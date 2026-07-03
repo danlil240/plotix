@@ -103,3 +103,6 @@ graphify-out/cache
 .playwright-mcp/
 graphify-out/
 python/graphify-out/
+
+
+.ccls-cache/

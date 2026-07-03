@@ -170,7 +170,15 @@ constexpr float NAV_RAIL_LABEL_ALPHA_INACTIVE  = 0.78f;   // readable tiny label
 constexpr float NAV_RAIL_LABEL_ALPHA_HOVER     = 0.95f;
 constexpr float NAV_RAIL_LABEL_ALPHA_ACTIVE    = 1.00f;
 constexpr float NAV_RAIL_ICON_SIZE_BASE        = 20.0f;   // matches ICON_MD
-constexpr float NAV_RAIL_LABEL_SIZE_BASE       = 11.0f;   // slightly larger tiny label
+// Drawn via font_heading_ (baked at 11.5px); keep the requested draw size close
+// to that baked size so ImGui's bitmap glyphs stay crisp (oversampled 4x/2x, but
+// still degrades if rescaled too far). 13px reads clearly while staying <15%
+// off the baked size.
+constexpr float NAV_RAIL_LABEL_SIZE_BASE       = 13.0f;
+// Floors applied after the rail's height-driven compression scale so labels/icons
+// never shrink into illegibility on short windows (see nav_rail_scale_for_height()).
+constexpr float NAV_RAIL_ICON_SIZE_MIN         = 14.0f;
+constexpr float NAV_RAIL_LABEL_SIZE_MIN        = 11.0f;
 constexpr float NAV_RAIL_GLOW_ALPHA_ACTIVE     = 0.14f;   // refined active glow
 constexpr float NAV_RAIL_GLOW_ALPHA_HOVER      = 0.06f;
 constexpr float NAV_RAIL_SURFACE_ALPHA_INACTIVE = 0.00f;  // no bg until interaction

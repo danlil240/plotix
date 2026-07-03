@@ -1,0 +1,24 @@
+.ccls-cache/@@home@daniel@projects@Spectra/@opt@ros@jazzy@include@sensor_msgs@sensor_msgs@msg@rosidl_generator_cpp__visibility_control.hpp
+Error processing request textDocument/documentSymbol with params:
+{'textDocument': {'uri': 'file:///home/daniel/projects/Spectra/.ccls-cache/%40%40home%40daniel%40projects%40Spectra/%40opt%40ros%40jazzy%40include%40sensor_msgs%40sensor_msgs%40msg%40rosidl_generator_cpp__visibility_control.hpp'}}
+(caused by not indexed (-32600))
+.ccls-cache/@@home@daniel@projects@Spectra/@opt@ros@jazzy@include@rclcpp@rclcpp@create_timer.hpp
+Error processing request textDocument/documentSymbol with params:
+{'textDocument': {'uri': 'file:///home/daniel/projects/Spectra/.ccls-cache/%40%40home%40daniel%40projects%40Spectra/%40opt%40ros%40jazzy%40include%40rclcpp%40rclcpp%40create_timer.hpp'}}
+(caused by not indexed (-32600))
+.ccls-cache/@@home@daniel@projects@Spectra/@usr@include@x86_64-linux-gnu@qt6@QtCore@qlist.h
+Error processing request textDocument/documentSymbol with params:
+{'textDocument': {'uri': 'file:///home/daniel/projects/Spectra/.ccls-cache/%40%40home%40daniel%40projects%40Spectra/%40usr%40include%40x86_64-linux-gnu%40qt6%40QtCore%40qlist.h'}}
+(caused by not indexed (-32600))
+.ccls-cache/@@home@daniel@projects@Spectra/@usr@include@c++@13@bits@functional_hash.h
+Error processing request textDocument/documentSymbol with params:
+{'textDocument': {'uri': 'file:///home/daniel/projects/Spectra/.ccls-cache/%40%40home%40daniel%40projects%40Spectra/%40usr%40include%40c%2B%2B%4013%40bits%40functional_hash.h'}}
+(caused by not indexed (-32600))
+.ccls-cache/@@home@daniel@projects@Spectra/@usr@include@x86_64-linux-gnu@qt6@QtCore@qarraydata.h
+Error processing request textDocument/documentSymbol with params:
+{'textDocument': {'uri': 'file:///home/daniel/projects/Spectra/.ccls-cache/%40%40home%40daniel%40projects%40Spectra/%40usr%40include%40x86_64-linux-gnu%40qt6%40QtCore%40qarraydata.h'}}
+(caused by not indexed (-32600))
+.ccls-cache/@home@daniel@projects@Spectra/include@spectra@series_shapes.hpp
+Error processing request textDocument/documentSymbol with params:
+{'textDocument': {'uri': 'file:///home/daniel/projects/Spectra/.ccls-cache/%40home%40daniel%40projects%40Spectra/include%40spectra%40series_shapes.hpp'}}
+(caused by not indexed (-32600))

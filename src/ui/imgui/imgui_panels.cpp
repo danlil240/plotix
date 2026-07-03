@@ -814,7 +814,11 @@ void ImGuiIntegration::populate_status_bar(ui::shell::StatusBar& bar)
                      {
         ImGui::PushFont(font_heading_);
 
-        const float bar_h       = layout_manager_->status_bar_rect().h;
+        // Use the column child window's actual height, not the outer status-bar
+        // rect: the bar reserves vertical WindowPadding, so the child is shorter
+        // than the full bar height. Centering against the wrong (larger) height
+        // pushes pills past the child's clip rect and trims their bottom edge.
+        const float bar_h       = ImGui::GetWindowHeight();
         const float text_h      = ImGui::GetTextLineHeight();
         const float pill_h      = ui::tokens::STATUS_BAR_PILL_HEIGHT;
         const float pill_pad_h  = ui::tokens::STATUS_BAR_PILL_PAD_H;
@@ -939,6 +943,9 @@ void ImGuiIntegration::populate_status_bar(ui::shell::StatusBar& bar)
         const float text_h      = ImGui::GetTextLineHeight();
         const float pill_h      = ui::tokens::STATUS_BAR_PILL_HEIGHT;
         const float pill_radius = ui::tokens::STATUS_BAR_PILL_RADIUS;
+        // See left-segment comment: center against the actual column child
+        // height, not the outer bar rect (which includes vertical padding).
+        const float bar_h       = ImGui::GetWindowHeight();
 
         const std::string fps_buf = std::format("{} fps", static_cast<int>(io.Framerate));
         const std::string gpu_buf = std::format("GPU: {:.1f}ms", gpu_time_ms_);
@@ -958,6 +965,7 @@ void ImGuiIntegration::populate_status_bar(ui::shell::StatusBar& bar)
 
         ImGui::SameLine();
         ImGui::SetCursorPosX(right_x);
+        ImGui::SetCursorPosY((bar_h - text_h) * 0.5f);
 
         ImDrawList* dl = ImGui::GetWindowDrawList();
 
