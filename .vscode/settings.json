@@ -33,6 +33,19 @@
         "--completion-style=detailed",
         "--inlay-hints=true"
     ],
+    "ccls.initializationOptions": {
+        "index": {
+            "threads": 4,
+            "blacklist": [
+                "/opt/ros/",
+                "/home/daniel/projects/Spectra/build-ros2/",
+                "/home/daniel/projects/Spectra/build-humble/",
+                "/home/daniel/projects/Spectra/build-humble2/",
+                "/home/daniel/projects/Spectra/build-humble3/",
+                "/home/daniel/projects/Spectra/build/_deps/"
+            ]
+        }
+    },
     "files.associations": {
         "*.hpp": "cpp",
         "*.cpp": "cpp",

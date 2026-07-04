@@ -72,21 +72,14 @@ void StatusBar::draw()
                                  70),
                         1.0f);
 
-        const float bar_h  = bounds.h;
-        const float row_h  = ui::tokens::STATUS_BAR_PILL_HEIGHT;
-        const float y      = std::max(1.0f, (bar_h - row_h) * 0.5f - 1.0f);
-
-        // Establish window content extents before segment draw_fns adjust cursor Y.
-        ImGui::SetCursorPosY(y);
-        ImGui::Dummy(ImVec2(std::max(1.0f, bounds.w), std::max(1.0f, row_h)));
-        ImGui::SetCursorPos(ImVec2(0.0f, y));
+        const float col_h = std::max(1.0f, ImGui::GetContentRegionAvail().y);
 
         const auto draw_column = [&](StatusAlign align, int column_id)
         {
             const float col_w = std::max(1.0f, ImGui::GetContentRegionAvail().x);
             ImGui::PushID(column_id);
             ImGui::BeginChild("##status_col",
-                              ImVec2(col_w, row_h),
+                              ImVec2(col_w, col_h),
                               ImGuiChildFlags_None,
                               ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoBackground);
             bool first = true;

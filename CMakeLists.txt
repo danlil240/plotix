@@ -16,6 +16,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Symlink compile_commands.json to project root for ccls / clangd indexing.
+# Recreated on every configure so it never goes stale after a clean or rebuild.
+if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json")
+    file(CREATE_LINK
+        "${CMAKE_CURRENT_BINARY_DIR}/compile_commands.json"
+        "${CMAKE_CURRENT_SOURCE_DIR}/compile_commands.json"
+        SYMBOLIC)
+endif()
+
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 set(SPECTRA_HICOLOR_ICON_SIZES 16 32 48 64 128 256 512)
 set(SPECTRA_HICOLOR_ICON_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated/icons/hicolor)

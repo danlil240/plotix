@@ -152,6 +152,23 @@ void SpectraNavRail::build_items(std::vector<NavItem>& out) const
         {
             if (item.is_section_header || item.id.empty() || item.id.rfind("core.", 0) != 0)
                 continue;
+
+            // SettingsPanel gates its own draw() on an internal visible_ flag that is
+            // independent of the PanelRegistry entry used for menu/nav bookkeeping, so
+            // toggling the registry panel alone never opens the window. Drive the real
+            // panel directly instead.
+            if (item.id == "core.settings")
+            {
+                item.is_active = [imgui = imgui_]()
+                { return imgui->settings_panel() && imgui->settings_panel()->is_visible(); };
+                item.on_click = [imgui = imgui_]()
+                {
+                    if (auto* sp = imgui->settings_panel())
+                        sp->set_visible(!sp->is_visible());
+                };
+                continue;
+            }
+
             const std::string panel_id = item.id;
             item.is_active             = [shell, panel_id]()
             { return shell->panel_visible(panel_id); };
@@ -634,6 +651,16 @@ void SpectraAppShell::on_populate_menus(MenuBar& bar)
                       imgui_->command_registry_->execute("app.cancel");
               }});
 
+    auto& edit = bar.menu("Edit");
+    edit.add({.label = "Undo", .shortcut = "Ctrl+Z", .on_click = [this]() {
+                  if (imgui_->command_registry_)
+                      imgui_->command_registry_->execute("edit.undo");
+              }});
+    edit.add({.label = "Redo", .shortcut = "Ctrl+Y", .on_click = [this]() {
+                  if (imgui_->command_registry_)
+                      imgui_->command_registry_->execute("edit.redo");
+              }});
+
     auto& view = bar.menu("View");
     view.add(make_toggle_action(
         "Toggle Inspector",
@@ -710,14 +737,6 @@ void SpectraAppShell::on_populate_menus(MenuBar& bar)
     tools.add({.label = "Screenshot (PNG)", .on_click = [this]() {
                    if (imgui_->command_registry_)
                        imgui_->command_registry_->execute("file.export_png");
-               }});
-    tools.add({.label = "Undo", .on_click = [this]() {
-                   if (imgui_->command_registry_)
-                       imgui_->command_registry_->execute("edit.undo");
-               }});
-    tools.add({.label = "Redo", .on_click = [this]() {
-                   if (imgui_->command_registry_)
-                       imgui_->command_registry_->execute("edit.redo");
                }});
     tools.add_separator();
     tools.add({.label = "Theme Settings", .on_click = [this]() {
