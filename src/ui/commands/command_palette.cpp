@@ -376,25 +376,43 @@ bool CommandPalette::draw(float window_width, float window_height)
     }
 
     // ─── Draw overlay on FOREGROUND draw list (above all ImGui windows) ─────
+    // NOTE: the foreground draw list renders AFTER every window's own draw list
+    // (including this palette's window, drawn below via ImGui::Begin). A filled
+    // rect covering the palette bounds here would therefore darken the palette
+    // itself. Instead, dim/shadow only the margin OUTSIDE the palette's own
+    // bounding rect via 4 surrounding strips ("donut" fill), never touching the
+    // interior where the palette window renders.
     ImDrawList* fg = ImGui::GetForegroundDrawList();
 
-    // Full-screen dim overlay
-    fg->AddRectFilled(ImVec2(0, 0),
-                      ImVec2(window_width, window_height),
-                      IM_COL32(static_cast<int>(colors.bg_overlay.r * 255),
-                               static_cast<int>(colors.bg_overlay.g * 255),
-                               static_cast<int>(colors.bg_overlay.b * 255),
-                               static_cast<int>(colors.bg_overlay.a * opacity_ * 0.5f * 255)));
+    auto draw_donut = [&](ImVec2 outer_min, ImVec2 outer_max, ImU32 col)
+    {
+        // Top strip
+        fg->AddRectFilled(outer_min, ImVec2(outer_max.x, palette_y), col);
+        // Bottom strip
+        fg->AddRectFilled(
+            ImVec2(outer_min.x, palette_y + palette_h), outer_max, col);
+        // Left strip
+        fg->AddRectFilled(
+            ImVec2(outer_min.x, palette_y), ImVec2(palette_x, palette_y + palette_h), col);
+        // Right strip
+        fg->AddRectFilled(ImVec2(palette_x + palette_w, palette_y),
+                          ImVec2(outer_max.x, palette_y + palette_h),
+                          col);
+    };
 
-    // Layered shadow
-    fg->AddRectFilled(ImVec2(palette_x - 4, palette_y - 2),
-                      ImVec2(palette_x + palette_w + 4, palette_y + palette_h + 12),
-                      IM_COL32(0, 0, 0, static_cast<int>(30 * opacity_)),
-                      ui::tokens::RADIUS_LG + 6);
-    fg->AddRectFilled(ImVec2(palette_x - 1, palette_y),
-                      ImVec2(palette_x + palette_w + 1, palette_y + palette_h + 4),
-                      IM_COL32(0, 0, 0, static_cast<int>(50 * opacity_)),
-                      ui::tokens::RADIUS_LG + 2);
+    ImU32 overlay_col = IM_COL32(static_cast<int>(colors.bg_overlay.r * 255),
+                                 static_cast<int>(colors.bg_overlay.g * 255),
+                                 static_cast<int>(colors.bg_overlay.b * 255),
+                                 static_cast<int>(colors.bg_overlay.a * opacity_ * 0.5f * 255));
+    draw_donut(ImVec2(0, 0), ImVec2(window_width, window_height), overlay_col);
+
+    // Layered shadow (drawn only in the margin around the palette, not over it)
+    draw_donut(ImVec2(palette_x - 4, palette_y - 2),
+              ImVec2(palette_x + palette_w + 4, palette_y + palette_h + 12),
+              IM_COL32(0, 0, 0, static_cast<int>(30 * opacity_)));
+    draw_donut(ImVec2(palette_x - 1, palette_y),
+              ImVec2(palette_x + palette_w + 1, palette_y + palette_h + 4),
+              IM_COL32(0, 0, 0, static_cast<int>(50 * opacity_)));
 
     // ─── Click outside palette to dismiss ──────────────────────────────────
     if (ImGui::IsMouseClicked(0))
