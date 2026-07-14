@@ -247,6 +247,11 @@ class AnimationCurveEditor
     ChannelDisplay*       find_display(uint32_t channel_id);
     const ChannelDisplay* find_display(uint32_t channel_id) const;
     ChannelDisplay&       ensure_display(uint32_t channel_id);
+
+    // Box-select state (used by draw() input handling).
+    bool  box_select_active_  = false;
+    float box_select_start_x_ = 0.0f;
+    float box_select_start_y_ = 0.0f;
 };
 
 }   // namespace spectra

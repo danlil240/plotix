@@ -637,6 +637,82 @@ void AnimationCurveEditor::draw(float width, float height)
     view_.origin_x        = origin.x;
     view_.origin_y        = origin.y;
 
+    // ─── Mouse / keyboard input ──────────────────────────────────
+    ImGui::InvisibleButton("##curve_editor_input", ImVec2(width, height));
+    bool     hovered = ImGui::IsItemHovered();
+    ImGuiIO& io      = ImGui::GetIO();
+    float    mx      = io.MousePos.x;
+    float    my      = io.MousePos.y;
+
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+    {
+        auto hit = hit_test(mx, my);
+        if (hit.type == CurveHitType::Keyframe || hit.type == CurveHitType::InTangent
+            || hit.type == CurveHitType::OutTangent)
+        {
+            if (!io.KeyShift)
+                deselect_all();
+            if (hit.type == CurveHitType::Keyframe)
+                select_keyframe(hit.channel_id, hit.keyframe_index);
+            begin_drag(mx, my);
+        }
+        else
+        {
+            if (!io.KeyShift)
+                deselect_all();
+            box_select_active_  = true;
+            box_select_start_x_ = mx;
+            box_select_start_y_ = my;
+        }
+    }
+
+    if (is_dragging() && ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f))
+    {
+        update_drag(mx, my);
+        if (interpolator_)
+            interpolator_->evaluate(playhead_time_);
+    }
+    if (is_dragging() && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    {
+        end_drag();
+        if (interpolator_)
+            interpolator_->evaluate(playhead_time_);
+    }
+    if (is_dragging() && ImGui::IsKeyPressed(ImGuiKey_Escape))
+    {
+        cancel_drag();
+        if (interpolator_)
+            interpolator_->evaluate(playhead_time_);
+    }
+
+    if (box_select_active_ && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    {
+        float t_min  = view_.x_to_time(std::min(box_select_start_x_, mx));
+        float t_max  = view_.x_to_time(std::max(box_select_start_x_, mx));
+        float y_top  = std::min(box_select_start_y_, my);
+        float y_bot  = std::max(box_select_start_y_, my);
+        float v_max  = view_.y_to_value(y_top);
+        float v_min  = view_.y_to_value(y_bot);
+        select_keyframes_in_rect(t_min, t_max, v_min, v_max);
+        box_select_active_ = false;
+    }
+
+    if (hovered && ImGui::IsMouseDragging(ImGuiMouseButton_Middle))
+    {
+        view_.pan(io.MouseDelta.x, io.MouseDelta.y);
+    }
+
+    if (hovered && io.MouseWheel != 0.0f)
+    {
+        float factor = std::pow(1.1f, io.MouseWheel);
+        view_.zoom(factor, mx, my);
+    }
+
+    if (hovered && selected_count() > 0 && ImGui::IsKeyPressed(ImGuiKey_Delete))
+    {
+        delete_selected();
+    }
+
     // ─── Background ──────────────────────────────────────────────
     draw_list->AddRectFilled(origin,
                              ImVec2(origin.x + width, origin.y + height),
@@ -801,6 +877,17 @@ void AnimationCurveEditor::draw(float width, float height)
                            ImVec2(ph_x, origin.y + height),
                            IM_COL32(255, 80, 80, 200),
                            1.5f);
+    }
+
+    // ─── Box-select overlay ──────────────────────────────────────
+    if (box_select_active_)
+    {
+        draw_list->AddRect(ImVec2(box_select_start_x_, box_select_start_y_),
+                           ImVec2(mx, my),
+                           IM_COL32(255, 255, 255, 180));
+        draw_list->AddRectFilled(ImVec2(box_select_start_x_, box_select_start_y_),
+                                 ImVec2(mx, my),
+                                 IM_COL32(255, 255, 255, 20));
     }
 
     ImGui::EndChild();
