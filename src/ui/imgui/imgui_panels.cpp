@@ -807,10 +807,9 @@ void ImGuiIntegration::populate_status_bar(ui::shell::StatusBar& bar)
     bar.set_layout_manager(layout_manager_.get());
 
     const auto& colors = theme_colors();
-    ImDrawList* dl     = nullptr;
 
     bar.add_segment({.align = ui::shell::StatusAlign::Left,
-                     .draw_fn = [this, &colors, &dl]()
+                     .draw_fn = [this, &colors]()
                      {
         ImGui::PushFont(font_heading_);
 
@@ -828,7 +827,7 @@ void ImGuiIntegration::populate_status_bar(ui::shell::StatusBar& bar)
         float y_offset = (bar_h - pill_h) * 0.5f;
         ImGui::SetCursorPosY(y_offset + (pill_h - text_h) * 0.5f);
 
-        dl = ImGui::GetWindowDrawList();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
 
         auto draw_pill = [&](const char*      label,
                              const ui::Color& text_col,

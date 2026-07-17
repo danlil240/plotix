@@ -219,9 +219,10 @@ void emit_line_series(std::ostringstream& svg, const LineSeries& series, const D
     if (series.point_count() < 2)
         return;
 
-    auto        x = series.x_data();
-    auto        y = series.y_data();
-    const auto& c = static_cast<const Series&>(series).color();
+    auto        x        = series.x_data();
+    auto        y        = series.y_data();
+    const auto  x_offset = series.x_offset();
+    const auto& c        = static_cast<const Series&>(series).color();
 
     svg << R"(    <polyline fill="none" stroke=")" << svg_color(c) << "\" stroke-width=\""
         << fmt(series.width()) << "\" stroke-opacity=\"" << fmt(c.a)
@@ -231,7 +232,7 @@ void emit_line_series(std::ostringstream& svg, const LineSeries& series, const D
     {
         if (i > 0)
             svg << " ";
-        svg << fmt(m.map_x(x[i])) << "," << fmt(m.map_y(y[i]));
+        svg << fmt(m.map_x(static_cast<double>(x[i]) + x_offset)) << "," << fmt(m.map_y(y[i]));
     }
 
     svg << "\"/>\n";
@@ -243,17 +244,18 @@ void emit_scatter_series(std::ostringstream& svg, const ScatterSeries& series, c
     if (series.point_count() == 0)
         return;
 
-    auto        x = series.x_data();
-    auto        y = series.y_data();
-    float       r = series.size();
-    const auto& c = static_cast<const Series&>(series).color();
+    auto        x        = series.x_data();
+    auto        y        = series.y_data();
+    float       r        = series.size();
+    const auto  x_offset = series.x_offset();
+    const auto& c        = static_cast<const Series&>(series).color();
 
     svg << "    <g fill=\"" << svg_color(c) << "\" fill-opacity=\"" << fmt(c.a) << "\">\n";
 
     for (size_t i = 0; i < series.point_count(); ++i)
     {
-        svg << "      <circle cx=\"" << fmt(m.map_x(x[i])) << "\" cy=\"" << fmt(m.map_y(y[i]))
-            << "\" r=\"" << fmt(r) << "\"/>\n";
+        svg << "      <circle cx=\"" << fmt(m.map_x(static_cast<double>(x[i]) + x_offset))
+            << "\" cy=\"" << fmt(m.map_y(y[i])) << "\" r=\"" << fmt(r) << "\"/>\n";
     }
 
     svg << "    </g>\n";

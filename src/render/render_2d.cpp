@@ -110,14 +110,20 @@ void Renderer::render_series(Series& series,
                 {
                     const float* begin = xd.data();
                     const float* end   = begin + n;
+                    // Visible range is in absolute coords; x_data is relative
+                    // to the series x_offset.  Convert in double (exact) then
+                    // to float (small values, no precision loss).
+                    const double xoff        = line->x_offset();
+                    const auto   local_x_min = static_cast<float>(visible->x_min - xoff);
+                    const auto   local_x_max = static_cast<float>(visible->x_max - xoff);
                     // Find first point >= x_min (with 1-point margin for segment connectivity)
-                    auto lo     = std::lower_bound(begin, end, visible->x_min);
+                    auto lo     = std::lower_bound(begin, end, local_x_min);
                     auto lo_idx = static_cast<size_t>(lo - begin);
                     if (lo_idx > 0)
                         lo_idx--;   // include one segment before visible range
 
                     // Find first point > x_max
-                    auto hi     = std::upper_bound(begin, end, visible->x_max);
+                    auto hi     = std::upper_bound(begin, end, local_x_max);
                     auto hi_idx = static_cast<size_t>(hi - begin);
                     if (hi_idx < n)
                         hi_idx++;   // include one segment after visible range
@@ -209,8 +215,8 @@ void Renderer::render_series(Series& series,
             {
                 const auto& theme_colors = theme_mgr_.colors();
                 float       bg_luma      = 0.2126f * theme_colors.bg_canvas.r
-                                           + 0.7152f * theme_colors.bg_canvas.g
-                                           + 0.0722f * theme_colors.bg_canvas.b;
+                                + 0.7152f * theme_colors.bg_canvas.g
+                                + 0.0722f * theme_colors.bg_canvas.b;
                 pc.marker_type = static_cast<uint32_t>(bg_luma > 0.80f ? MarkerStyle::FilledCircle
                                                                        : MarkerStyle::Circle);
             }
@@ -521,14 +527,13 @@ void Renderer::render_series(Series& series,
                 {
                     float viewport_xywh[4] = {0, 0, 0, 0};   // Set by caller via set_viewport
                     auto  result           = plugin_guard_invoke(entry->type_name.c_str(),
-                                                                 [&]()
-                                                                 {
+                                                      [&]() {
                                                           entry->draw_fn(backend_,
                                                                          entry->pipeline,
                                                                          gpu.plugin_gpu_state,
                                                                          viewport_xywh,
                                                                          pc);
-                                                                 });
+                                                      });
                     if (result != PluginCallResult::Success)
                     {
                         entry->faulted = true;

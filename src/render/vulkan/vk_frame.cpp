@@ -91,6 +91,14 @@ bool VulkanBackend::begin_frame(FrameProfiler* profiler)
         active_window_->swapchain_invalidated = true;
         return false;   // Swapchain truly unusable — caller must recreate
     }
+    if (result == VK_ERROR_SURFACE_LOST_KHR)
+    {
+        // The surface itself is gone (compositor restart, display change).
+        // Mark for full surface + swapchain recreation.
+        active_window_->mark_surface_lost();
+        SPECTRA_LOG_WARN("vulkan", "begin_frame: acquire returned SURFACE_LOST, will recreate");
+        return false;
+    }
     if (result == VK_TIMEOUT || result == VK_NOT_READY)
     {
         // Compositor hasn't delivered an image within the timeout.
@@ -233,6 +241,14 @@ void VulkanBackend::end_frame(FrameProfiler* profiler)
     {
         active_window_->swapchain_dirty = true;
         SPECTRA_LOG_DEBUG("vulkan", "end_frame: present returned SUBOPTIMAL");
+    }
+    else if (result == VK_ERROR_SURFACE_LOST_KHR)
+    {
+        // The surface itself is gone (compositor restart, display change).
+        // Mark for full surface + swapchain recreation on the next tick
+        // instead of erroring forever on a dead surface.
+        active_window_->mark_surface_lost();
+        SPECTRA_LOG_WARN("vulkan", "end_frame: present returned SURFACE_LOST, will recreate");
     }
     else if (result != VK_SUCCESS)
     {

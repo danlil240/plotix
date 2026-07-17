@@ -51,6 +51,53 @@ bool try_parse_float(const std::string& s, float& out)
     return true;
 }
 
+bool try_parse_double(const std::string& s, double& out)
+{
+    if (s.empty())
+        return false;
+    char*  end = nullptr;
+    double val = std::strtod(s.c_str(), &end);
+    while (end && *end && std::isspace(static_cast<unsigned char>(*end)))
+        ++end;
+    if (end == s.c_str() || (end && *end != '\0'))
+        return false;
+    out = val;
+    return true;
+}
+
+bool header_suggests_time(std::string_view header)
+{
+    std::string              normalized;
+    std::vector<std::string> tokens;
+    std::string              token;
+    normalized.reserve(header.size());
+    for (unsigned char c : header)
+    {
+        if (std::isalnum(c))
+        {
+            const char lower = static_cast<char>(std::tolower(c));
+            normalized.push_back(lower);
+            token.push_back(lower);
+        }
+        else if (!token.empty())
+        {
+            tokens.push_back(std::move(token));
+            token.clear();
+        }
+    }
+    if (!token.empty())
+        tokens.push_back(std::move(token));
+
+    const bool has_time_token =
+        std::any_of(tokens.begin(),
+                    tokens.end(),
+                    [](const std::string& t) { return t == "time" || t == "date"; });
+
+    return normalized.find("timestamp") != std::string::npos
+           || normalized.find("datetime") != std::string::npos
+           || normalized.find("epoch") != std::string::npos || has_time_token;
+}
+
 std::string trim_copy(const std::string& s)
 {
     size_t begin = 0;
@@ -473,7 +520,13 @@ CsvData parse_csv(const std::string& path)
 
     // Initialize columns
     result.columns.resize(result.num_cols);
-    std::vector<std::optional<double>> datetime_bases(result.num_cols);
+    // Per-column double base for values that exceed float precision
+    // (datetimes and large numeric timestamps).  The base is recorded in
+    // CsvData::column_offsets so callers can recover absolute values.
+    std::vector<std::optional<double>> column_bases(result.num_cols);
+    std::vector<bool>                  numeric_time_columns(result.num_cols, false);
+    for (size_t c = 0; c < result.num_cols; ++c)
+        numeric_time_columns[c] = header_suggests_time(result.headers[c]);
 
     // Parse data rows
     for (size_t i = data_start; i < lines.size(); ++i)
@@ -491,18 +544,38 @@ CsvData parse_csv(const std::string& path)
 
                 if (has_datetime_shape && try_parse_datetime(trimmed_field, datetime_value))
                 {
-                    if (!datetime_bases[c].has_value())
-                        datetime_bases[c] = datetime_value;
-                    val = static_cast<float>(datetime_value - *datetime_bases[c]);
+                    if (!column_bases[c].has_value())
+                        column_bases[c] = datetime_value;
+                    val = static_cast<float>(datetime_value - *column_bases[c]);
                 }
                 else
                 {
-                    try_parse_float(fields[c], val);
+                    // Parse as double first to detect large numeric values
+                    // (e.g. epoch timestamps ~1.7e9) that exceed float's
+                    // ~7-digit precision.  Store them relative to the first
+                    // value in the column; the base is recorded in
+                    // column_offsets so the absolute value is preserved.
+                    double double_val = 0.0;
+                    if (numeric_time_columns[c] && try_parse_double(trimmed_field, double_val)
+                        && std::abs(double_val) > 1e6)
+                    {
+                        if (!column_bases[c].has_value())
+                            column_bases[c] = double_val;
+                        val = static_cast<float>(double_val - *column_bases[c]);
+                    }
+                    else
+                    {
+                        try_parse_float(fields[c], val);
+                    }
                 }
             }
             result.columns[c].push_back(val);
         }
     }
+
+    result.column_offsets.resize(result.num_cols, 0.0);
+    for (size_t c = 0; c < result.num_cols; ++c)
+        result.column_offsets[c] = column_bases[c].value_or(0.0);
 
     result.num_rows = lines.size() - data_start;
     return result;

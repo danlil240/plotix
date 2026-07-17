@@ -61,3 +61,25 @@ TEST_F(FigureSerializerTest, SaveLoadRestores2DAxesAndSeries)
     EXPECT_EQ(loaded_ax.series()[0]->label(), "sin");
     EXPECT_EQ(loaded_ax.series()[1]->label(), "cos");
 }
+
+TEST_F(FigureSerializerTest, SaveLoadPreservesEpochScaleSeriesOffset)
+{
+    constexpr double         epoch = 1783350621.752999;
+    Figure                   src({800, 600});
+    auto&                    ax = src.subplot(1, 1, 1);
+    const std::vector<float> x  = {0.0f, 0.02f, 0.04f};
+    const std::vector<float> y  = {1.0f, 2.0f, 3.0f};
+    ax.line(x, y).x_offset(epoch);
+
+    ASSERT_TRUE(FigureSerializer::save(tmp_path_, src));
+
+    Figure dst({800, 600});
+    ASSERT_TRUE(FigureSerializer::load(tmp_path_, dst));
+    ASSERT_EQ(dst.axes().size(), 1u);
+    ASSERT_EQ(dst.axes()[0]->series().size(), 1u);
+    EXPECT_NEAR(dst.axes()[0]->series()[0]->x_offset(), epoch, 1e-6);
+
+    const auto limits = dst.axes()[0]->x_limits();
+    EXPECT_NEAR(limits.min, epoch, 0.1);
+    EXPECT_LT(limits.max - limits.min, 1.0);
+}

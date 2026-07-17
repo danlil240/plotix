@@ -611,14 +611,16 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
             if (mouse.x + est_tip_w * 0.5f > display.x - margin)
             {
                 float tip_x = display.x - margin;
-                ImGui::SetNextWindowPos(
-                    ImVec2(tip_x, tip_y), ImGuiCond_Always, ImVec2(1.0f, pivot_y));
+                ImGui::SetNextWindowPos(ImVec2(tip_x, tip_y),
+                                        ImGuiCond_Always,
+                                        ImVec2(1.0f, pivot_y));
             }
             else if (mouse.x - est_tip_w * 0.5f < margin)
             {
                 float tip_x = margin;
-                ImGui::SetNextWindowPos(
-                    ImVec2(tip_x, tip_y), ImGuiCond_Always, ImVec2(0.0f, pivot_y));
+                ImGui::SetNextWindowPos(ImVec2(tip_x, tip_y),
+                                        ImGuiCond_Always,
+                                        ImVec2(0.0f, pivot_y));
             }
             else
             {
@@ -727,13 +729,13 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
         ImDrawList* fg     = ImGui::GetForegroundDrawList();
         const auto& colors = theme_colors();
         ImU32       fill   = IM_COL32(static_cast<uint8_t>(colors.selection_fill.r * 255),
-                                      static_cast<uint8_t>(colors.selection_fill.g * 255),
-                                      static_cast<uint8_t>(colors.selection_fill.b * 255),
-                                      40);
+                              static_cast<uint8_t>(colors.selection_fill.g * 255),
+                              static_cast<uint8_t>(colors.selection_fill.b * 255),
+                              40);
         ImU32       border = IM_COL32(static_cast<uint8_t>(colors.selection_border.r * 255),
-                                      static_cast<uint8_t>(colors.selection_border.g * 255),
-                                      static_cast<uint8_t>(colors.selection_border.b * 255),
-                                      200);
+                                static_cast<uint8_t>(colors.selection_border.g * 255),
+                                static_cast<uint8_t>(colors.selection_border.b * 255),
+                                200);
         fg->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), fill);
         fg->AddRect(ImVec2(x0, y0), ImVec2(x1, y1), border, 0.0f, 0, 1.0f);
     }
@@ -753,7 +755,7 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
             auto        xlim = ax->x_limits();
             auto        ylim = ax->y_limits();
 
-            auto data_to_screen = [&](float dx_, float dy_, float& scr_x, float& scr_y)
+            auto data_to_screen = [&](double dx_, double dy_, float& scr_x, float& scr_y)
             {
                 double xr = xlim.max - xlim.min;
                 double yr = ylim.max - ylim.min;
@@ -765,13 +767,13 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
                 scr_y = static_cast<float>(vp.y + (1.0 - (dy_ - ylim.min) / yr) * vp.h);
             };
 
-            float sx = input_handler_->measure_start_data_x();
-            float sy = input_handler_->measure_start_data_y();
-            float ex = input_handler_->measure_end_data_x();
-            float ey = input_handler_->measure_end_data_y();
+            double sx = input_handler_->measure_start_data_x();
+            double sy = input_handler_->measure_start_data_y();
+            double ex = input_handler_->measure_end_data_x();
+            double ey = input_handler_->measure_end_data_y();
 
-            float mdx  = ex - sx;
-            float mdy  = ey - sy;
+            auto  mdx  = static_cast<float>(ex - sx);
+            auto  mdy  = static_cast<float>(ey - sy);
             float dist = std::sqrt(mdx * mdx + mdy * mdy);
             if (dist > 1e-6f)
             {
@@ -782,13 +784,13 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
                                           uint8_t(accent.b * 255),
                                           220);
                 ImU32 dot_col  = IM_COL32(uint8_t(accent.r * 255),
-                                          uint8_t(accent.g * 255),
-                                          uint8_t(accent.b * 255),
-                                          255);
+                                         uint8_t(accent.g * 255),
+                                         uint8_t(accent.b * 255),
+                                         255);
                 ImU32 bg_col   = IM_COL32(uint8_t(theme_colors().bg_elevated.r * 255),
-                                          uint8_t(theme_colors().bg_elevated.g * 255),
-                                          uint8_t(theme_colors().bg_elevated.b * 255),
-                                          230);
+                                        uint8_t(theme_colors().bg_elevated.g * 255),
+                                        uint8_t(theme_colors().bg_elevated.b * 255),
+                                        230);
 
                 float scr_sx = NAN;
                 float scr_sy = NAN;
@@ -805,8 +807,8 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
                 dl->AddCircleFilled(ImVec2(scr_ex, scr_ey), 4.0f, dot_col);
 
                 // Distance label at midpoint
-                float mid_x = (scr_sx + scr_ex) * 0.5f;
-                float mid_y = (scr_sy + scr_ey) * 0.5f;
+                float             mid_x = (scr_sx + scr_ex) * 0.5f;
+                float             mid_y = (scr_sy + scr_ey) * 0.5f;
                 const std::string label =
                     std::format("dX: {:.4f}  dY: {:.4f}  dist: {:.4f}", mdx, mdy, dist);
                 ImVec2 tsz = ImGui::CalcTextSize(label.c_str());
@@ -829,24 +831,52 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
         if (native_dialogs_enabled())
         {
             DialogEnvGuard env_guard;
-        char const*    filters[3] = {"*.csv", "*.tsv", "*.txt"};
-        const char*    home_env   = std::getenv("HOME");
-        std::string    home_dir   = home_env ? std::string(home_env) + "/" : "/";
-        char const*    result =
-            tinyfd_openFileDialog("Open CSV File", home_dir.c_str(), 3, filters, "CSV files", 0);
-        if (result)
-        {
-            csv_file_path_   = result;
-            csv_data_        = parse_csv(csv_file_path_);
-            csv_data_loaded_ = csv_data_.error.empty();
-            csv_error_       = csv_data_.error;
-            csv_col_x_       = 0;
-            csv_col_y_       = (csv_data_.num_cols > 1) ? 1 : 0;
-            csv_col_z_       = -1;
-            if (csv_data_loaded_)
-                csv_dialog_open_ = true;
+            char const*    filters[3] = {"*.csv", "*.tsv", "*.txt"};
+            const char*    home_env   = std::getenv("HOME");
+            std::string    home_dir   = home_env ? std::string(home_env) + "/" : "/";
+            char const*    result     = tinyfd_openFileDialog("Open CSV File",
+                                                       home_dir.c_str(),
+                                                       3,
+                                                       filters,
+                                                       "CSV files",
+                                                       0);
+            if (result)
+            {
+                csv_file_path_   = result;
+                csv_data_        = parse_csv(csv_file_path_);
+                csv_data_loaded_ = csv_data_.error.empty();
+                csv_error_       = csv_data_.error;
+                csv_col_x_       = 0;
+                csv_selected_y_.clear();
+                for (size_t c = 1; c < csv_data_.num_cols; ++c)
+                    csv_selected_y_.push_back(static_cast<int>(c));
+                if (csv_selected_y_.empty() && csv_data_.num_cols > 0)
+                    csv_selected_y_.push_back(0);
+                csv_col_z_ = -1;
+                if (csv_data_loaded_)
+                    csv_dialog_open_ = true;
+            }
         }
-        }
+    }
+
+    // Handle CSV file dropped via OS drag-and-drop
+    if (!pending_csv_drop_path_.empty())
+    {
+        std::string path = std::move(pending_csv_drop_path_);
+        pending_csv_drop_path_.clear();
+        csv_file_path_   = path;
+        csv_data_        = parse_csv(csv_file_path_);
+        csv_data_loaded_ = csv_data_.error.empty();
+        csv_error_       = csv_data_.error;
+        csv_col_x_       = 0;
+        csv_selected_y_.clear();
+        for (size_t c = 1; c < csv_data_.num_cols; ++c)
+            csv_selected_y_.push_back(static_cast<int>(c));
+        if (csv_selected_y_.empty() && csv_data_.num_cols > 0)
+            csv_selected_y_.push_back(0);
+        csv_col_z_ = -1;
+        if (csv_data_loaded_)
+            csv_dialog_open_ = true;
     }
 
     // Draw CSV load dialog if open
@@ -948,9 +978,9 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
         {
             // Draw highlight rect for the active drop zone
             ImU32 highlight_color  = IM_COL32(static_cast<int>(theme.accent.r * 255),
-                                              static_cast<int>(theme.accent.g * 255),
-                                              static_cast<int>(theme.accent.b * 255),
-                                              40);
+                                             static_cast<int>(theme.accent.g * 255),
+                                             static_cast<int>(theme.accent.b * 255),
+                                             40);
             ImU32 highlight_border = IM_COL32(static_cast<int>(theme.accent.r * 255),
                                               static_cast<int>(theme.accent.g * 255),
                                               static_cast<int>(theme.accent.b * 255),
@@ -1298,8 +1328,8 @@ bool ImGuiIntegration::wants_capture_mouse() const
 
     if (layout_manager_)
     {
-        Rect   canvas = layout_manager_->canvas_rect();
-        ImVec2 mouse  = ImGui::GetIO().MousePos;
+        Rect       canvas    = layout_manager_->canvas_rect();
+        ImVec2     mouse     = ImGui::GetIO().MousePos;
         const bool in_canvas = mouse.x >= canvas.x && mouse.x < canvas.x + canvas.w
                                && mouse.y >= canvas.y && mouse.y < canvas.y + canvas.h;
 
@@ -1344,9 +1374,9 @@ void ImGuiIntegration::load_fonts()
     {
         cfg.SizePixels = 0;
         ImFont* font   = io.Fonts->AddFontFromMemoryCompressedTTF(InterFont_compressed_data,
-                                                                  InterFont_compressed_size,
-                                                                  size,
-                                                                  &cfg);
+                                                                InterFont_compressed_size,
+                                                                size,
+                                                                &cfg);
 
         ImFontConfig icon_cfg;
         icon_cfg.FontDataOwnedByAtlas = false;

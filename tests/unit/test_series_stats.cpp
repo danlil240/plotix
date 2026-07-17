@@ -11,6 +11,47 @@ using namespace spectra;
 // BoxPlotSeries
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Series x_offset — double-precision absolute x (epoch timestamps)
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST(SeriesXOffset, AxisLimitsIncludeOffset)
+{
+    // Epoch-scale timestamps stored as small relative floats + double offset.
+    // Axis limits must reflect the absolute values at double precision.
+    constexpr double   epoch = 1783350621.752999;
+    std::vector<float> x     = {0.0f, 0.02f, 0.04f};
+    std::vector<float> y     = {1.0f, 2.0f, 3.0f};
+
+    Axes  ax;
+    auto& line = ax.line(x, y);
+    line.x_offset(epoch);
+    ax.auto_fit();
+
+    auto xlim = ax.x_limits();
+    // Limits bracket the absolute range [epoch, epoch + 0.04] with padding.
+    EXPECT_LT(xlim.min, epoch);
+    EXPECT_GT(xlim.max, epoch + 0.04);
+    // Sub-second resolution preserved: the whole span is well under a second.
+    EXPECT_LT(xlim.max - xlim.min, 1.0);
+    EXPECT_NEAR(xlim.min, epoch, 0.1);
+}
+
+TEST(SeriesXOffset, DefaultOffsetIsZero)
+{
+    std::vector<float> x = {1.0f, 2.0f, 3.0f};
+    std::vector<float> y = {1.0f, 2.0f, 3.0f};
+
+    Axes  ax;
+    auto& line = ax.line(x, y);
+    EXPECT_EQ(line.x_offset(), 0.0);
+    ax.auto_fit();
+
+    auto xlim = ax.x_limits();
+    EXPECT_LE(xlim.min, 1.0);
+    EXPECT_GE(xlim.max, 3.0);
+}
+
 TEST(BoxPlotStats, ComputeFromData)
 {
     std::vector<float> data  = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};

@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "core/layout.hpp"
+#include "ui/app/window_ui_context.hpp"
+#include "render/vulkan/window_context.hpp"
 
 using namespace spectra;
 
@@ -83,4 +85,19 @@ TEST(ResizeLayout, ConsecutiveResizesProduceDeterministicLayout)
         EXPECT_FLOAT_EQ(a[i].w, c[i].w) << "cell " << i;
         EXPECT_FLOAT_EQ(a[i].h, c[i].h) << "cell " << i;
     }
+}
+
+TEST(VulkanSurfaceState, LostSurfaceInvalidatesSwapchainUntilRecovered)
+{
+    WindowContext context;
+
+    context.mark_surface_lost();
+    EXPECT_TRUE(context.surface_lost);
+    EXPECT_TRUE(context.swapchain_dirty);
+    EXPECT_TRUE(context.swapchain_invalidated);
+
+    context.mark_surface_recovered();
+    EXPECT_FALSE(context.surface_lost);
+    EXPECT_FALSE(context.swapchain_dirty);
+    EXPECT_FALSE(context.swapchain_invalidated);
 }

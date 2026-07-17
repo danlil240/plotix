@@ -167,7 +167,8 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
             // compares against ssbo_capacity (element capacity), not uploaded_count,
             // so the headroom is actually used.
             size_t alloc_count = count * 2;
-            gpu.ssbo = backend_.create_buffer(BufferUsage::Storage, alloc_count * 2 * sizeof(float));
+            gpu.ssbo =
+                backend_.create_buffer(BufferUsage::Storage, alloc_count * 2 * sizeof(float));
             gpu.ssbo_capacity = alloc_count;
         }
 
@@ -177,9 +178,12 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
         // Camera-relative upload: subtract origin in double precision
         // before converting to float.  Keeps GPU floats small, eliminating
         // catastrophic cancellation at deep zoom.
+        // The series x_offset (logical x = x_offset + stored float) folds
+        // into the effective origin: uploaded = (x + xoff) - origin_x.
+        const double x_org = origin_x - series.x_offset();
         for (size_t i = 0; i < count; ++i)
         {
-            upload_scratch_[i * 2] = static_cast<float>(static_cast<double>(x_data[i]) - origin_x);
+            upload_scratch_[i * 2] = static_cast<float>(static_cast<double>(x_data[i]) - x_org);
             upload_scratch_[i * 2 + 1] =
                 static_cast<float>(static_cast<double>(y_data[i]) - origin_y);
         }
@@ -227,13 +231,13 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
             {
                 if (gpu.fill_buffer)
                     backend_.destroy_buffer(gpu.fill_buffer);
-                size_t fill_alloc        = fill_count * 2;
-                gpu.fill_buffer          = backend_.create_buffer(BufferUsage::Vertex,
-                                                         fill_alloc * 3 * sizeof(float));
+                size_t fill_alloc = fill_count * 2;
+                gpu.fill_buffer =
+                    backend_.create_buffer(BufferUsage::Vertex, fill_alloc * 3 * sizeof(float));
                 gpu.fill_vertex_capacity = fill_alloc;
             }
 
-            if (origin_x != 0.0 || origin_y != 0.0)
+            if (x_org != 0.0 || origin_y != 0.0)
             {
                 // Re-center fill vertices (stride=3: x, y, alpha)
                 if (upload_scratch_.size() < fill_floats)
@@ -242,7 +246,7 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
                 for (size_t i = 0; i < fill_count; ++i)
                 {
                     upload_scratch_[i * 3] =
-                        static_cast<float>(static_cast<double>(fv[i * 3]) - origin_x);
+                        static_cast<float>(static_cast<double>(fv[i * 3]) - x_org);
                     upload_scratch_[i * 3 + 1] =
                         static_cast<float>(static_cast<double>(fv[i * 3 + 1]) - origin_y);
                     upload_scratch_[i * 3 + 2] = fv[i * 3 + 2];   // alpha unchanged
@@ -265,10 +269,10 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
             {
                 if (gpu.outlier_buffer)
                     backend_.destroy_buffer(gpu.outlier_buffer);
-                size_t out_alloc      = out_count * 2;
-                gpu.outlier_buffer    = backend_.create_buffer(BufferUsage::Storage,
-                                                            out_alloc * 2 * sizeof(float));
-                gpu.outlier_capacity  = out_alloc;
+                size_t out_alloc = out_count * 2;
+                gpu.outlier_buffer =
+                    backend_.create_buffer(BufferUsage::Storage, out_alloc * 2 * sizeof(float));
+                gpu.outlier_capacity = out_alloc;
             }
             size_t out_floats = out_count * 2;
             if (upload_scratch_.size() < out_floats)
@@ -277,7 +281,7 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
             const float* oy = boxplot->outlier_y().data();
             for (size_t i = 0; i < out_count; ++i)
             {
-                upload_scratch_[i * 2] = static_cast<float>(static_cast<double>(ox[i]) - origin_x);
+                upload_scratch_[i * 2] = static_cast<float>(static_cast<double>(ox[i]) - x_org);
                 upload_scratch_[i * 2 + 1] =
                     static_cast<float>(static_cast<double>(oy[i]) - origin_y);
             }
@@ -330,7 +334,8 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
             if (gpu.ssbo)
                 backend_.destroy_buffer(gpu.ssbo);
             size_t alloc_count = count * 2;
-            gpu.ssbo = backend_.create_buffer(BufferUsage::Storage, alloc_count * 2 * sizeof(float));
+            gpu.ssbo =
+                backend_.create_buffer(BufferUsage::Storage, alloc_count * 2 * sizeof(float));
             gpu.ssbo_capacity = alloc_count;
         }
 
@@ -338,9 +343,10 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
         if (upload_scratch_.size() < floats_needed)
             upload_scratch_.resize(floats_needed);
 
+        const double x_org = origin_x - series.x_offset();
         for (size_t i = 0; i < count; ++i)
         {
-            upload_scratch_[i * 2] = static_cast<float>(static_cast<double>(vis.x[i]) - origin_x);
+            upload_scratch_[i * 2] = static_cast<float>(static_cast<double>(vis.x[i]) - x_org);
             upload_scratch_[i * 2 + 1] =
                 static_cast<float>(static_cast<double>(vis.y[i]) - origin_y);
         }
@@ -385,7 +391,8 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
             if (gpu.ssbo)
                 backend_.destroy_buffer(gpu.ssbo);
             size_t alloc_count = count * 2;
-            gpu.ssbo = backend_.create_buffer(BufferUsage::Storage, alloc_count * 4 * sizeof(float));
+            gpu.ssbo =
+                backend_.create_buffer(BufferUsage::Storage, alloc_count * 4 * sizeof(float));
             gpu.ssbo_capacity = alloc_count;
         }
 
@@ -530,8 +537,7 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
         if (entry && entry->upload_fn && !entry->faulted)
         {
             auto result = plugin_guard_invoke(entry->type_name.c_str(),
-                                              [&]()
-                                              {
+                                              [&]() {
                                                   entry->upload_fn(backend_,
                                                                    custom->data(),
                                                                    gpu.plugin_gpu_state,

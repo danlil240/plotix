@@ -80,6 +80,19 @@ class Series
     bool excluded_from_autoscale() const { return excluded_from_autoscale_; }
     void set_excluded_from_autoscale(bool v) { excluded_from_autoscale_ = v; }
 
+    // ── Double-precision x-axis offset ──
+    // Logical x value = x_offset() + x_data()[i].  Allows plotting data with
+    // large absolute x values (e.g. epoch timestamps ~1.7e9) that exceed
+    // float's ~7-digit precision: the stored floats stay small and precise
+    // while axis limits, ticks, and cursor readouts show absolute values.
+    Series& x_offset(double off)
+    {
+        x_offset_ = off;
+        dirty_    = true;
+        return *this;
+    }
+    double x_offset() const { return x_offset_; }
+
     // Control whether this series appears in the legend.
     bool show_in_legend() const { return show_in_legend_; }
     void set_show_in_legend(bool v) { show_in_legend_ = v; }
@@ -166,7 +179,8 @@ class Series
     std::string       label_;
     Color             color_ = colors::blue;
     PlotStyle         style_;   // line/marker style, sizes, opacity
-    bool              visible_ = true;
+    bool              visible_                 = true;
+    double            x_offset_                = 0.0;
     bool              excluded_from_autoscale_ = false;
     bool              show_in_legend_          = true;
     bool              is_reference_line_       = false;

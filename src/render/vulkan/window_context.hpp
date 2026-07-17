@@ -66,7 +66,23 @@ struct WindowContext
     bool swapchain_dirty = false;
     bool swapchain_invalidated =
         false;   // present returned OUT_OF_DATE — must recreate before next acquire
+    bool surface_lost =
+        false;   // acquire/present returned SURFACE_LOST — surface itself must be recreated
     bool should_close = false;
+
+    void mark_surface_lost()
+    {
+        surface_lost          = true;
+        swapchain_dirty       = true;
+        swapchain_invalidated = true;
+    }
+
+    void mark_surface_recovered()
+    {
+        surface_lost          = false;
+        swapchain_dirty       = false;
+        swapchain_invalidated = false;
+    }
 
     // Window state
     bool     is_focused = false;

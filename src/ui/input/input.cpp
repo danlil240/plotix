@@ -463,20 +463,20 @@ void InputHandler::on_mouse_move(double x, double y)
     if (hit_base)
     {
         SPECTRA_LOG_TRACE("input", "Mouse move hit axes");
-        Axes*       hit2d            = dynamic_cast<Axes*>(hit_base);
-        Axes*       prev             = active_axes_;
-        AxesBase*   prev_base        = active_axes_base_;
-        const auto& vp               = viewport_for_axes(hit_base);
-        float       saved_vp_x       = vp_x_;
-        float       saved_vp_y       = vp_y_;
-        float       saved_vp_w       = vp_w_;
-        float       saved_vp_h       = vp_h_;
-        vp_x_                        = vp.x;
-        vp_y_                        = vp.y;
-        vp_w_                        = vp.w;
-        vp_h_                        = vp.h;
-        active_axes_base_            = hit_base;
-        active_axes_                 = hit2d;
+        Axes*       hit2d      = dynamic_cast<Axes*>(hit_base);
+        Axes*       prev       = active_axes_;
+        AxesBase*   prev_base  = active_axes_base_;
+        const auto& vp         = viewport_for_axes(hit_base);
+        float       saved_vp_x = vp_x_;
+        float       saved_vp_y = vp_y_;
+        float       saved_vp_w = vp_w_;
+        float       saved_vp_h = vp_h_;
+        vp_x_                  = vp.x;
+        vp_y_                  = vp.y;
+        vp_w_                  = vp.w;
+        vp_h_                  = vp.h;
+        active_axes_base_      = hit_base;
+        active_axes_           = hit2d;
 
         cursor_readout_.valid    = true;
         cursor_readout_.screen_x = x;
@@ -894,10 +894,10 @@ void InputHandler::apply_box_zoom()
     vp_w_            = vp.w;
     vp_h_            = vp.h;
 
-    float d_x0 = NAN;
-    float d_y0 = NAN;
-    float d_x1 = NAN;
-    float d_y1 = NAN;
+    double d_x0 = NAN;
+    double d_y0 = NAN;
+    double d_x1 = NAN;
+    double d_y1 = NAN;
     screen_to_data(box_zoom_.x0, box_zoom_.y0, d_x0, d_y0);
     screen_to_data(box_zoom_.x1, box_zoom_.y1, d_x1, d_y1);
 
@@ -907,10 +907,10 @@ void InputHandler::apply_box_zoom()
     vp_h_ = saved_vp_h;
 
     // Ensure min < max
-    float xmin = std::min(d_x0, d_x1);
-    float xmax = std::max(d_x0, d_x1);
-    float ymin = std::min(d_y0, d_y1);
-    float ymax = std::max(d_y0, d_y1);
+    double xmin = std::min(d_x0, d_x1);
+    double xmax = std::max(d_x0, d_x1);
+    double ymin = std::min(d_y0, d_y1);
+    double ymax = std::max(d_y0, d_y1);
 
     // Only apply if the selection is large enough (avoid accidental clicks)
     constexpr float MIN_SELECTION_PIXELS = 5.0f;
@@ -975,27 +975,28 @@ void InputHandler::set_viewport(float vp_x, float vp_y, float vp_w, float vp_h)
     vp_h_ = vp_h;
 }
 
-void InputHandler::screen_to_data(double screen_x,
-                                  double screen_y,
-                                  float& data_x,
-                                  float& data_y) const
+void InputHandler::screen_to_data(double  screen_x,
+                                  double  screen_y,
+                                  double& data_x,
+                                  double& data_y) const
 {
     if (!active_axes_)
     {
-        data_x = 0.0f;
-        data_y = 0.0f;
+        data_x = 0.0;
+        data_y = 0.0;
         return;
     }
 
     auto xlim = active_axes_->x_limits();
     auto ylim = active_axes_->y_limits();
 
-    // Normalize screen position within viewport [0, 1]
-    float norm_x = (static_cast<float>(screen_x) - vp_x_) / vp_w_;
-    float norm_y = (static_cast<float>(screen_y) - vp_y_) / vp_h_;
+    // Normalize screen position within viewport [0, 1] (double precision:
+    // limits can sit at epoch scale where float quantizes to ~128 s)
+    double norm_x = (screen_x - static_cast<double>(vp_x_)) / static_cast<double>(vp_w_);
+    double norm_y = (screen_y - static_cast<double>(vp_y_)) / static_cast<double>(vp_h_);
 
     // Invert Y (screen Y goes down, data Y goes up)
-    norm_y = 1.0f - norm_y;
+    norm_y = 1.0 - norm_y;
 
     // Map to data space
     data_x = xlim.min + norm_x * (xlim.max - xlim.min);

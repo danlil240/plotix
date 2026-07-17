@@ -136,20 +136,20 @@ LineSeries& Axes::vline(double x, std::string_view fmt)
 }
 
 LineSeries& Axes::fplot(std::function<double(double)> func,
-                        double                 xmin,
-                        double                 xmax,
-                        int                    n,
-                        std::string_view       fmt)
+                        double                        xmin,
+                        double                        xmax,
+                        int                           n,
+                        std::string_view              fmt)
 {
     n = std::max(n, 2);
     std::vector<float> xs(static_cast<size_t>(n));
     std::vector<float> ys(static_cast<size_t>(n));
-    const double dx = (xmax - xmin) / static_cast<double>(n - 1);
+    const double       dx = (xmax - xmin) / static_cast<double>(n - 1);
     for (int i = 0; i < n; ++i)
     {
-        const double x = xmin + dx * static_cast<double>(i);
+        const double x             = xmin + dx * static_cast<double>(i);
         xs[static_cast<size_t>(i)] = static_cast<float>(x);
-        ys[static_cast<size_t>(i)]   = static_cast<float>(func(x));
+        ys[static_cast<size_t>(i)] = static_cast<float>(func(x));
     }
     return plot(xs, ys, fmt);
 }
@@ -314,33 +314,37 @@ void Axes::set_presented_buffer_right_edge(double x)
 
 // Compute data extent across all series
 static void data_extent(const std::vector<std::unique_ptr<Series>>& series,
-                        float&                                      x_min,
-                        float&                                      x_max,
-                        float&                                      y_min,
-                        float&                                      y_max)
+                        double&                                     x_min,
+                        double&                                     x_max,
+                        double&                                     y_min,
+                        double&                                     y_max)
 {
-    x_min = std::numeric_limits<float>::max();
-    x_max = -std::numeric_limits<float>::max();
-    y_min = std::numeric_limits<float>::max();
-    y_max = -std::numeric_limits<float>::max();
+    x_min = std::numeric_limits<double>::max();
+    x_max = -std::numeric_limits<double>::max();
+    y_min = std::numeric_limits<double>::max();
+    y_max = -std::numeric_limits<double>::max();
 
     for (const auto& s : series)
     {
         if (s->excluded_from_autoscale())
             continue;
 
+        // Per-series double x-offset: logical x = x_offset + stored float.
+        // Accumulating in double preserves precision for epoch-scale offsets.
+        const double xoff = s->x_offset();
+
         // Try LineSeries
         if (auto* ls = dynamic_cast<const LineSeries*>(s.get()))
         {
             for (auto v : ls->x_data())
             {
-                x_min = std::min(x_min, v);
-                x_max = std::max(x_max, v);
+                x_min = std::min(x_min, static_cast<double>(v) + xoff);
+                x_max = std::max(x_max, static_cast<double>(v) + xoff);
             }
             for (auto v : ls->y_data())
             {
-                y_min = std::min(y_min, v);
-                y_max = std::max(y_max, v);
+                y_min = std::min(y_min, static_cast<double>(v));
+                y_max = std::max(y_max, static_cast<double>(v));
             }
         }
         // Try ScatterSeries
@@ -348,13 +352,13 @@ static void data_extent(const std::vector<std::unique_ptr<Series>>& series,
         {
             for (auto v : ss->x_data())
             {
-                x_min = std::min(x_min, v);
-                x_max = std::max(x_max, v);
+                x_min = std::min(x_min, static_cast<double>(v) + xoff);
+                x_max = std::max(x_max, static_cast<double>(v) + xoff);
             }
             for (auto v : ss->y_data())
             {
-                y_min = std::min(y_min, v);
-                y_max = std::max(y_max, v);
+                y_min = std::min(y_min, static_cast<double>(v));
+                y_max = std::max(y_max, static_cast<double>(v));
             }
         }
         // Try statistical series (all expose x_data/y_data with NaN breaks)
@@ -364,16 +368,16 @@ static void data_extent(const std::vector<std::unique_ptr<Series>>& series,
             {
                 if (!std::isnan(v))
                 {
-                    x_min = std::min(x_min, v);
-                    x_max = std::max(x_max, v);
+                    x_min = std::min(x_min, static_cast<double>(v) + xoff);
+                    x_max = std::max(x_max, static_cast<double>(v) + xoff);
                 }
             }
             for (auto v : yd)
             {
                 if (!std::isnan(v))
                 {
-                    y_min = std::min(y_min, v);
-                    y_max = std::max(y_max, v);
+                    y_min = std::min(y_min, static_cast<double>(v));
+                    y_max = std::max(y_max, static_cast<double>(v));
                 }
             }
         };
@@ -383,8 +387,8 @@ static void data_extent(const std::vector<std::unique_ptr<Series>>& series,
             // Include outlier extents
             for (auto v : bp->outlier_y())
             {
-                y_min = std::min(y_min, v);
-                y_max = std::max(y_max, v);
+                y_min = std::min(y_min, static_cast<double>(v));
+                y_max = std::max(y_max, static_cast<double>(v));
             }
         }
         if (auto* vn = dynamic_cast<const ViolinSeries*>(s.get()))
@@ -400,22 +404,22 @@ static void data_extent(const std::vector<std::unique_ptr<Series>>& series,
     // Fallback if no data
     if (x_min > x_max)
     {
-        x_min = 0.0f;
-        x_max = 1.0f;
+        x_min = 0.0;
+        x_max = 1.0;
     }
     if (y_min > y_max)
     {
-        y_min = 0.0f;
-        y_max = 1.0f;
+        y_min = 0.0;
+        y_max = 1.0;
     }
 
     // Add 5% padding
-    float x_pad = (x_max - x_min) * 0.05f;
-    float y_pad = (y_max - y_min) * 0.05f;
-    if (x_pad == 0.0f)
-        x_pad = 0.5f;
-    if (y_pad == 0.0f)
-        y_pad = 0.5f;
+    double x_pad = (x_max - x_min) * 0.05;
+    double y_pad = (y_max - y_min) * 0.05;
+    if (x_pad == 0.0)
+        x_pad = 0.5;
+    if (y_pad == 0.0)
+        y_pad = 0.5;
     x_min -= x_pad;
     x_max += x_pad;
     y_min -= y_pad;
@@ -424,10 +428,10 @@ static void data_extent(const std::vector<std::unique_ptr<Series>>& series,
 
 static void data_extent_with_mode(const std::vector<std::unique_ptr<Series>>& series,
                                   AutoscaleMode                               mode,
-                                  float&                                      x_min,
-                                  float&                                      x_max,
-                                  float&                                      y_min,
-                                  float&                                      y_max)
+                                  double&                                     x_min,
+                                  double&                                     x_max,
+                                  double&                                     y_min,
+                                  double&                                     y_max)
 {
     // Compute raw extent
     data_extent(series, x_min, x_max, y_min, y_max);
@@ -435,77 +439,81 @@ static void data_extent_with_mode(const std::vector<std::unique_ptr<Series>>& se
     if (mode == AutoscaleMode::Tight)
     {
         // Re-compute without padding (data_extent adds 5% padding)
-        x_min = std::numeric_limits<float>::max();
-        x_max = -std::numeric_limits<float>::max();
-        y_min = std::numeric_limits<float>::max();
-        y_max = -std::numeric_limits<float>::max();
+        x_min = std::numeric_limits<double>::max();
+        x_max = -std::numeric_limits<double>::max();
+        y_min = std::numeric_limits<double>::max();
+        y_max = -std::numeric_limits<double>::max();
         for (const auto& s : series)
         {
             if (s->excluded_from_autoscale())
                 continue;
+            const double xoff = s->x_offset();
             if (auto* ls = dynamic_cast<const LineSeries*>(s.get()))
             {
                 for (auto v : ls->x_data())
                 {
-                    x_min = std::min(x_min, v);
-                    x_max = std::max(x_max, v);
+                    x_min = std::min(x_min, static_cast<double>(v) + xoff);
+                    x_max = std::max(x_max, static_cast<double>(v) + xoff);
                 }
                 for (auto v : ls->y_data())
                 {
-                    y_min = std::min(y_min, v);
-                    y_max = std::max(y_max, v);
+                    y_min = std::min(y_min, static_cast<double>(v));
+                    y_max = std::max(y_max, static_cast<double>(v));
                 }
             }
             if (auto* ss = dynamic_cast<const ScatterSeries*>(s.get()))
             {
                 for (auto v : ss->x_data())
                 {
-                    x_min = std::min(x_min, v);
-                    x_max = std::max(x_max, v);
+                    x_min = std::min(x_min, static_cast<double>(v) + xoff);
+                    x_max = std::max(x_max, static_cast<double>(v) + xoff);
                 }
                 for (auto v : ss->y_data())
                 {
-                    y_min = std::min(y_min, v);
-                    y_max = std::max(y_max, v);
+                    y_min = std::min(y_min, static_cast<double>(v));
+                    y_max = std::max(y_max, static_cast<double>(v));
                 }
             }
         }
         if (x_min > x_max)
         {
-            x_min = 0.0f;
-            x_max = 1.0f;
+            x_min = 0.0;
+            x_max = 1.0;
         }
         if (y_min > y_max)
         {
-            y_min = 0.0f;
-            y_max = 1.0f;
+            y_min = 0.0;
+            y_max = 1.0;
         }
         // Handle zero range
         if (x_max == x_min)
         {
-            x_min -= 0.5f;
-            x_max += 0.5f;
+            x_min -= 0.5;
+            x_max += 0.5;
         }
         if (y_max == y_min)
         {
-            y_min -= 0.5f;
-            y_max += 0.5f;
+            y_min -= 0.5;
+            y_max += 0.5;
         }
     }
     // Fit and Padded use the default data_extent behavior (with padding)
 }
 
-static bool latest_x_value(const std::vector<std::unique_ptr<Series>>& series, float& latest_x)
+static bool latest_x_value(const std::vector<std::unique_ptr<Series>>& series, double& latest_x)
 {
     bool has_value = false;
+
+    double current_xoff = 0.0;
 
     auto update_latest = [&](float x)
     {
         if (!std::isfinite(x))
             return;
-        if (!has_value || x > latest_x)
+        const double abs_x = static_cast<double>(x) + current_xoff;
+        if (!has_value || abs_x > latest_x)
         {
-            latest_x  = x;
+            latest_x  = abs_x;
             has_value = true;
         }
     };
@@ -514,6 +522,7 @@ static bool latest_x_value(const std::vector<std::unique_ptr<Series>>& series, f
     {
         if (s->excluded_from_autoscale())
             continue;
+        current_xoff = s->x_offset();
         if (auto* ls = dynamic_cast<const LineSeries*>(s.get()))
         {
             for (float x : ls->x_data())
@@ -544,14 +553,16 @@ static bool latest_x_value(const std::vector<std::unique_ptr<Series>>& series, f
 }
 
 static bool windowed_y_extent(const std::vector<std::unique_ptr<Series>>& series,
-                              float                                       window_min,
-                              float                                       window_max,
+                              double                                      window_min,
+                              double                                      window_max,
                               float&                                      y_min,
                               float&                                      y_max)
 {
     y_min      = std::numeric_limits<float>::max();
     y_max      = -std::numeric_limits<float>::max();
     bool has_y = false;
+
+    double current_xoff = 0.0;
 
     auto consume_xy = [&](std::span<const float> xd, std::span<const float> yd)
     {
@@ -562,7 +573,8 @@ static bool windowed_y_extent(const std::vector<std::unique_ptr<Series>>& series
             float y = yd[i];
             if (!std::isfinite(x) || !std::isfinite(y))
                 continue;
-            if (x < window_min || x > window_max)
+            const double abs_x = static_cast<double>(x) + current_xoff;
+            if (abs_x < window_min || abs_x > window_max)
                 continue;
             y_min = std::min(y_min, y);
             y_max = std::max(y_max, y);
@@ -574,6 +586,7 @@ static bool windowed_y_extent(const std::vector<std::unique_ptr<Series>>& series
     {
         if (s->excluded_from_autoscale())
             continue;
+        current_xoff = s->x_offset();
         if (auto* ls = dynamic_cast<const LineSeries*>(s.get()))
             consume_xy(ls->x_data(), ls->y_data());
         if (auto* ss = dynamic_cast<const ScatterSeries*>(s.get()))
@@ -605,19 +618,19 @@ AxisLimits Axes::x_limits() const
             return {left, right};
         }
 
-        float latest_x = 0.0f;
+        double latest_x = 0.0;
         if (latest_x_value(series_, latest_x))
         {
-            return {latest_x - presented_buffer_seconds_.value(), latest_x};
+            return {latest_x - static_cast<double>(presented_buffer_seconds_.value()), latest_x};
         }
     }
 
     if (xlim_.has_value() || autoscale_mode_ == AutoscaleMode::Manual)
         return xlim_.value_or(AxisLimits{0.0, 1.0});
-    float xmin = NAN;
-    float xmax = NAN;
-    float ymin = NAN;
-    float ymax = NAN;
+    double xmin = NAN;
+    double xmax = NAN;
+    double ymin = NAN;
+    double ymax = NAN;
     data_extent_with_mode(series_, autoscale_mode_, xmin, xmax, ymin, ymax);
     return {xmin, xmax};
 }
@@ -629,24 +642,24 @@ AxisLimits Axes::y_limits() const
 
     if (presented_buffer_seconds_.has_value() && presented_buffer_seconds_.value() > 0.0f)
     {
-        float window_min  = 0.0f;
-        float window_max  = 0.0f;
-        bool  have_window = false;
+        double window_min  = 0.0;
+        double window_max  = 0.0;
+        bool   have_window = false;
 
         if (presented_buffer_following_)
         {
             if (presented_buffer_right_edge_.has_value())
             {
-                window_max  = static_cast<float>(presented_buffer_right_edge_.value());
-                window_min  = window_max - presented_buffer_seconds_.value();
+                window_max  = presented_buffer_right_edge_.value();
+                window_min  = window_max - static_cast<double>(presented_buffer_seconds_.value());
                 have_window = true;
             }
             else
             {
-                float latest_x = 0.0f;
+                double latest_x = 0.0;
                 if (latest_x_value(series_, latest_x))
                 {
-                    window_min  = latest_x - presented_buffer_seconds_.value();
+                    window_min  = latest_x - static_cast<double>(presented_buffer_seconds_.value());
                     window_max  = latest_x;
                     have_window = true;
                 }
@@ -654,8 +667,8 @@ AxisLimits Axes::y_limits() const
         }
         else if (xlim_.has_value())
         {
-            window_min  = static_cast<float>(xlim_->min);
-            window_max  = static_cast<float>(xlim_->max);
+            window_min  = xlim_->min;
+            window_max  = xlim_->max;
             have_window = true;
         }
 
@@ -676,10 +689,10 @@ AxisLimits Axes::y_limits() const
         }
     }
 
-    float xmin = NAN;
-    float xmax = NAN;
-    float ymin = NAN;
-    float ymax = NAN;
+    double xmin = NAN;
+    double xmax = NAN;
+    double ymin = NAN;
+    double ymax = NAN;
     data_extent_with_mode(series_, autoscale_mode_, xmin, xmax, ymin, ymax);
     return {ymin, ymax};
 }
@@ -838,8 +851,10 @@ static std::string format_tick_value(double value, double spacing)
     }
 
     // Use fixed notation if it results in a reasonable string,
-    // otherwise switch to scientific notation.
-    if (digits_after_decimal <= 9 && abs_val < 1e9 && abs_val >= 0.001)
+    // otherwise switch to scientific notation.  The 1e12 bound keeps
+    // epoch-scale timestamps (~1.7e9) in plain fixed notation like
+    // PlotJuggler/rqt instead of scientific notation.
+    if (digits_after_decimal <= 9 && abs_val < 1e12 && abs_val >= 0.001)
     {
         // Fixed notation with enough decimals
         std::string str = std::format("{:.{}f}", value, digits_after_decimal);
@@ -853,7 +868,7 @@ static std::string format_tick_value(double value, double spacing)
             if (min_digits < 0)
                 min_digits = 0;
         }
-        auto        dot_pos = str.find('.');
+        auto dot_pos = str.find('.');
         if (dot_pos != std::string::npos)
         {
             size_t current_decimals = str.size() - dot_pos - 1;

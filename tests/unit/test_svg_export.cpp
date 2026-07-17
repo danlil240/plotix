@@ -263,5 +263,20 @@ TEST(SvgExport, GridDisabledOmitsGridGroup)
     EXPECT_EQ(svg.find("class=\"grid\""), std::string::npos);
 }
 
+TEST(SvgExport, MapsEpochOffsetSeriesIntoViewport)
+{
+    Figure                   fig({.width = 800, .height = 600});
+    auto&                    ax = fig.subplot(1, 1, 1);
+    const std::vector<float> x  = {0.0f, 0.02f, 0.04f};
+    const std::vector<float> y  = {1.0f, 2.0f, 3.0f};
+    ax.line(x, y).x_offset(1783350621.752999);
+    ax.auto_fit();
+    fig.compute_layout();
+
+    const std::string svg = SvgExporter::to_string(fig);
+    EXPECT_EQ(svg.find("<polyline fill=\"none\"") == std::string::npos, false);
+    EXPECT_EQ(svg.find("points=\"-"), std::string::npos);
+}
+
 }   // namespace
 }   // namespace spectra

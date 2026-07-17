@@ -38,34 +38,34 @@ TEST_F(InputHandlerTest, ScreenToDataCenter)
     float cx = vp.x + vp.w / 2.0f;
     float cy = vp.y + vp.h / 2.0f;
 
-    float dx, dy;
+    double dx, dy;
     handler_.screen_to_data(cx, cy, dx, dy);
 
-    EXPECT_NEAR(dx, 5.0f, 0.1f);
-    EXPECT_NEAR(dy, 5.0f, 0.1f);
+    EXPECT_NEAR(dx, 5.0, 0.1);
+    EXPECT_NEAR(dy, 5.0, 0.1);
 }
 
 TEST_F(InputHandlerTest, ScreenToDataTopLeft)
 {
     auto& vp = axes().viewport();
 
-    float dx, dy;
+    double dx, dy;
     handler_.screen_to_data(vp.x, vp.y, dx, dy);
 
     // Top-left of viewport = data (xmin, ymax) because screen Y is inverted
-    EXPECT_NEAR(dx, 0.0f, 0.1f);
-    EXPECT_NEAR(dy, 10.0f, 0.1f);
+    EXPECT_NEAR(dx, 0.0, 0.1);
+    EXPECT_NEAR(dy, 10.0, 0.1);
 }
 
 TEST_F(InputHandlerTest, ScreenToDataBottomRight)
 {
     auto& vp = axes().viewport();
 
-    float dx, dy;
+    double dx, dy;
     handler_.screen_to_data(vp.x + vp.w, vp.y + vp.h, dx, dy);
 
-    EXPECT_NEAR(dx, 10.0f, 0.1f);
-    EXPECT_NEAR(dy, 0.0f, 0.1f);
+    EXPECT_NEAR(dx, 10.0, 0.1);
+    EXPECT_NEAR(dy, 0.0, 0.1);
 }
 
 // ─── Pan ────────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ TEST_F(InputHandlerTest, PanIgnoredOutsideViewport)
 
 TEST_F(InputHandlerTest, ScrollIgnoredOutsideViewport)
 {
-    auto& vp = axes().viewport();
+    auto& vp          = axes().viewport();
     auto  xlim_before = axes().x_limits();
 
     handler_.set_active_axes(&axes());
@@ -204,6 +204,61 @@ TEST_F(InputHandlerTest, RightDragExtendsPresentedBuffer)
 
     EXPECT_TRUE(axes().has_presented_buffer());
     EXPECT_GT(axes().presented_buffer_seconds(), before_seconds);
+}
+
+TEST_F(InputHandlerTest, RightDragZoomStableAtEpochScaleLimits)
+{
+    // Regression: with epoch-scale x limits (~1.78e9), the drag-start anchor
+    // must be captured in double precision.  A float anchor quantizes to
+    // ~128 s steps, flinging the view on the first zoom step.
+    constexpr double epoch = 1783350621.752999;
+    axes().xlim(epoch, epoch + 0.04);
+    axes().ylim(0.0f, 10.0f);
+
+    auto& vp = axes().viewport();
+    float cx = vp.x + vp.w * 0.5f;
+    float cy = vp.y + vp.h * 0.5f;
+
+    const double anchor_expected = epoch + 0.02;   // data x at viewport center
+
+    // Right-drag right along X → zoom in around the anchor
+    handler_.on_mouse_button(1, 1, 0, cx, cy);
+    handler_.on_mouse_move(cx + 40.0, cy);
+    handler_.on_mouse_button(1, 0, 0, cx + 40.0, cy);
+
+    auto xlim = axes().x_limits();
+    // Range must shrink (zoom in) and stay sub-second
+    EXPECT_LT(xlim.max - xlim.min, 0.04);
+    EXPECT_GT(xlim.max - xlim.min, 0.0);
+    // Anchor must remain inside the new limits (no view fling)
+    EXPECT_GT(anchor_expected, xlim.min);
+    EXPECT_LT(anchor_expected, xlim.max);
+    // Limits stay in the immediate neighborhood of the anchor
+    EXPECT_NEAR(xlim.min, anchor_expected, 0.05);
+    EXPECT_NEAR(xlim.max, anchor_expected, 0.05);
+}
+
+TEST_F(InputHandlerTest, ScrollZoomStableAtEpochScaleLimits)
+{
+    // Same regression for wheel zoom: cursor anchor in double precision.
+    constexpr double epoch = 1783350621.752999;
+    axes().xlim(epoch, epoch + 0.04);
+    axes().ylim(0.0f, 10.0f);
+
+    auto& vp = axes().viewport();
+    float cx = vp.x + vp.w * 0.5f;
+    float cy = vp.y + vp.h * 0.5f;
+
+    const double anchor_expected = epoch + 0.02;
+
+    handler_.on_scroll(0.0, 1.0, cx, cy);
+    for (int i = 0; i < 30; ++i)
+        handler_.update(1.0f / 60.0f);
+
+    auto xlim = axes().x_limits();
+    EXPECT_LT(xlim.max - xlim.min, 0.04);
+    EXPECT_GT(anchor_expected, xlim.min);
+    EXPECT_LT(anchor_expected, xlim.max);
 }
 
 TEST_F(InputHandlerTest, ScrollAdjustsPresentedBufferWithoutPausingFollow)

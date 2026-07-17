@@ -111,7 +111,7 @@ cmake --build build -j$(nproc)
 | **Easy API** | `plot()`, `scatter()`, `subplot()`, `plot3()`, `surf()` — 7 levels of progressive complexity |
 | **Animation** | Frame callbacks, timeline editor, 7 keyframe interpolation modes, camera animator |
 | **UI** | Command palette, undo/redo, docking/split view, inspector, configurable shortcuts |
-| **Data Interaction** | Tooltips, crosshair, markers, linked axes, shared cursor, 14 data transforms |
+| **Data Interaction** | Drag-and-drop multi-series CSV, epoch-precise X data, tooltips, crosshair, markers, linked axes, shared cursor, 14 transforms |
 | **Multi-Window** | Independent OS windows, tab tear-off, per-window Vulkan swapchain |
 | **Python** | `spectra.plot()` one-liners, NumPy fast path, live streaming, auto-launch backend |
 | **Export** | Headless PNG/GIF/MP4, CMake `find_package`, plugin API, workspace save/load |

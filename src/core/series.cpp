@@ -19,11 +19,10 @@ Series::~Series() = default;
 
 Series::Series(const Series& other)
     : label_(other.label_), color_(other.color_), style_(other.style_), visible_(other.visible_),
-      excluded_from_autoscale_(other.excluded_from_autoscale_),
+      x_offset_(other.x_offset_), excluded_from_autoscale_(other.excluded_from_autoscale_),
       show_in_legend_(other.show_in_legend_), is_reference_line_(other.is_reference_line_),
       dirty_(other.dirty_.load(std::memory_order_relaxed)), event_system_(other.event_system_),
-      owning_axes_(other.owning_axes_),   
-      pending_(nullptr)
+      owning_axes_(other.owning_axes_), pending_(nullptr)
 {
 }
 
@@ -31,10 +30,11 @@ Series& Series::operator=(const Series& other)
 {
     if (this != &other)
     {
-        label_   = other.label_;
-        color_   = other.color_;
-        style_   = other.style_;
-        visible_ = other.visible_;
+        label_                   = other.label_;
+        color_                   = other.color_;
+        style_                   = other.style_;
+        visible_                 = other.visible_;
+        x_offset_                = other.x_offset_;
         excluded_from_autoscale_ = other.excluded_from_autoscale_;
         show_in_legend_          = other.show_in_legend_;
         is_reference_line_       = other.is_reference_line_;
@@ -181,7 +181,7 @@ size_t LineSeries::erase_after(float x_threshold)
     if (x_.empty())
         return 0;
 
-    auto it = std::upper_bound(x_.begin(), x_.end(), x_threshold);
+    auto         it     = std::upper_bound(x_.begin(), x_.end(), x_threshold);
     const size_t remove = static_cast<size_t>(x_.end() - it);
     if (remove == 0)
         return 0;
