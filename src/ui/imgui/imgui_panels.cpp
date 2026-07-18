@@ -806,12 +806,10 @@ void ImGuiIntegration::populate_status_bar(ui::shell::StatusBar& bar)
     bar.clear();
     bar.set_layout_manager(layout_manager_.get());
 
-    const auto& colors = theme_colors();
-    ImDrawList* dl     = nullptr;
-
     bar.add_segment({.align = ui::shell::StatusAlign::Left,
-                     .draw_fn = [this, &colors, &dl]()
+                     .draw_fn = [this]()
                      {
+        const auto& colors = theme_colors();
         ImGui::PushFont(font_heading_);
 
         // Use the column child window's actual height, not the outer status-bar
@@ -828,7 +826,7 @@ void ImGuiIntegration::populate_status_bar(ui::shell::StatusBar& bar)
         float y_offset = (bar_h - pill_h) * 0.5f;
         ImGui::SetCursorPosY(y_offset + (pill_h - text_h) * 0.5f);
 
-        dl = ImGui::GetWindowDrawList();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
 
         auto draw_pill = [&](const char*      label,
                              const ui::Color& text_col,
@@ -935,8 +933,9 @@ void ImGuiIntegration::populate_status_bar(ui::shell::StatusBar& bar)
                      }});
 
     bar.add_segment({.align = ui::shell::StatusAlign::Right,
-                     .draw_fn = [this, &colors]()
+                     .draw_fn = [this]()
                      {
+        const auto& colors = theme_colors();
         ImGuiIO& io = ImGui::GetIO();
         ImGui::PushFont(font_heading_);
 

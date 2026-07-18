@@ -14,7 +14,7 @@
 namespace spectra
 {
 
-void DataMarkerManager::add(float         data_x,
+void DataMarkerManager::add(double        data_x,
                             float         data_y,
                             const Series* series,
                             size_t        index,
@@ -35,7 +35,7 @@ void DataMarkerManager::add(float         data_x,
     markers_.push_back(m);
 }
 
-bool DataMarkerManager::toggle_or_add(float         data_x,
+bool DataMarkerManager::toggle_or_add(double        data_x,
                                       float         data_y,
                                       const Series* series,
                                       size_t        index,
@@ -121,24 +121,26 @@ void DataMarkerManager::clear()
     markers_.clear();
 }
 
-void DataMarkerManager::data_to_screen(float       data_x,
+void DataMarkerManager::data_to_screen(double      data_x,
                                        float       data_y,
                                        const Rect& viewport,
-                                       float       xlim_min,
-                                       float       xlim_max,
+                                       double      xlim_min,
+                                       double      xlim_max,
                                        float       ylim_min,
                                        float       ylim_max,
                                        float&      screen_x,
                                        float&      screen_y)
 {
-    float x_range = xlim_max - xlim_min;
-    float y_range = ylim_max - ylim_min;
-    if (x_range == 0.0f)
-        x_range = 1.0f;
+    double x_range = xlim_max - xlim_min;
+    float  y_range = ylim_max - ylim_min;
+    if (x_range == 0.0)
+        x_range = 1.0;
     if (y_range == 0.0f)
         y_range = 1.0f;
 
-    float norm_x = (data_x - xlim_min) / x_range;
+    // Subtract in double first: at epoch-scale x the difference is small
+    // and converts to float without precision loss.
+    auto  norm_x = static_cast<float>((data_x - xlim_min) / x_range);
     float norm_y = (data_y - ylim_min) / y_range;
 
     screen_x = viewport.x + norm_x * viewport.w;
@@ -147,8 +149,8 @@ void DataMarkerManager::data_to_screen(float       data_x,
 }
 
 void DataMarkerManager::draw(const Rect& viewport,
-                             float       xlim_min,
-                             float       xlim_max,
+                             double      xlim_min,
+                             double      xlim_max,
                              float       ylim_min,
                              float       ylim_max,
                              float       opacity,
@@ -214,8 +216,10 @@ void DataMarkerManager::draw(const Rect& viewport,
         fg->AddCircle(ImVec2(sx, sy), ring_r, border_col, 0, 1.0f);
 
         // ── Build label text ────────────────────────────────────────────
+        // Large x values (epoch timestamps) use fixed notation to stay precise.
         const std::string coord_buf =
-            std::format("X: {:.4g}   Y: {:.4g}", m.data_x, m.data_y);
+            std::abs(m.data_x) >= 1e6 ? std::format("X: {:.3f}   Y: {:.4g}", m.data_x, m.data_y)
+                                      : std::format("X: {:.4g}   Y: {:.4g}", m.data_x, m.data_y);
 
         std::string deriv_buf;
         bool        has_deriv = m.dy_dx_valid;
@@ -228,8 +232,8 @@ void DataMarkerManager::draw(const Rect& viewport,
         ImVec2 name_sz = has_name ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, m.series_label.c_str())
                                   : ImVec2(0, 0);
         ImVec2 coord_sz = font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, coord_buf.c_str());
-        ImVec2 deriv_sz = has_deriv ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, deriv_buf.c_str())
-                                   : ImVec2(0, 0);
+        ImVec2 deriv_sz =
+            has_deriv ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, deriv_buf.c_str()) : ImVec2(0, 0);
 
         float text_w = std::max({name_sz.x, coord_sz.x, deriv_sz.x});
         float text_h = coord_sz.y + (has_name ? (name_sz.y + 3.0f) : 0.0f)
@@ -356,8 +360,8 @@ void DataMarkerManager::draw(const Rect& viewport,
 int DataMarkerManager::hit_test(float       screen_x,
                                 float       screen_y,
                                 const Rect& viewport,
-                                float       xlim_min,
-                                float       xlim_max,
+                                double      xlim_min,
+                                double      xlim_max,
                                 float       ylim_min,
                                 float       ylim_max,
                                 float       radius_px,
@@ -406,7 +410,8 @@ int DataMarkerManager::hit_test(float       screen_x,
 
         // 2) Check the label box (replicate geometry from draw)
         const std::string coord_buf =
-            std::format("X: {:.4g}   Y: {:.4g}", m.data_x, m.data_y);
+            std::abs(m.data_x) >= 1e6 ? std::format("X: {:.3f}   Y: {:.4g}", m.data_x, m.data_y)
+                                      : std::format("X: {:.4g}   Y: {:.4g}", m.data_x, m.data_y);
 
         std::string deriv_buf;
         bool        has_deriv = m.dy_dx_valid;
@@ -417,14 +422,14 @@ int DataMarkerManager::hit_test(float       screen_x,
         ImVec2 name_sz = has_name ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, m.series_label.c_str())
                                   : ImVec2(0, 0);
         ImVec2 coord_sz = font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, coord_buf.c_str());
-        ImVec2 deriv_sz = has_deriv ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, deriv_buf.c_str())
-                                   : ImVec2(0, 0);
+        ImVec2 deriv_sz =
+            has_deriv ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, deriv_buf.c_str()) : ImVec2(0, 0);
 
         float text_w = std::max({name_sz.x, coord_sz.x, deriv_sz.x});
         float text_h = coord_sz.y + (has_name ? (name_sz.y + 3.0f) : 0.0f)
                        + (has_deriv ? (deriv_sz.y + 3.0f) : 0.0f);
-        float box_w  = text_w + pad_x * 2.0f;
-        float box_h  = text_h + pad_y * 2.0f;
+        float box_w = text_w + pad_x * 2.0f;
+        float box_h = text_h + pad_y * 2.0f;
 
         bool  flip    = (sy - ring_r - gap - arrow_h - box_h) < viewport.y;
         float box_top = NAN;
@@ -476,12 +481,12 @@ void DataMarkerManager::draw_3d(const Axes3D& axes3d, float opacity, ImDrawList*
     if (markers_.empty())
         return;
 
-    const auto& colors = theme_mgr_->colors();
-    ImDrawList* fg     = dl ? dl : ImGui::GetForegroundDrawList();
-    ImFont*     font   = ImGui::GetFont();
-    const float fs_sm  = font->LegacySize * 0.72f;
-    const float pad_x  = 6.0f;
-    const float pad_y  = 3.0f;
+    const auto& colors   = theme_mgr_->colors();
+    ImDrawList* fg       = dl ? dl : ImGui::GetForegroundDrawList();
+    ImFont*     font     = ImGui::GetFont();
+    const float fs_sm    = font->LegacySize * 0.72f;
+    const float pad_x    = 6.0f;
+    const float pad_y    = 3.0f;
     const float arrow_h  = 5.0f;
     const float arrow_w  = 5.0f;
     const float corner_r = 6.0f;
@@ -518,8 +523,8 @@ void DataMarkerManager::draw_3d(const Axes3D& axes3d, float opacity, ImDrawList*
             std::format("{:.4g}, {:.4g}, {:.4g}", m.data_x, m.data_y, m.data_z);
         bool has_name = !m.series_label.empty();
 
-        ImVec2 name_sz =
-            has_name ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, m.series_label.c_str()) : ImVec2(0, 0);
+        ImVec2 name_sz = has_name ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, m.series_label.c_str())
+                                  : ImVec2(0, 0);
         ImVec2 coord_sz = font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, coord_buf.c_str());
 
         float text_w = std::max(name_sz.x, coord_sz.x);
@@ -587,10 +592,11 @@ void DataMarkerManager::draw_3d(const Axes3D& axes3d, float opacity, ImDrawList*
                                   bg_col);
         }
 
-        ImU32 box_border = ImGui::ColorConvertFloat4ToU32(ImVec4(colors.tooltip_border.r,
-                                                                 colors.tooltip_border.g,
-                                                                 colors.tooltip_border.b,
-                                                                 colors.tooltip_border.a * opacity));
+        ImU32 box_border =
+            ImGui::ColorConvertFloat4ToU32(ImVec4(colors.tooltip_border.r,
+                                                  colors.tooltip_border.g,
+                                                  colors.tooltip_border.b,
+                                                  colors.tooltip_border.a * opacity));
         fg->AddRect(ImVec2(box_left, box_top),
                     ImVec2(box_right, box_bot),
                     box_border,
@@ -598,8 +604,8 @@ void DataMarkerManager::draw_3d(const Axes3D& axes3d, float opacity, ImDrawList*
                     0,
                     0.5f);
 
-        ImU32 accent_col =
-            ImGui::ColorConvertFloat4ToU32(ImVec4(m.color.r, m.color.g, m.color.b, 0.85f * opacity));
+        ImU32 accent_col = ImGui::ColorConvertFloat4ToU32(
+            ImVec4(m.color.r, m.color.g, m.color.b, 0.85f * opacity));
         fg->AddRectFilled(ImVec2(box_left, box_top + corner_r),
                           ImVec2(box_left + 2.0f, box_bot - corner_r),
                           accent_col);
@@ -627,13 +633,13 @@ int DataMarkerManager::hit_test_3d(float         screen_x,
                                    const Axes3D& axes3d,
                                    float         radius_px) const
 {
-    ImFont*     font    = ImGui::GetFont();
-    const float fs_sm   = font->LegacySize * 0.72f;
-    const float pad_x   = 6.0f;
-    const float pad_y   = 3.0f;
-    const float arrow_h = 5.0f;
-    const float ring_r  = 5.0f;
-    const float gap     = 3.0f;
+    ImFont*     font     = ImGui::GetFont();
+    const float fs_sm    = font->LegacySize * 0.72f;
+    const float pad_x    = 6.0f;
+    const float pad_y    = 3.0f;
+    const float arrow_h  = 5.0f;
+    const float ring_r   = 5.0f;
+    const float gap      = 3.0f;
     const Rect& viewport = axes3d.viewport();
 
     for (size_t i = 0; i < markers_.size(); ++i)
@@ -657,14 +663,14 @@ int DataMarkerManager::hit_test_3d(float         screen_x,
 
         const std::string coord_buf =
             std::format("{:.4g}, {:.4g}, {:.4g}", m.data_x, m.data_y, m.data_z);
-        bool   has_name  = !m.series_label.empty();
-        ImVec2 name_sz   = has_name ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, m.series_label.c_str())
-                                    : ImVec2(0, 0);
-        ImVec2 coord_sz  = font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, coord_buf.c_str());
-        float  text_w    = std::max(name_sz.x, coord_sz.x);
-        float  text_h    = coord_sz.y + (has_name ? (name_sz.y + 2.0f) : 0.0f);
-        float  box_w     = text_w + pad_x * 2.0f;
-        float  box_h     = text_h + pad_y * 2.0f;
+        bool   has_name = !m.series_label.empty();
+        ImVec2 name_sz = has_name ? font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, m.series_label.c_str())
+                                  : ImVec2(0, 0);
+        ImVec2 coord_sz = font->CalcTextSizeA(fs_sm, 300.0f, 0.0f, coord_buf.c_str());
+        float  text_w   = std::max(name_sz.x, coord_sz.x);
+        float  text_h   = coord_sz.y + (has_name ? (name_sz.y + 2.0f) : 0.0f);
+        float  box_w    = text_w + pad_x * 2.0f;
+        float  box_h    = text_h + pad_y * 2.0f;
 
         bool  flip    = (sy - ring_r - gap - arrow_h - box_h) < viewport.y;
         float box_top = NAN;

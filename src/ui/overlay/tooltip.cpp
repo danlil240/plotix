@@ -79,8 +79,11 @@ void Tooltip::draw(const NearestPointResult& nearest,
 
     const auto& colors = theme_mgr_->colors();
 
-    // Format coordinate strings
-    const std::string x_buf = std::format("{:.6g}", nearest.data_x);
+    // Format coordinate strings.  Large x values (epoch timestamps) use
+    // fixed notation with full precision instead of lossy scientific form.
+    const std::string x_buf = std::abs(nearest.data_x) >= 1e6
+                                  ? std::format("{:.3f}", nearest.data_x)
+                                  : std::format("{:.6g}", nearest.data_x);
     const std::string y_buf = std::format("{:.6g}", nearest.data_y);
 
     // Format dy/dx value (label rendered separately)
@@ -130,8 +133,8 @@ void Tooltip::draw(const NearestPointResult& nearest,
     float divider_h  = 6.0f;
     float tooltip_w  = content_w + padding * 2.0f;
     float tooltip_h  = padding * 2.0f + row_h   // name row
-                       + divider_h              // separator gap
-                       + row_h * static_cast<float>(data_rows);
+                      + divider_h               // separator gap
+                      + row_h * static_cast<float>(data_rows);
 
     // Position: above-right of the snap point, clamped to window
     float offset_x = 14.0f;
@@ -260,8 +263,8 @@ void Tooltip::draw(const NearestPointResult& nearest,
     // Draw triangular arrow pointer toward data point
     if (nearest.found && nearest.distance_px <= snap_radius_px_)
     {
-        ImDrawList* fg  = dl ? dl : ImGui::GetForegroundDrawList();
-        ImU32 arrow_col = ImGui::ColorConvertFloat4ToU32(ImVec4(colors.tooltip_bg.r,
+        ImDrawList*     fg         = dl ? dl : ImGui::GetForegroundDrawList();
+        ImU32           arrow_col  = ImGui::ColorConvertFloat4ToU32(ImVec4(colors.tooltip_bg.r,
                                                                 colors.tooltip_bg.g,
                                                                 colors.tooltip_bg.b,
                                                                 colors.tooltip_bg.a * opacity_));
@@ -425,13 +428,13 @@ void Tooltip::draw_3d(const NearestPointResult& nearest,
             lbl_z = nearest.axes3d->zlabel().c_str();
     }
 
-    constexpr float padding      = 12.0f;
-    constexpr float accent_w     = 4.0f;
-    constexpr float swatch_r     = 5.0f;
-    constexpr float col_gap      = 12.0f;
-    constexpr float min_width    = 168.0f;
-    constexpr float depth_bar_h  = 3.0f;
-    constexpr float depth_pad    = 6.0f;
+    constexpr float padding     = 12.0f;
+    constexpr float accent_w    = 4.0f;
+    constexpr float swatch_r    = 5.0f;
+    constexpr float col_gap     = 12.0f;
+    constexpr float min_width   = 168.0f;
+    constexpr float depth_bar_h = 3.0f;
+    constexpr float depth_pad   = 6.0f;
 
     ImFont* body_font = font_body_ ? font_body_ : ImGui::GetFont();
     float   font_sz   = ui::tokens::FONT_MONO;
@@ -475,8 +478,11 @@ void Tooltip::draw_3d(const NearestPointResult& nearest,
 
     if (colors.glow_intensity > 0.01f)
     {
-        ImU32 glow_col = ImGui::ColorConvertFloat4ToU32(
-            ImVec4(series_color.r, series_color.g, series_color.b, 0.14f * opacity_ * colors.glow_intensity));
+        ImU32 glow_col =
+            ImGui::ColorConvertFloat4ToU32(ImVec4(series_color.r,
+                                                  series_color.g,
+                                                  series_color.b,
+                                                  0.14f * opacity_ * colors.glow_intensity));
         fg->AddRect(ImVec2(tx - 1.0f, ty - 1.0f),
                     ImVec2(tx + tooltip_w + 1.0f, ty + tooltip_h + 1.0f),
                     glow_col,
@@ -499,9 +505,9 @@ void Tooltip::draw_3d(const NearestPointResult& nearest,
                       ImDrawFlags_RoundCornersLeft);
 
     ImU32 border_col = ImGui::ColorConvertFloat4ToU32(ImVec4(colors.tooltip_border.r,
-                                                            colors.tooltip_border.g,
-                                                            colors.tooltip_border.b,
-                                                            colors.tooltip_border.a * opacity_));
+                                                             colors.tooltip_border.g,
+                                                             colors.tooltip_border.b,
+                                                             colors.tooltip_border.a * opacity_));
     fg->AddRect(ImVec2(tx, ty), ImVec2(tx + tooltip_w, ty + tooltip_h), border_col, rnd, 0, 0.75f);
 
     float ox = tx + accent_w + padding;
@@ -566,13 +572,14 @@ void Tooltip::draw_3d(const NearestPointResult& nearest,
 
     if (nearest.axes3d)
     {
-        auto  zlim = nearest.axes3d->z_limits();
+        auto  zlim   = nearest.axes3d->z_limits();
         float z_span = static_cast<float>(zlim.max - zlim.min);
         float z_norm = 0.5f;
         if (z_span > 1e-12f)
-            z_norm = std::clamp((nearest.data_z - static_cast<float>(zlim.min)) / z_span, 0.0f, 1.0f);
+            z_norm =
+                std::clamp((nearest.data_z - static_cast<float>(zlim.min)) / z_span, 0.0f, 1.0f);
 
-        float bar_y = oy + row_h + divider_h + row_h * 3.0f + depth_pad;
+        float bar_y  = oy + row_h + divider_h + row_h * 3.0f + depth_pad;
         float bar_x0 = ox;
         float bar_x1 = ox + content_w;
 
@@ -585,7 +592,7 @@ void Tooltip::draw_3d(const NearestPointResult& nearest,
                           track_col,
                           depth_bar_h * 0.5f);
 
-        float fill_x = bar_x0 + z_norm * (bar_x1 - bar_x0);
+        float fill_x   = bar_x0 + z_norm * (bar_x1 - bar_x0);
         ImU32 fill_col = ImGui::ColorConvertFloat4ToU32(
             ImVec4(series_color.r, series_color.g, series_color.b, 0.85f * opacity_));
         fg->AddRectFilled(ImVec2(bar_x0, bar_y),
@@ -597,8 +604,11 @@ void Tooltip::draw_3d(const NearestPointResult& nearest,
     if (nearest.found && in_range)
     {
         float pulse = 0.5f + 0.5f * std::sin(ImGui::GetTime() * 6.0f);
-        ImU32 pulse_col = ImGui::ColorConvertFloat4ToU32(
-            ImVec4(series_color.r, series_color.g, series_color.b, (0.15f + 0.20f * pulse) * opacity_));
+        ImU32 pulse_col =
+            ImGui::ColorConvertFloat4ToU32(ImVec4(series_color.r,
+                                                  series_color.g,
+                                                  series_color.b,
+                                                  (0.15f + 0.20f * pulse) * opacity_));
         fg->AddCircle(ImVec2(nearest.screen_x, nearest.screen_y),
                       10.0f + pulse * 4.0f,
                       pulse_col,
@@ -612,8 +622,11 @@ void Tooltip::draw_3d(const NearestPointResult& nearest,
 
         if (colors.glow_intensity > 0.01f)
         {
-            ImU32 glow_outer = ImGui::ColorConvertFloat4ToU32(
-                ImVec4(series_color.r, series_color.g, series_color.b, 0.14f * opacity_ * colors.glow_intensity));
+            ImU32 glow_outer =
+                ImGui::ColorConvertFloat4ToU32(ImVec4(series_color.r,
+                                                      series_color.g,
+                                                      series_color.b,
+                                                      0.14f * opacity_ * colors.glow_intensity));
             fg->AddCircleFilled(ImVec2(nearest.screen_x, nearest.screen_y), 14.0f, glow_outer, 24);
         }
 
@@ -638,11 +651,11 @@ void Tooltip::draw_3d(const NearestPointResult& nearest,
             {
                 float seg_start = pos;
                 float seg_end   = std::min(pos + dash_len, dist);
-                fg->AddLine(ImVec2(tooltip_anchor.x + nx * seg_start,
-                                   tooltip_anchor.y + ny * seg_start),
-                            ImVec2(tooltip_anchor.x + nx * seg_end, tooltip_anchor.y + ny * seg_end),
-                            line_color,
-                            1.25f);
+                fg->AddLine(
+                    ImVec2(tooltip_anchor.x + nx * seg_start, tooltip_anchor.y + ny * seg_start),
+                    ImVec2(tooltip_anchor.x + nx * seg_end, tooltip_anchor.y + ny * seg_end),
+                    line_color,
+                    1.25f);
                 pos = seg_end + gap_len;
             }
         }

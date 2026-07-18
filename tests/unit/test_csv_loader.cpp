@@ -112,6 +112,74 @@ TEST(CsvLoader, SupportsAdditionalCommonDatetimeFormats)
     EXPECT_NEAR(data.columns[0][5], 4.281586f, 1e-5f);
 }
 
+TEST(CsvLoader, PreservesLargeNumericTimestampsViaColumnOffset)
+{
+    // Epoch-style timestamps (~1.7e9) exceed float's ~7-digit precision.
+    // The loader stores them as small relative floats plus a double base in
+    // column_offsets, so the absolute value is fully recoverable.
+    TempCsvFile file("ros_time_s,value\n"
+                     "1783350621.752999,1\n"
+                     "1783350621.772817,2\n"
+                     "1783350621.792635,3\n");
+
+    const spectra::CsvData data = spectra::parse_csv(file.path());
+
+    ASSERT_TRUE(data.error.empty());
+    ASSERT_EQ(data.num_cols, 2u);
+    ASSERT_EQ(data.num_rows, 3u);
+    ASSERT_EQ(data.columns[0].size(), 3u);
+    ASSERT_EQ(data.column_offsets.size(), 2u);
+    // Base offset holds the first absolute value at double precision
+    EXPECT_NEAR(data.column_offsets[0], 1783350621.752999, 1e-6);
+    // Stored floats are relative: first value 0, sub-second diffs preserved
+    EXPECT_NEAR(data.columns[0][0], 0.0f, 1e-4f);
+    EXPECT_NEAR(data.columns[0][1], 0.019818f, 1e-4f);
+    EXPECT_NEAR(data.columns[0][2], 0.039636f, 1e-4f);
+    // Absolute value round-trips: offset + float ≈ original
+    EXPECT_NEAR(data.column_offsets[0] + static_cast<double>(data.columns[0][2]),
+                1783350621.792635,
+                1e-4);
+    // Y column unaffected (small values, zero offset)
+    EXPECT_EQ(data.column_offsets[1], 0.0);
+    EXPECT_FLOAT_EQ(data.columns[1][0], 1.0f);
+    EXPECT_FLOAT_EQ(data.columns[1][1], 2.0f);
+    EXPECT_FLOAT_EQ(data.columns[1][2], 3.0f);
+}
+
+TEST(CsvLoader, DatetimeColumnRecordsEpochBaseInColumnOffsets)
+{
+    TempCsvFile file("time,value\n"
+                     "2026-03-15T20:47:00Z,1\n"
+                     "2026-03-15T20:47:01.500Z,2\n");
+
+    const spectra::CsvData data = spectra::parse_csv(file.path());
+
+    ASSERT_TRUE(data.error.empty());
+    ASSERT_EQ(data.column_offsets.size(), 2u);
+    // Base is the epoch seconds of the first datetime (non-zero)
+    EXPECT_GT(data.column_offsets[0], 1e9);
+    EXPECT_EQ(data.column_offsets[1], 0.0);
+}
+
+TEST(CsvLoader, DoesNotNormalizeSmallNumericValues)
+{
+    // Values below 1e6 should be stored as-is with zero offset.
+    TempCsvFile file("x,y\n"
+                     "100,1\n"
+                     "200,2\n"
+                     "300,3\n");
+
+    const spectra::CsvData data = spectra::parse_csv(file.path());
+
+    ASSERT_TRUE(data.error.empty());
+    ASSERT_EQ(data.num_rows, 3u);
+    ASSERT_EQ(data.column_offsets.size(), 2u);
+    EXPECT_EQ(data.column_offsets[0], 0.0);
+    EXPECT_FLOAT_EQ(data.columns[0][0], 100.0f);
+    EXPECT_FLOAT_EQ(data.columns[0][1], 200.0f);
+    EXPECT_FLOAT_EQ(data.columns[0][2], 300.0f);
+}
+
 TEST(CsvLoader, SupportsTimezoneVariants)
 {
     TempCsvFile file("time,value\n"

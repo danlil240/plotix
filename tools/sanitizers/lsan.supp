@@ -1,3 +1,15 @@
-# Known external leak from GLFW/X11 stack through libdbus.
-# Keep LeakSanitizer enabled for Spectra allocations and suppress this library-only report.
+# Known external leaks from system libraries used by GLFW's Wayland backend.
+# Keep LeakSanitizer enabled for Spectra allocations and suppress these library-only reports.
 leak:libdbus-1.so
+
+# GLFW + libdecor (Wayland decorations) leaks through GTK/Pango/Fontconfig.
+# These are internal GTK allocations not freed at process exit.
+leak:libdecor-gtk.so
+leak:libdecor-0.so.0
+leak:libgtk-3.so.0
+leak:libpango-1.0.so.0
+leak:libpangoft2-1.0.so.0
+leak:libfontconfig.so.1
+
+# Wayland client protocol proxy objects leaked by GLFW's Wayland backend.
+leak:libwayland-client.so.0
