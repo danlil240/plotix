@@ -19,11 +19,11 @@ vec3 compute_centroid_xyz(const std::vector<float>& x,
                           const std::vector<float>& y,
                           const std::vector<float>& z)
 {
-    if (x.empty())
+    const size_t n = std::min({x.size(), y.size(), z.size()});
+    if (n == 0)
         return {0.0f, 0.0f, 0.0f};
 
-    vec3   sum{0.0f, 0.0f, 0.0f};
-    size_t n = std::min({x.size(), y.size(), z.size()});
+    vec3 sum{0.0f, 0.0f, 0.0f};
     for (size_t i = 0; i < n; ++i)
     {
         sum.x += x[i];
@@ -39,15 +39,15 @@ void get_bounds_xyz(const std::vector<float>& x,
                     vec3&                     min_out,
                     vec3&                     max_out)
 {
-    if (x.empty())
+    const size_t n = std::min({x.size(), y.size(), z.size()});
+    if (n == 0)
     {
         min_out = max_out = {0.0f, 0.0f, 0.0f};
         return;
     }
 
-    size_t n = std::min({x.size(), y.size(), z.size()});
-    min_out  = {x[0], y[0], z[0]};
-    max_out  = min_out;
+    min_out = {x[0], y[0], z[0]};
+    max_out = min_out;
 
     for (size_t i = 1; i < n; ++i)
     {

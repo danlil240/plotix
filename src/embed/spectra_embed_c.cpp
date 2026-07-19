@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <deque>
 #include <span>
 #include <string>
 #include <vector>
@@ -53,9 +54,9 @@ struct SpectraSeries
 // Small pool of wrapper objects so the C API can return stable pointers.
 // These are leaked intentionally — the embed surface owns the real objects.
 // A real production API would use a handle table; this is sufficient for FFI demos.
-static thread_local std::vector<SpectraFigure> g_fig_pool;
-static thread_local std::vector<SpectraAxes>   g_ax_pool;
-static thread_local std::vector<SpectraSeries> g_series_pool;
+static thread_local std::deque<SpectraFigure> g_fig_pool;
+static thread_local std::deque<SpectraAxes>   g_ax_pool;
+static thread_local std::deque<SpectraSeries> g_series_pool;
 
 // ── Enum mapping helpers ─────────────────────────────────────────────────────
 
@@ -154,30 +155,27 @@ static void trim_to_capacity(SpectraSeries* s)
     if (!s || s->capacity == 0)
         return;
     const auto cap = static_cast<size_t>(s->capacity);
+    auto       trim = [cap](auto* series)
+    {
+        auto         x     = series->x_data();
+        auto         y     = series->y_data();
+        const size_t count = series->point_count();
+        if (count > cap)
+        {
+            const size_t       offset = count - cap;
+            std::vector<float> nx(x.begin() + static_cast<ptrdiff_t>(offset),
+                                  x.begin() + static_cast<ptrdiff_t>(count));
+            std::vector<float> ny(y.begin() + static_cast<ptrdiff_t>(offset),
+                                  y.begin() + static_cast<ptrdiff_t>(count));
+            series->set_x(nx);
+            series->set_y(ny);
+        }
+    };
+
     if (auto* line = dynamic_cast<spectra::LineSeries*>(s->ptr))
-    {
-        auto x = line->x_data();
-        auto y = line->y_data();
-        if (x.size() > cap)
-        {
-            std::vector<float> nx(x.end() - cap, x.end());
-            std::vector<float> ny(y.end() - cap, y.end());
-            line->set_x(nx);
-            line->set_y(ny);
-        }
-    }
+        trim(line);
     else if (auto* sc = dynamic_cast<spectra::ScatterSeries*>(s->ptr))
-    {
-        auto x = sc->x_data();
-        auto y = sc->y_data();
-        if (x.size() > cap)
-        {
-            std::vector<float> nx(x.end() - cap, x.end());
-            std::vector<float> ny(y.end() - cap, y.end());
-            sc->set_x(nx);
-            sc->set_y(ny);
-        }
-    }
+        trim(sc);
 }
 
 extern "C"

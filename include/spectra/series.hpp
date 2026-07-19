@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -199,7 +200,7 @@ class LineSeries : public Series
 
     std::span<const float> x_data() const { return x_; }
     std::span<const float> y_data() const { return y_; }
-    size_t                 point_count() const { return x_.size(); }
+    size_t                 point_count() const { return std::min(x_.size(), y_.size()); }
 
     // Remove all points with x < x_threshold.  Assumes x is sorted ascending.
     // Returns the number of points removed.
@@ -286,7 +287,7 @@ class ScatterSeries : public Series
 
     std::span<const float> x_data() const { return x_; }
     std::span<const float> y_data() const { return y_; }
-    size_t                 point_count() const { return x_.size(); }
+    size_t                 point_count() const { return std::min(x_.size(), y_.size()); }
 
     // Bring base-class getters into scope (setters below would otherwise hide them)
     using Series::color;

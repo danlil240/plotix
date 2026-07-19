@@ -45,6 +45,18 @@ TEST(LineSeries, SetXY)
     EXPECT_TRUE(s.is_dirty());
 }
 
+TEST(LineSeries, MismatchedCoordinatesCountCompletePairs)
+{
+    LineSeries         s;
+    std::vector<float> x = {1.0f, 2.0f, 3.0f};
+    std::vector<float> y = {4.0f};
+
+    s.set_x(x);
+    s.set_y(y);
+
+    EXPECT_EQ(s.point_count(), 1u);
+}
+
 TEST(LineSeries, Append)
 {
     LineSeries s;
@@ -121,6 +133,18 @@ TEST(ScatterSeries, SetXY)
     s.set_x(x);
     s.set_y(y);
     EXPECT_EQ(s.point_count(), 1u);
+}
+
+TEST(ScatterSeries, MismatchedCoordinatesCountCompletePairs)
+{
+    ScatterSeries      s;
+    std::vector<float> x = {1.0f, 2.0f, 3.0f};
+    std::vector<float> y = {4.0f, 5.0f};
+
+    s.set_x(x);
+    s.set_y(y);
+
+    EXPECT_EQ(s.point_count(), 2u);
 }
 
 TEST(ScatterSeries, Append)
