@@ -41,6 +41,7 @@
 #include <spectra/axes3d.hpp>
 #include <spectra/series.hpp>
 #include <spectra/series3d.hpp>
+#include <optional>
 #include <type_traits>
 
 namespace spectra
@@ -71,24 +72,59 @@ struct is_eigen_float_vector<
 template <typename T>
 inline constexpr bool is_eigen_float_vector_v = is_eigen_float_vector<T>::value;
 
-// Convert any contiguous Eigen float vector expression to std::span<const float>.
-// For non-contiguous expressions (e.g. strided maps), the caller must .eval() first.
+// Span-like adapter that keeps evaluated Eigen expressions alive. Plain,
+// contiguous lvalue vectors remain zero-copy; lazy expressions and strided
+// views are materialized inside the adapter.
 template <typename Derived>
-std::span<const float> to_span(const Eigen::DenseBase<Derived>& v)
+class StableFloatSpan
 {
-    static_assert(std::is_same_v<typename Derived::Scalar, float>,
-                  "Spectra Eigen adapter requires float scalar type. "
-                  "Use .cast<float>() to convert.");
-    // Evaluate lazy expressions into a temporary if needed.
-    // For plain vectors this is a no-op (returns a const ref).
-    const auto& evaluated = v.derived().eval();
-    return {evaluated.data(), static_cast<size_t>(evaluated.size())};
+   public:
+    using PlainObject = typename Derived::PlainObject;
+
+    explicit StableFloatSpan(const Eigen::DenseBase<Derived>& value, bool force_own = false)
+    {
+        static_assert(std::is_same_v<typename Derived::Scalar, float>,
+                      "Spectra Eigen adapter requires float scalar type. "
+                      "Use .cast<float>() to convert.");
+
+        constexpr bool directly_contiguous = (Derived::Flags & Eigen::DirectAccessBit) != 0
+                                             && Derived::InnerStrideAtCompileTime == 1;
+        if constexpr (directly_contiguous)
+        {
+            if (!force_own)
+            {
+                direct_data_ = value.derived().data();
+                size_        = static_cast<size_t>(value.size());
+                return;
+            }
+        }
+
+        owned_.emplace(value.derived().eval());
+        size_ = static_cast<size_t>(owned_->size());
+    }
+
+    const float* data() const { return owned_ ? owned_->data() : direct_data_; }
+    size_t       size() const { return size_; }
+    const float& operator[](size_t index) const { return data()[index]; }
+
+    operator std::span<const float>() const { return {data(), size()}; }
+
+   private:
+    const float*               direct_data_ = nullptr;
+    size_t                     size_        = 0;
+    std::optional<PlainObject> owned_;
+};
+
+template <typename Derived>
+StableFloatSpan<Derived> to_span(const Eigen::DenseBase<Derived>& value)
+{
+    return StableFloatSpan<Derived>(value);
 }
 
-// Overload for Eigen::VectorXf and fixed-size vectors (already evaluated).
-inline std::span<const float> to_span(const Eigen::VectorXf& v)
+template <typename Derived>
+StableFloatSpan<Derived> to_span(Eigen::DenseBase<Derived>&& value)
 {
-    return {v.data(), static_cast<size_t>(v.size())};
+    return StableFloatSpan<Derived>(value, true);
 }
 
 // Convert Eigen::VectorXi to span<const uint32_t> for index buffers.

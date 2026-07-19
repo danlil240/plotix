@@ -60,7 +60,6 @@ class DataEditor
     char edit_buf_[64] = {};
 
     // Scroll tracking for large datasets
-    int visible_row_start_ = 0;
 
     // Fonts
     ImFont* font_body_    = nullptr;
