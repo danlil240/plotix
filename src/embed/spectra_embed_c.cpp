@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <deque>
 #include <span>
 #include <string>
 #include <vector>
@@ -53,9 +54,9 @@ struct SpectraSeries
 // Small pool of wrapper objects so the C API can return stable pointers.
 // These are leaked intentionally — the embed surface owns the real objects.
 // A real production API would use a handle table; this is sufficient for FFI demos.
-static thread_local std::vector<SpectraFigure> g_fig_pool;
-static thread_local std::vector<SpectraAxes>   g_ax_pool;
-static thread_local std::vector<SpectraSeries> g_series_pool;
+static thread_local std::deque<SpectraFigure> g_fig_pool;
+static thread_local std::deque<SpectraAxes>   g_ax_pool;
+static thread_local std::deque<SpectraSeries> g_series_pool;
 
 // ── Enum mapping helpers ─────────────────────────────────────────────────────
 
