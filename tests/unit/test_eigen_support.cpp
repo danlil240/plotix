@@ -93,6 +93,16 @@ TEST(EigenToSpan, LinSpaced)
     EXPECT_NEAR(span[99], 1.0f, 1e-5f);
 }
 
+TEST(EigenToSpan, LazyExpressionOwnsEvaluatedStorage)
+{
+    auto expression = Eigen::VectorXf::LinSpaced(100, 0.0f, 1.0f).array().square().matrix();
+    auto values     = eigen_detail::to_span(expression);
+
+    EXPECT_EQ(values.size(), 100u);
+    EXPECT_FLOAT_EQ(values[0], 0.0f);
+    EXPECT_NEAR(values[99], 1.0f, 1e-5f);
+}
+
 // ─── to_index_span Tests ────────────────────────────────────────────────────
 
 TEST(EigenToIndexSpan, VectorXiBasic)

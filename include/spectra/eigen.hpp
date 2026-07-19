@@ -71,18 +71,33 @@ struct is_eigen_float_vector<
 template <typename T>
 inline constexpr bool is_eigen_float_vector_v = is_eigen_float_vector<T>::value;
 
-// Convert any contiguous Eigen float vector expression to std::span<const float>.
-// For non-contiguous expressions (e.g. strided maps), the caller must .eval() first.
+// Own an evaluated Eigen expression while exposing a span-compatible view.
+// This keeps lazy-expression storage alive through calls that immediately copy
+// the data into a series.
 template <typename Derived>
-std::span<const float> to_span(const Eigen::DenseBase<Derived>& v)
+class EvaluatedSpan
+{
+   public:
+    explicit EvaluatedSpan(const Eigen::DenseBase<Derived>& value) : value_(value.derived()) {}
+
+    const float* data() const { return value_.data(); }
+    size_t       size() const { return static_cast<size_t>(value_.size()); }
+    float        operator[](size_t index) const { return data()[index]; }
+
+    operator std::span<const float>() const { return {data(), size()}; }
+
+   private:
+    typename Derived::PlainObject value_;
+};
+
+// Convert any Eigen float vector expression to an owning, span-compatible view.
+template <typename Derived>
+EvaluatedSpan<Derived> to_span(const Eigen::DenseBase<Derived>& v)
 {
     static_assert(std::is_same_v<typename Derived::Scalar, float>,
                   "Spectra Eigen adapter requires float scalar type. "
                   "Use .cast<float>() to convert.");
-    // Evaluate lazy expressions into a temporary if needed.
-    // For plain vectors this is a no-op (returns a const ref).
-    const auto& evaluated = v.derived().eval();
-    return {evaluated.data(), static_cast<size_t>(evaluated.size())};
+    return EvaluatedSpan<Derived>(v);
 }
 
 // Overload for Eigen::VectorXf and fixed-size vectors (already evaluated).
