@@ -99,14 +99,16 @@ services:
 
   # ─── Main GUI application ──────────────────────────────────────────────────
   # Launches the full Spectra app with Vulkan rendering + ImGui UI.
-  # Connects to the shared backend daemon via IPC volume.
+  # Runs in-process (not as a backend agent) so the welcome screen shows.
+  # Publishers can still connect via the in-process topic server.
   spectra-app:
     image: spectra-full
     container_name: spectra-app
     command: ["build/spectra"]
-    depends_on:
-      - spectra-backend
-    environment: *gui-env
+    environment:
+      <<: *gui-env
+      SPECTRA_SOCKET: ""
+      SPECTRA_NO_DAEMON_DISCOVERY: "1"
     <<: *gui-common
     profiles:
       - ""

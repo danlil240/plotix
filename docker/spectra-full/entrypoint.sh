@@ -37,7 +37,8 @@ if [ -z "$VK_ICD_FILENAMES" ] && [ -z "$VK_DRIVER_FILES" ]; then
 fi
 
 # ─── Pin the IPC socket to a fixed path for cross-container discovery ─────────
-if [ -z "$SPECTRA_SOCKET" ]; then
+# Only set default if not explicitly disabled (e.g. spectra-app runs in-process)
+if [ -z "$SPECTRA_SOCKET" ] && [ -z "$SPECTRA_NO_DAEMON_DISCOVERY" ]; then
     export SPECTRA_SOCKET="$XDG_RUNTIME_DIR/spectra-backend.sock"
 fi
 
