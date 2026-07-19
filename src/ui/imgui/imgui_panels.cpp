@@ -806,10 +806,8 @@ void ImGuiIntegration::populate_status_bar(ui::shell::StatusBar& bar)
     bar.clear();
     bar.set_layout_manager(layout_manager_.get());
 
-    const auto& colors = theme_colors();
-
     bar.add_segment({.align = ui::shell::StatusAlign::Left,
-                     .draw_fn = [this, &colors]()
+                     .draw_fn = [this]()
                      {
         const auto& colors = theme_colors();
         ImGui::PushFont(font_heading_);

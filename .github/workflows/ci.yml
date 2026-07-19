@@ -382,6 +382,8 @@ jobs:
             g++-13 \
             libvulkan-dev \
             libglfw3-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
             glslang-tools \
             nlohmann-json3-dev \
             libtinyxml2-dev \
