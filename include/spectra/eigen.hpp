@@ -43,6 +43,7 @@
 #include <spectra/series3d.hpp>
 #include <optional>
 #include <type_traits>
+#include <utility>
 
 namespace spectra
 {

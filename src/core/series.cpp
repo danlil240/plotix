@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cassert>
 #include <cmath>
 #include <limits>
 #include <spectra/event_bus.hpp>
@@ -102,7 +101,6 @@ Series& Series::apply_format_string(std::string_view fmt)
 LineSeries::LineSeries(std::span<const float> x, std::span<const float> y)
     : x_(x.begin(), x.end()), y_(y.begin(), y.end())
 {
-    assert(x.size() == y.size());
     x_sorted_ = std::is_sorted(x_.begin(), x_.end());
     dirty_    = true;
 }
@@ -153,12 +151,13 @@ size_t LineSeries::erase_before(float x_threshold)
         pending_->erase_before(x_threshold);
         return 0;   // Actual count available after commit.
     }
-    if (x_.empty())
+    const size_t count = point_count();
+    if (count == 0)
         return 0;
 
     // Binary search for the first element >= x_threshold (x_ is sorted ascending).
     size_t lo = 0;
-    size_t hi = x_.size();
+    size_t hi = count;
     while (lo < hi)
     {
         size_t mid = lo + (hi - lo) / 2;
@@ -184,16 +183,19 @@ size_t LineSeries::erase_after(float x_threshold)
         pending_->erase_after(x_threshold);
         return 0;
     }
-    if (x_.empty())
+    const size_t count = point_count();
+    if (count == 0)
         return 0;
 
-    auto         it     = std::upper_bound(x_.begin(), x_.end(), x_threshold);
-    const size_t remove = static_cast<size_t>(x_.end() - it);
+    auto         it     = std::upper_bound(x_.begin(), x_.begin() + count, x_threshold);
+    const size_t keep   = static_cast<size_t>(it - x_.begin());
+    const size_t remove = count - keep;
     if (remove == 0)
         return 0;
 
-    x_.erase(it, x_.end());
-    y_.erase(y_.end() - static_cast<ptrdiff_t>(remove), y_.end());
+    x_.erase(it, it + static_cast<ptrdiff_t>(remove));
+    y_.erase(y_.begin() + static_cast<ptrdiff_t>(keep),
+             y_.begin() + static_cast<ptrdiff_t>(keep + remove));
     dirty_ = true;
     return remove;
 }
@@ -205,10 +207,11 @@ size_t LineSeries::trim_to_max_points(size_t max_points)
         pending_->trim_to_max_points(max_points);
         return 0;
     }
-    if (x_.size() <= max_points)
+    const size_t count = point_count();
+    if (count <= max_points)
         return 0;
 
-    const size_t remove = x_.size() - max_points;
+    const size_t remove = count - max_points;
     x_.erase(x_.begin(), x_.begin() + static_cast<ptrdiff_t>(remove));
     y_.erase(y_.begin(), y_.begin() + static_cast<ptrdiff_t>(remove));
     dirty_ = true;
@@ -238,7 +241,6 @@ bool LineSeries::commit_pending()
 ScatterSeries::ScatterSeries(std::span<const float> x, std::span<const float> y)
     : x_(x.begin(), x.end()), y_(y.begin(), y.end())
 {
-    assert(x.size() == y.size());
     x_sorted_ = std::is_sorted(x_.begin(), x_.end());
     dirty_    = true;
 }

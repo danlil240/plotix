@@ -250,6 +250,19 @@ TEST(ViolinSeries, Resolution)
     EXPECT_GT(vn.point_count(), 40u);
 }
 
+TEST(ViolinSeries, ResolutionIsClampedToSafeMinimum)
+{
+    ViolinSeries       vn;
+    std::vector<float> data = {1, 2, 3, 4, 5};
+    vn.add_violin(1.0f, data);
+
+    vn.resolution(0);
+    vn.rebuild_geometry();
+
+    EXPECT_EQ(vn.resolution(), 2);
+    EXPECT_GT(vn.point_count(), 0u);
+}
+
 TEST(ViolinSeries, FluentAPI)
 {
     ViolinSeries vn;
@@ -502,6 +515,24 @@ TEST(AxesStats, AutoFitWithStats)
     EXPECT_GE(xlim.max, 3.0f);
     EXPECT_LE(ylim.min, 0.0f);
     EXPECT_GE(ylim.max, 15.0f);
+}
+
+TEST(AxesStats, AutoFitIgnoresNonFiniteCoordinates)
+{
+    Axes               ax;
+    const float        inf = std::numeric_limits<float>::infinity();
+    std::vector<float> x   = {1.0f, inf, 2.0f};
+    std::vector<float> y   = {3.0f, 4.0f, 5.0f};
+    ax.line(x, y);
+
+    auto xlim = ax.x_limits();
+    auto ylim = ax.y_limits();
+    EXPECT_TRUE(std::isfinite(xlim.min));
+    EXPECT_TRUE(std::isfinite(xlim.max));
+    EXPECT_TRUE(std::isfinite(ylim.min));
+    EXPECT_TRUE(std::isfinite(ylim.max));
+    EXPECT_LE(xlim.min, 1.0);
+    EXPECT_GE(xlim.max, 2.0);
 }
 
 TEST(AxesStats, MixedSeriesTypes)

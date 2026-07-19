@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <span>
 #include <spectra/color.hpp>
 #include <spectra/fwd.hpp>
@@ -44,7 +45,7 @@ class LineSeries3D : public Series
     std::span<const float> x_data() const { return x_; }
     std::span<const float> y_data() const { return y_; }
     std::span<const float> z_data() const { return z_; }
-    size_t                 point_count() const { return x_.size(); }
+    size_t point_count() const { return std::min({x_.size(), y_.size(), z_.size()}); }
 
     vec3 compute_centroid() const;
     void get_bounds(vec3& min_out, vec3& max_out) const;
@@ -127,7 +128,7 @@ class ScatterSeries3D : public Series
     std::span<const float> x_data() const { return x_; }
     std::span<const float> y_data() const { return y_; }
     std::span<const float> z_data() const { return z_; }
-    size_t                 point_count() const { return x_.size(); }
+    size_t point_count() const { return std::min({x_.size(), y_.size(), z_.size()}); }
 
     vec3 compute_centroid() const;
     void get_bounds(vec3& min_out, vec3& max_out) const;

@@ -319,6 +319,21 @@ void Axes::set_presented_buffer_right_edge(double x)
 
 // --- Limits ---
 
+static void consume_finite_extent(std::span<const float> values,
+                                  double&                min_value,
+                                  double&                max_value,
+                                  double                 offset = 0.0)
+{
+    for (float value : values)
+    {
+        if (!std::isfinite(value))
+            continue;
+        const double adjusted = static_cast<double>(value) + offset;
+        min_value             = std::min(min_value, adjusted);
+        max_value             = std::max(max_value, adjusted);
+    }
+}
+
 // Compute data extent across all series
 static void data_extent(const std::vector<std::unique_ptr<Series>>& series,
                         double&                                     x_min,
@@ -343,60 +358,26 @@ static void data_extent(const std::vector<std::unique_ptr<Series>>& series,
         // Try LineSeries
         if (auto* ls = dynamic_cast<const LineSeries*>(s.get()))
         {
-            for (auto v : ls->x_data())
-            {
-                x_min = std::min(x_min, static_cast<double>(v) + xoff);
-                x_max = std::max(x_max, static_cast<double>(v) + xoff);
-            }
-            for (auto v : ls->y_data())
-            {
-                y_min = std::min(y_min, static_cast<double>(v));
-                y_max = std::max(y_max, static_cast<double>(v));
-            }
+            consume_finite_extent(ls->x_data(), x_min, x_max, xoff);
+            consume_finite_extent(ls->y_data(), y_min, y_max);
         }
         // Try ScatterSeries
         if (auto* ss = dynamic_cast<const ScatterSeries*>(s.get()))
         {
-            for (auto v : ss->x_data())
-            {
-                x_min = std::min(x_min, static_cast<double>(v) + xoff);
-                x_max = std::max(x_max, static_cast<double>(v) + xoff);
-            }
-            for (auto v : ss->y_data())
-            {
-                y_min = std::min(y_min, static_cast<double>(v));
-                y_max = std::max(y_max, static_cast<double>(v));
-            }
+            consume_finite_extent(ss->x_data(), x_min, x_max, xoff);
+            consume_finite_extent(ss->y_data(), y_min, y_max);
         }
         // Try statistical series (all expose x_data/y_data with NaN breaks)
         auto try_stat = [&](std::span<const float> xd, std::span<const float> yd)
         {
-            for (auto v : xd)
-            {
-                if (!std::isnan(v))
-                {
-                    x_min = std::min(x_min, static_cast<double>(v) + xoff);
-                    x_max = std::max(x_max, static_cast<double>(v) + xoff);
-                }
-            }
-            for (auto v : yd)
-            {
-                if (!std::isnan(v))
-                {
-                    y_min = std::min(y_min, static_cast<double>(v));
-                    y_max = std::max(y_max, static_cast<double>(v));
-                }
-            }
+            consume_finite_extent(xd, x_min, x_max, xoff);
+            consume_finite_extent(yd, y_min, y_max);
         };
         if (auto* bp = dynamic_cast<const BoxPlotSeries*>(s.get()))
         {
             try_stat(bp->x_data(), bp->y_data());
             // Include outlier extents
-            for (auto v : bp->outlier_y())
-            {
-                y_min = std::min(y_min, static_cast<double>(v));
-                y_max = std::max(y_max, static_cast<double>(v));
-            }
+            consume_finite_extent(bp->outlier_y(), y_min, y_max);
         }
         if (auto* vn = dynamic_cast<const ViolinSeries*>(s.get()))
             try_stat(vn->x_data(), vn->y_data());
@@ -459,49 +440,19 @@ static void data_extent_with_mode(const std::vector<std::unique_ptr<Series>>& se
             const double xoff = s->x_offset();
             if (auto* ls = dynamic_cast<const LineSeries*>(s.get()))
             {
-                for (auto v : ls->x_data())
-                {
-                    x_min = std::min(x_min, static_cast<double>(v) + xoff);
-                    x_max = std::max(x_max, static_cast<double>(v) + xoff);
-                }
-                for (auto v : ls->y_data())
-                {
-                    y_min = std::min(y_min, static_cast<double>(v));
-                    y_max = std::max(y_max, static_cast<double>(v));
-                }
+                consume_finite_extent(ls->x_data(), x_min, x_max, xoff);
+                consume_finite_extent(ls->y_data(), y_min, y_max);
             }
             if (auto* ss = dynamic_cast<const ScatterSeries*>(s.get()))
             {
-                for (auto v : ss->x_data())
-                {
-                    x_min = std::min(x_min, static_cast<double>(v) + xoff);
-                    x_max = std::max(x_max, static_cast<double>(v) + xoff);
-                }
-                for (auto v : ss->y_data())
-                {
-                    y_min = std::min(y_min, static_cast<double>(v));
-                    y_max = std::max(y_max, static_cast<double>(v));
-                }
+                consume_finite_extent(ss->x_data(), x_min, x_max, xoff);
+                consume_finite_extent(ss->y_data(), y_min, y_max);
             }
             if (auto* band = dynamic_cast<const BandSeries*>(s.get()))
             {
-                for (auto v : band->x_values())
-                {
-                    if (!std::isfinite(v))
-                        continue;
-                    x_min = std::min(x_min, static_cast<double>(v) + xoff);
-                    x_max = std::max(x_max, static_cast<double>(v) + xoff);
-                }
-                for (auto values : {band->lower_values(), band->upper_values()})
-                {
-                    for (auto v : values)
-                    {
-                        if (!std::isfinite(v))
-                            continue;
-                        y_min = std::min(y_min, static_cast<double>(v));
-                        y_max = std::max(y_max, static_cast<double>(v));
-                    }
-                }
+                consume_finite_extent(band->x_values(), x_min, x_max, xoff);
+                consume_finite_extent(band->lower_values(), y_min, y_max);
+                consume_finite_extent(band->upper_values(), y_min, y_max);
             }
         }
         if (x_min > x_max)

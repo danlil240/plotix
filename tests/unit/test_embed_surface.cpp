@@ -560,6 +560,52 @@ TEST(EmbedCApi, CreateDestroy)
     spectra_embed_destroy(s);
 }
 
+TEST(EmbedCApi, HandlesRemainStableWhenPoolsGrow)
+{
+    SpectraEmbed* s = spectra_embed_create(64, 64);
+    ASSERT_NE(s, nullptr);
+
+    SpectraFigure* first_figure = spectra_embed_figure(s);
+    ASSERT_NE(first_figure, nullptr);
+    for (int i = 0; i < 1024; ++i)
+        ASSERT_NE(spectra_embed_figure(s), nullptr);
+
+    SpectraAxes* first_axes = spectra_figure_subplot(first_figure, 1, 1, 1);
+    ASSERT_NE(first_axes, nullptr);
+    for (int i = 0; i < 1024; ++i)
+        ASSERT_NE(spectra_figure_subplot(first_figure, 1, 1, 1), nullptr);
+
+    const std::vector<float> x  = {0.0f, 1.0f};
+    const std::vector<float> y  = {0.0f, 1.0f};
+    SpectraSeries* first_series = spectra_axes_line(first_axes, x.data(), y.data(), 2, nullptr);
+    ASSERT_NE(first_series, nullptr);
+    for (int i = 0; i < 1024; ++i)
+        ASSERT_NE(spectra_axes_line(first_axes, x.data(), y.data(), 2, nullptr), nullptr);
+
+    spectra_series_set_opacity(first_series, 0.5f);
+    spectra_embed_destroy(s);
+}
+
+TEST(EmbedCApi, CapacityHandlesMismatchedCoordinates)
+{
+    SpectraEmbed* s = spectra_embed_create(64, 64);
+    ASSERT_NE(s, nullptr);
+    SpectraFigure* figure = spectra_embed_figure(s);
+    ASSERT_NE(figure, nullptr);
+    SpectraAxes* axes = spectra_figure_subplot(figure, 1, 1, 1);
+    ASSERT_NE(axes, nullptr);
+
+    const std::vector<float> initial = {0.0f};
+    SpectraSeries* series = spectra_axes_line(axes, initial.data(), initial.data(), 1, nullptr);
+    ASSERT_NE(series, nullptr);
+
+    const std::vector<float> x = {0.0f, 1.0f, 2.0f};
+    spectra_series_set_x(series, x.data(), static_cast<uint32_t>(x.size()));
+    spectra_series_set_capacity(series, 2);
+
+    spectra_embed_destroy(s);
+}
+
 TEST(EmbedCApi, CreateExWithTheme)
 {
     SpectraEmbed* s = spectra_embed_create_ex(64, 64, "dark", 1.0f, 1, 1.0f);
