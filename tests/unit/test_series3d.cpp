@@ -1033,12 +1033,36 @@ TEST(Series3D, MismatchedArraySizes)
 
     LineSeries3D series(x, y, z);
     // Should handle gracefully - point_count is min of all sizes
-    EXPECT_EQ(series.point_count(), 3);
+    EXPECT_EQ(series.point_count(), 1);
 
     vec3 min_bound, max_bound;
     series.get_bounds(min_bound, max_bound);
     // Should only process the minimum count
-    EXPECT_EQ(series.point_count(), 3);
+    EXPECT_FLOAT_EQ(min_bound.x, 1.0f);
+    EXPECT_FLOAT_EQ(max_bound.x, 1.0f);
+
+    ScatterSeries3D scatter(x, y, z);
+    EXPECT_EQ(scatter.point_count(), 1);
+}
+
+TEST(Series3D, MissingCoordinateHasNoCompletePoints)
+{
+    std::vector<float> x = {1.0f};
+    std::vector<float> y = {2.0f};
+
+    LineSeries3D series;
+    series.set_x(x).set_y(y);
+    EXPECT_EQ(series.point_count(), 0);
+
+    const vec3 centroid = series.compute_centroid();
+    EXPECT_FLOAT_EQ(centroid.x, 0.0f);
+    EXPECT_FLOAT_EQ(centroid.y, 0.0f);
+    EXPECT_FLOAT_EQ(centroid.z, 0.0f);
+
+    vec3 min_bound, max_bound;
+    series.get_bounds(min_bound, max_bound);
+    EXPECT_FLOAT_EQ(min_bound.x, 0.0f);
+    EXPECT_FLOAT_EQ(max_bound.x, 0.0f);
 }
 
 TEST(Series3D, SinglePoint)

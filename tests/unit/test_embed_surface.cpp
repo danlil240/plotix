@@ -586,6 +586,26 @@ TEST(EmbedCApi, HandlesRemainStableWhenPoolsGrow)
     spectra_embed_destroy(s);
 }
 
+TEST(EmbedCApi, CapacityHandlesMismatchedCoordinates)
+{
+    SpectraEmbed* s = spectra_embed_create(64, 64);
+    ASSERT_NE(s, nullptr);
+    SpectraFigure* figure = spectra_embed_figure(s);
+    ASSERT_NE(figure, nullptr);
+    SpectraAxes* axes = spectra_figure_subplot(figure, 1, 1, 1);
+    ASSERT_NE(axes, nullptr);
+
+    const std::vector<float> initial = {0.0f};
+    SpectraSeries* series = spectra_axes_line(axes, initial.data(), initial.data(), 1, nullptr);
+    ASSERT_NE(series, nullptr);
+
+    const std::vector<float> x = {0.0f, 1.0f, 2.0f};
+    spectra_series_set_x(series, x.data(), static_cast<uint32_t>(x.size()));
+    spectra_series_set_capacity(series, 2);
+
+    spectra_embed_destroy(s);
+}
+
 TEST(EmbedCApi, CreateExWithTheme)
 {
     SpectraEmbed* s = spectra_embed_create_ex(64, 64, "dark", 1.0f, 1, 1.0f);
