@@ -162,7 +162,7 @@ class ViolinSeries : public Series
     // Number of points in the KDE curve. Default: 50
     ViolinSeries& resolution(int n)
     {
-        resolution_ = n;
+        resolution_ = (n < 2) ? 2 : n;
         dirty_      = true;
         return *this;
     }
