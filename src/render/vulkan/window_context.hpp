@@ -66,13 +66,15 @@ struct WindowContext
     bool swapchain_dirty = false;
     bool swapchain_invalidated =
         false;   // present returned OUT_OF_DATE — must recreate before next acquire
+    bool surface_lost =
+        false;   // acquire/present returned SURFACE_LOST — surface itself must be recreated
     bool should_close = false;
 
     // Window state
     bool     is_focused = false;
     bool     is_preview = false;   // Tearoff preview window (borderless, floating)
     bool     is_panel   = false;   // Detached panel window (undecorated, custom title bar)
-    uint64_t z_order    = 0;       // Monotonic counter — higher = more recently focused (frontmost)
+    uint64_t z_order    = 0;   // Monotonic counter — higher = more recently focused (frontmost)
 
     // Custom title bar drag state (for undecorated panel windows)
     bool   titlebar_dragging = false;

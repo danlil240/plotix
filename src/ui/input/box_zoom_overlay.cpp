@@ -70,9 +70,9 @@ void BoxZoomOverlay::draw(float /*window_width*/, float /*window_height*/)
     {
         const auto& fill     = colors.selection_fill;
         ImU32       fill_col = IM_COL32(static_cast<uint8_t>(fill.r * 255),
-                                        static_cast<uint8_t>(fill.g * 255),
-                                        static_cast<uint8_t>(fill.b * 255),
-                                        static_cast<uint8_t>(fill_opacity_ * alpha * 255));
+                                  static_cast<uint8_t>(fill.g * 255),
+                                  static_cast<uint8_t>(fill.b * 255),
+                                  static_cast<uint8_t>(fill_opacity_ * alpha * 255));
         dl->AddRectFilled(ImVec2(x0, y0), ImVec2(x1, y1), fill_col, ui::tokens::RADIUS_SM);
         dl->AddRectFilledMultiColor(ImVec2(x0, y0),
                                     ImVec2(x1, y0 + (y1 - y0) * 0.45f),
@@ -84,13 +84,13 @@ void BoxZoomOverlay::draw(float /*window_width*/, float /*window_height*/)
 
     const auto& border     = colors.selection_border;
     ImU32       border_col = IM_COL32(static_cast<uint8_t>(border.r * 255),
-                                      static_cast<uint8_t>(border.g * 255),
-                                      static_cast<uint8_t>(border.b * 255),
-                                      static_cast<uint8_t>(alpha * 255));
+                                static_cast<uint8_t>(border.g * 255),
+                                static_cast<uint8_t>(border.b * 255),
+                                static_cast<uint8_t>(alpha * 255));
     ImU32       glow_col   = IM_COL32(static_cast<uint8_t>(colors.accent_glow.r * 255),
-                                      static_cast<uint8_t>(colors.accent_glow.g * 255),
-                                      static_cast<uint8_t>(colors.accent_glow.b * 255),
-                                      static_cast<uint8_t>(alpha * 46));
+                              static_cast<uint8_t>(colors.accent_glow.g * 255),
+                              static_cast<uint8_t>(colors.accent_glow.b * 255),
+                              static_cast<uint8_t>(alpha * 46));
 
     dl->AddRect(ImVec2(x0 - 1.0f, y0 - 1.0f),
                 ImVec2(x1 + 1.0f, y1 + 1.0f),
@@ -110,9 +110,9 @@ void BoxZoomOverlay::draw(float /*window_width*/, float /*window_height*/)
     {
         const auto& vp        = input_handler_->active_axes()->viewport();
         ImU32       cross_col = IM_COL32(static_cast<uint8_t>(border.r * 255),
-                                         static_cast<uint8_t>(border.g * 255),
-                                         static_cast<uint8_t>(border.b * 255),
-                                         static_cast<uint8_t>(alpha * 0.24f * 255));
+                                   static_cast<uint8_t>(border.g * 255),
+                                   static_cast<uint8_t>(border.b * 255),
+                                   static_cast<uint8_t>(alpha * 0.24f * 255));
         draw_zoom_crosshair_impl(x0, y0, x1, y1, vp.x, vp.y, vp.w, vp.h, cross_col);
     }
 
@@ -192,17 +192,17 @@ void BoxZoomOverlay::draw_dimension_label_impl(float        x0,
     if (input_handler_ && input_handler_->active_axes())
     {
         // Convert corners to data space for the label
-        float d_x0 = NAN;
-        float d_y0 = NAN;
-        float d_x1 = NAN;
-        float d_y1 = NAN;
+        double d_x0 = NAN;
+        double d_y0 = NAN;
+        double d_x1 = NAN;
+        double d_y1 = NAN;
         // Use the public screen_to_data (requires const_cast since it reads active_axes_)
         auto* ih = const_cast<InputHandler*>(input_handler_);
         ih->screen_to_data(x0, y0, d_x0, d_y0);
         ih->screen_to_data(x1, y1, d_x1, d_y1);
-        float dw = std::abs(d_x1 - d_x0);
-        float dh = std::abs(d_y1 - d_y0);
-        buf      = std::format("{:.3g} \xc3\x97 {:.3g}", dw, dh);
+        double dw = std::abs(d_x1 - d_x0);
+        double dh = std::abs(d_y1 - d_y0);
+        buf       = std::format("{:.3g} \xc3\x97 {:.3g}", dw, dh);
     }
     else
     {
@@ -218,9 +218,9 @@ void BoxZoomOverlay::draw_dimension_label_impl(float        x0,
     float       pad_y  = 2.0f;
     const auto& colors = ui::theme();
     ImU32       bg_col = IM_COL32(static_cast<uint8_t>(colors.bg_elevated.r * 255),
-                                  static_cast<uint8_t>(colors.bg_elevated.g * 255),
-                                  static_cast<uint8_t>(colors.bg_elevated.b * 255),
-                                  static_cast<uint8_t>(0.88f * 255));
+                            static_cast<uint8_t>(colors.bg_elevated.g * 255),
+                            static_cast<uint8_t>(colors.bg_elevated.b * 255),
+                            static_cast<uint8_t>(0.88f * 255));
     dl->AddRectFilled(ImVec2(label_x - pad_x, label_y - pad_y),
                       ImVec2(label_x + text_size.x + pad_x, label_y + text_size.y + pad_y),
                       bg_col,

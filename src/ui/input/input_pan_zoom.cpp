@@ -107,8 +107,8 @@ void InputHandler::handle_mouse_button_3d(Axes3D* axes3d,
             mode_             = InteractionMode::Idle;
             drag3d_axes_      = nullptr;
 
-            const Axis3DArrowPick axis_pick = pick_axes3d_axis_arrow(*axes3d, static_cast<float>(x),
-                                                                     static_cast<float>(y));
+            const Axis3DArrowPick axis_pick =
+                pick_axes3d_axis_arrow(*axes3d, static_cast<float>(x), static_cast<float>(y));
             if (axis_pick != Axis3DArrowPick::None)
             {
                 SPECTRA_LOG_DEBUG("input", "Double-click on 3D axis arrow — align view");
@@ -140,11 +140,12 @@ void InputHandler::handle_mouse_button_3d(Axes3D* axes3d,
     }
     if (button == MOUSE_BUTTON_LEFT && action == ACTION_RELEASE && is_3d_orbit_drag_)
     {
-        const double    dx_click    = x - drag_start_x_;
-        const double    dy_click    = y - drag_start_y_;
-        const float     move_dist   = static_cast<float>(std::sqrt(dx_click * dx_click + dy_click * dy_click));
+        const double dx_click = x - drag_start_x_;
+        const double dy_click = y - drag_start_y_;
+        const float  move_dist =
+            static_cast<float>(std::sqrt(dx_click * dx_click + dy_click * dy_click));
         constexpr float CLICK_THRESHOLD_PX = 5.0f;
-        const bool      was_click   = move_dist < CLICK_THRESHOLD_PX;
+        const bool      was_click          = move_dist < CLICK_THRESHOLD_PX;
 
         is_3d_orbit_drag_ = false;
         mode_             = InteractionMode::Idle;
@@ -153,11 +154,11 @@ void InputHandler::handle_mouse_button_3d(Axes3D* axes3d,
         {
             // Short click: undo only micro-orbit jitter, not an intentional nudge away
             // from an axis-aligned snap (drag3d_start may be the snapped pose).
-            auto& cam = axes3d->camera();
+            auto&       cam         = axes3d->camera();
             const float angle_delta = std::abs(cam.azimuth - drag3d_start_camera_.azimuth)
                                       + std::abs(cam.elevation - drag3d_start_camera_.elevation);
-            const vec3  pos_delta   = cam.position - drag3d_start_camera_.position;
-            const float pos_delta2  = vec3_length_sq(pos_delta);
+            const vec3  pos_delta  = cam.position - drag3d_start_camera_.position;
+            const float pos_delta2 = vec3_length_sq(pos_delta);
             if (angle_delta < 0.5f && pos_delta2 < 1e-4f)
             {
                 cam = drag3d_start_camera_;
@@ -190,7 +191,7 @@ void InputHandler::handle_mouse_button_3d(Axes3D* axes3d,
                                        {
                                            ax->camera() = after_camera;
                                            ax->camera().update_position_from_orbit();
-                                           }});
+                                       }});
         }
         drag3d_axes_ = nullptr;
         return;
@@ -816,8 +817,8 @@ void InputHandler::handle_mouse_move_rclick_zoom(double x, double y)
         }
         else if (active_axes_)
         {
-            const auto anchor_x = static_cast<double>(rclick_zoom_anchor_data_x_);
-            const auto anchor_y = static_cast<double>(rclick_zoom_anchor_data_y_);
+            const double anchor_x = rclick_zoom_anchor_data_x_;
+            const double anchor_y = rclick_zoom_anchor_data_y_;
 
             if (active_axes_->is_presented_buffer_following()
                 && (rclick_zoom_axis_ == ZoomAxis::X || rclick_zoom_axis_ == ZoomAxis::XY))
@@ -997,8 +998,8 @@ void InputHandler::handle_scroll_2d(double y_offset, double cursor_x, double cur
     vp_w_            = vp.w;
     vp_h_            = vp.h;
 
-    float data_x = NAN;
-    float data_y = NAN;
+    double data_x = NAN;
+    double data_y = NAN;
     screen_to_data(cursor_x, cursor_y, data_x, data_y);
 
     vp_x_ = saved_vp_x;
@@ -1024,12 +1025,12 @@ void InputHandler::handle_scroll_2d(double y_offset, double cursor_x, double cur
     // Apply zoom instantly — scroll zoom must be immediate and responsive.
     // (Animations are used for auto-fit, box zoom, and inertial pan instead.)
     // Use double arithmetic to preserve precision at deep zoom levels.
-    auto   dx       = static_cast<double>(data_x);
-    auto   dy       = static_cast<double>(data_y);
-    double new_xmin = dx + (xlim.min - dx) * factor;
-    double new_xmax = dx + (xlim.max - dx) * factor;
-    double new_ymin = dy + (ylim.min - dy) * factor;
-    double new_ymax = dy + (ylim.max - dy) * factor;
+    const double dx       = data_x;
+    const double dy       = data_y;
+    double       new_xmin = dx + (xlim.min - dx) * factor;
+    double       new_xmax = dx + (xlim.max - dx) * factor;
+    double       new_ymin = dy + (ylim.min - dy) * factor;
+    double       new_ymax = dy + (ylim.max - dy) * factor;
 
     // Clamp to double precision limits — prevent zooming past what double can represent
     {

@@ -7,6 +7,7 @@
 #include <spectra/series.hpp>
 
 #include "ui/overlay/axes3d_pick.hpp"
+#include "data/sorted_x_query.hpp"
 
 // DataInteraction and its components are ImGui-guarded.
 // These tests exercise the pure-logic parts (nearest-point, markers)
@@ -14,6 +15,38 @@
 // data structures directly.
 
 using namespace spectra;
+
+TEST(SortedXQuery, NarrowsMillionPointInteractionToVisibleCandidates)
+{
+    std::vector<float> x(1'000'000);
+    for (size_t i = 0; i < x.size(); ++i)
+        x[i] = static_cast<float>(i);
+
+    auto range = sorted_x_query_range(x, 500'000.0, 12.0);
+    EXPECT_LE(range.end - range.begin, 28u);
+    EXPECT_LE(range.begin, 500'000u);
+    EXPECT_GT(range.end, 500'000u);
+}
+
+TEST(SortedXQuery, KeepsSmallSeriesOnLinearPath)
+{
+    std::vector<float> x     = {0.0f, 1.0f, 2.0f};
+    auto               range = sorted_x_query_range(x, 1.0, 0.1);
+    EXPECT_EQ(range.begin, 0u);
+    EXPECT_EQ(range.end, x.size());
+}
+
+TEST(SortedXQuery, PreservesDoublePrecisionAroundLargeOffsets)
+{
+    std::vector<float> x(1'000);
+    for (size_t i = 0; i < x.size(); ++i)
+        x[i] = 1.0e9f + static_cast<float>(i * 128);
+
+    const double center = static_cast<double>(x[500]) + 40.0;
+    auto         range  = sorted_x_query_range(x, center, 10.0);
+    EXPECT_EQ(range.begin, 500u);
+    EXPECT_EQ(range.end, 502u);
+}
 
 // ─── Nearest-point logic (standalone, mirrors DataInteraction::find_nearest) ──
 

@@ -39,9 +39,11 @@ enum class InteractionMode
 // Cursor readout data (updated every mouse move)
 struct CursorReadout
 {
-    bool   valid    = false;
-    float  data_x   = 0.0f;
-    float  data_y   = 0.0f;
+    bool valid = false;
+    // Double precision: epoch-scale x values (~1.7e9) exceed float's
+    // ~7-digit precision and would quantize to ~128 s steps.
+    double data_x   = 0.0;
+    double data_y   = 0.0;
     double screen_x = 0.0;
     double screen_y = 0.0;
 };
@@ -169,11 +171,11 @@ class InputHandler
     const BoxZoomRect& select_rect() const { return select_rect_; }
 
     // Middle-mouse pan state (for callback passthrough)
-    bool  is_middle_pan_dragging() const { return middle_pan_dragging_; }
-    float measure_start_data_x() const { return measure_start_data_x_; }
-    float measure_start_data_y() const { return measure_start_data_y_; }
-    float measure_end_data_x() const { return measure_end_data_x_; }
-    float measure_end_data_y() const { return measure_end_data_y_; }
+    bool   is_middle_pan_dragging() const { return middle_pan_dragging_; }
+    double measure_start_data_x() const { return measure_start_data_x_; }
+    double measure_start_data_y() const { return measure_start_data_y_; }
+    double measure_end_data_x() const { return measure_end_data_x_; }
+    double measure_end_data_y() const { return measure_end_data_y_; }
 
     // True if any interaction animation is running (zoom, pan inertia, auto-fit)
     bool has_active_animations() const;
@@ -181,8 +183,10 @@ class InputHandler
     // Register callback for Ctrl+S save
     void set_save_callback(SavePngCallback cb) { save_callback_ = std::move(cb); }
 
-    // Convert screen coordinates to data coordinates using current active axes
-    void screen_to_data(double screen_x, double screen_y, float& data_x, float& data_y) const;
+    // Convert screen coordinates to data coordinates using current active axes.
+    // Double precision throughout: axis limits can sit at epoch scale (~1.7e9)
+    // where float would quantize to ~128 s steps.
+    void screen_to_data(double screen_x, double screen_y, double& data_x, double& data_y) const;
 
     // Hit-test: find which Axes the cursor is over (public for context menu)
     Axes* hit_test_axes(double screen_x, double screen_y) const;
@@ -244,8 +248,8 @@ class InputHandler
     AxesBase*        active_axes_base_ = nullptr;
 
     // 3D orbit drag state
-    bool                   is_3d_orbit_drag_ = false;
-    bool                   is_3d_pan_drag_   = false;
+    bool                   is_3d_orbit_drag_   = false;
+    bool                   is_3d_pan_drag_     = false;
     static constexpr int   MOUSE_BUTTON_MIDDLE = 2;
     static constexpr float ORBIT_SENSITIVITY   = 0.3f;
     static constexpr float ZOOM_3D_FACTOR      = 0.1f;
@@ -332,10 +336,10 @@ class InputHandler
     Axes*  measure_axes_           = nullptr;   // axes where the measurement started
     double measure_start_screen_x_ = 0.0;
     double measure_start_screen_y_ = 0.0;
-    float  measure_start_data_x_   = 0.0f;
-    float  measure_start_data_y_   = 0.0f;
-    float  measure_end_data_x_     = 0.0f;
-    float  measure_end_data_y_     = 0.0f;
+    double measure_start_data_x_   = 0.0;
+    double measure_start_data_y_   = 0.0;
+    double measure_end_data_x_     = 0.0;
+    double measure_end_data_y_     = 0.0;
     bool   crosshair_was_active_   = false;   // to restore crosshair state when leaving Measure
 
     // Annotate tool state
@@ -375,14 +379,14 @@ class InputHandler
     double   rclick_zoom_start_y_       = 0.0;
     double   rclick_zoom_last_x_        = 0.0;
     double   rclick_zoom_last_y_        = 0.0;
-    float    rclick_zoom_xlim_min_      = 0.0f;
-    float    rclick_zoom_xlim_max_      = 0.0f;
-    float    rclick_zoom_ylim_min_      = 0.0f;
-    float    rclick_zoom_ylim_max_      = 0.0f;
-    float    rclick_zoom_zlim_min_      = 0.0f;
-    float    rclick_zoom_zlim_max_      = 0.0f;
-    float    rclick_zoom_anchor_data_x_ = 0.0f;   // data-space anchor (drag-start point)
-    float    rclick_zoom_anchor_data_y_ = 0.0f;
+    double   rclick_zoom_xlim_min_      = 0.0;
+    double   rclick_zoom_xlim_max_      = 0.0;
+    double   rclick_zoom_ylim_min_      = 0.0;
+    double   rclick_zoom_ylim_max_      = 0.0;
+    double   rclick_zoom_zlim_min_      = 0.0;
+    double   rclick_zoom_zlim_max_      = 0.0;
+    double   rclick_zoom_anchor_data_x_ = 0.0;   // data-space anchor (drag-start point)
+    double   rclick_zoom_anchor_data_y_ = 0.0;
     // Screen-space direction of each 3D axis (computed at drag start from camera MVP)
     // Stored as (dx, dy) normalized screen vectors for X, Y, Z axes
     float                   rclick_zoom_axis_sx_[3] = {};   // screen X component for axes [X, Y, Z]

@@ -56,6 +56,7 @@ class DataInteraction
 
     // Nearest-point result from the last update
     const NearestPointResult& nearest_point() const { return nearest_; }
+    size_t last_query_points_examined() const { return last_query_points_examined_; }
 
     // Crosshair control
     bool crosshair_active() const { return crosshair_.enabled(); }
@@ -252,16 +253,18 @@ class DataInteraction
 
     // Cached state for drawing
     CursorReadout last_cursor_;
-    Figure*       last_figure_ = nullptr;
-    Axes*         active_axes_  = nullptr;
+    Figure*       last_figure_   = nullptr;
+    Axes*         active_axes_   = nullptr;
     const Axes3D* active_axes3d_ = nullptr;
     Rect          active_viewport_;
-    float         xlim_min_ = 0.0f, xlim_max_ = 1.0f;
-    float         ylim_min_ = 0.0f, ylim_max_ = 1.0f;
+    // Double precision for x: limits can sit at epoch scale (~1.7e9).
+    double xlim_min_ = 0.0, xlim_max_ = 1.0;
+    float  ylim_min_ = 0.0f, ylim_max_ = 1.0f;
 
     // Region selection: remember which axes the ROI was started in
     // so it stays in the correct subplot when the cursor moves.
-    Axes* region_axes_ = nullptr;
+    Axes*          region_axes_                = nullptr;
+    mutable size_t last_query_points_examined_ = 0;
 };
 
 }   // namespace spectra

@@ -1039,7 +1039,11 @@ void ImGuiIntegration::draw_command_bar()
                         csv_data_loaded_ = csv_data_.error.empty();
                         csv_error_       = csv_data_.error;
                         csv_col_x_       = 0;
-                        csv_col_y_       = (csv_data_.num_cols > 1) ? 1 : 0;
+                        csv_selected_y_.clear();
+                        for (size_t c = 1; c < csv_data_.num_cols; ++c)
+                            csv_selected_y_.push_back(static_cast<int>(c));
+                        if (csv_selected_y_.empty() && csv_data_.num_cols > 0)
+                            csv_selected_y_.push_back(0);
                         csv_col_z_       = -1;
                         if (csv_data_loaded_)
                             csv_dialog_open_ = true;

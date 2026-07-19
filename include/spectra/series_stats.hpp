@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <span>
 #include <spectra/color.hpp>
@@ -10,6 +11,92 @@
 
 namespace spectra
 {
+
+// ─── Uncertainty Band Series ───────────────────────────────────────────────
+// A filled envelope between aligned lower and upper samples. This is the
+// native primitive behind confidence intervals, forecast ranges, and error
+// bands; callers do not need to construct or triangulate polygons manually.
+
+class BandSeries : public Series
+{
+   public:
+    BandSeries() = default;
+    BandSeries(std::span<const float> x,
+               std::span<const float> lower,
+               std::span<const float> upper);
+
+    BandSeries& set_data(std::span<const float> x,
+                         std::span<const float> lower,
+                         std::span<const float> upper);
+
+    std::span<const float> x_values() const { return x_; }
+    std::span<const float> lower_values() const { return lower_; }
+    std::span<const float> upper_values() const { return upper_; }
+    size_t                 sample_count() const { return x_.size(); }
+
+    std::span<const float> x_data() const { return line_x_; }
+    std::span<const float> y_data() const { return line_y_; }
+    size_t                 point_count() const { return line_x_.size(); }
+
+    std::span<const float> fill_verts() const { return fill_verts_; }
+    size_t                 fill_vertex_count() const { return fill_verts_.size() / 3; }
+
+    BandSeries& fill_opacity(float value)
+    {
+        fill_opacity_ = std::clamp(value, 0.0f, 1.0f);
+        dirty_        = true;
+        return *this;
+    }
+    float fill_opacity() const { return fill_opacity_; }
+
+    BandSeries& edge_width(float value)
+    {
+        edge_width_ = std::max(value, 0.0f);
+        dirty_      = true;
+        return *this;
+    }
+    float edge_width() const { return edge_width_; }
+
+    BandSeries& show_edges(bool value)
+    {
+        show_edges_ = value;
+        dirty_      = true;
+        return *this;
+    }
+    bool show_edges() const { return show_edges_; }
+
+    using Series::color;
+    using Series::label;
+    using Series::opacity;
+    BandSeries& label(const std::string& value)
+    {
+        Series::label(value);
+        return *this;
+    }
+    BandSeries& color(const Color& value)
+    {
+        Series::color(value);
+        return *this;
+    }
+    BandSeries& opacity(float value)
+    {
+        Series::opacity(value);
+        return *this;
+    }
+
+    void rebuild_geometry();
+
+   private:
+    std::vector<float> x_;
+    std::vector<float> lower_;
+    std::vector<float> upper_;
+    std::vector<float> line_x_;
+    std::vector<float> line_y_;
+    std::vector<float> fill_verts_;
+    float              fill_opacity_ = 0.25f;
+    float              edge_width_   = 1.0f;
+    bool               show_edges_   = true;
+};
 
 // ─── Box Plot Series ────────────────────────────────────────────────────────
 // Renders one or more box-and-whisker plots.

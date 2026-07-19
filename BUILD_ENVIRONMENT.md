@@ -242,8 +242,9 @@ cmake -B build-asan -G Ninja \
 
 cmake --build build-asan -j$(nproc)
 
-# Run with leak detection
+# Run with leak detection (suppress known third-party leaks from GLFW/libdecor/GTK)
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+LSAN_OPTIONS=suppressions=tools/sanitizers/lsan.supp \
     ctest --test-dir build-asan -LE gpu --output-on-failure -j$(nproc)
 
 # UndefinedBehaviorSanitizer

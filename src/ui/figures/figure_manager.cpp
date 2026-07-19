@@ -377,6 +377,24 @@ FigureId FigureManager::duplicate_figure(FigureId index)
                     dup.label(ss->label());
                 dup.visible(ss->visible());
                 dup.plot_style(ss->plot_style());
+                if (!ss->color_values_data().empty())
+                    dup.color_values(ss->color_values_data()).colormap(ss->colormap());
+                if (ss->colormap_range_set())
+                    dup.colormap_range(ss->colormap_min(), ss->colormap_max());
+            }
+            else if (auto* band = dynamic_cast<const BandSeries*>(s.get()))
+            {
+                auto& dup =
+                    dst_ax.band(band->x_values(), band->lower_values(), band->upper_values());
+                dup.color(band->color());
+                dup.fill_opacity(band->fill_opacity());
+                dup.edge_width(band->edge_width());
+                dup.show_edges(band->show_edges());
+                if (!band->label().empty())
+                    dup.label(band->label());
+                dup.visible(band->visible());
+                dup.opacity(band->opacity());
+                dup.plot_style(band->plot_style());
             }
             else if (auto* bp = dynamic_cast<const BoxPlotSeries*>(s.get()))
             {

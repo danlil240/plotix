@@ -147,10 +147,10 @@ class Axes : public AxesBase
 
     // Sample y = f(x) over [xmin, xmax] with n evenly spaced points.
     LineSeries& fplot(std::function<double(double)> func,
-                      double                 xmin,
-                      double                 xmax,
-                      int                    n   = 200,
-                      std::string_view       fmt = "-");
+                      double                        xmin,
+                      double                        xmax,
+                      int                           n   = 200,
+                      std::string_view              fmt = "-");
 
     // Chunked line series — for large datasets and streaming (ROS2, PX4, etc.)
     ChunkedLineSeries& chunked_line();
@@ -160,6 +160,9 @@ class Axes : public AxesBase
     ViolinSeries&    violin();
     HistogramSeries& histogram(std::span<const float> values, int bins = 30);
     BarSeries&       bar(std::span<const float> positions, std::span<const float> heights);
+    BandSeries&      band(std::span<const float> x,
+                          std::span<const float> lower,
+                          std::span<const float> upper);
     StemSeries&      stem(std::span<const float> x, std::span<const float> y);
 
     // Shape annotation series (rectangles, circles, arrows, polygons, etc.)

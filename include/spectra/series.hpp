@@ -81,6 +81,19 @@ class Series
     bool excluded_from_autoscale() const { return excluded_from_autoscale_; }
     void set_excluded_from_autoscale(bool v) { excluded_from_autoscale_ = v; }
 
+    // ── Double-precision x-axis offset ──
+    // Logical x value = x_offset() + x_data()[i].  Allows plotting data with
+    // large absolute x values (e.g. epoch timestamps ~1.7e9) that exceed
+    // float's ~7-digit precision: the stored floats stay small and precise
+    // while axis limits, ticks, and cursor readouts show absolute values.
+    Series& x_offset(double off)
+    {
+        x_offset_ = off;
+        dirty_    = true;
+        return *this;
+    }
+    double x_offset() const { return x_offset_; }
+
     // Control whether this series appears in the legend.
     bool show_in_legend() const { return show_in_legend_; }
     void set_show_in_legend(bool v) { show_in_legend_ = v; }
@@ -167,7 +180,8 @@ class Series
     std::string       label_;
     Color             color_ = colors::blue;
     PlotStyle         style_;   // line/marker style, sizes, opacity
-    bool              visible_ = true;
+    bool              visible_                 = true;
+    double            x_offset_                = 0.0;
     bool              excluded_from_autoscale_ = false;
     bool              show_in_legend_          = true;
     bool              is_reference_line_       = false;
@@ -201,6 +215,7 @@ class LineSeries : public Series
     std::span<const float> x_data() const { return x_; }
     std::span<const float> y_data() const { return y_; }
     size_t                 point_count() const { return std::min(x_.size(), y_.size()); }
+    bool                   x_is_sorted() const { return x_sorted_; }
 
     // Remove all points with x < x_threshold.  Assumes x is sorted ascending.
     // Returns the number of points removed.
@@ -265,6 +280,7 @@ class LineSeries : public Series
     std::vector<float> x_;
     std::vector<float> y_;
     float              line_width_ = 2.0f;
+    bool               x_sorted_   = true;
 };
 
 class ScatterSeries : public Series
@@ -288,6 +304,7 @@ class ScatterSeries : public Series
     std::span<const float> x_data() const { return x_; }
     std::span<const float> y_data() const { return y_; }
     size_t                 point_count() const { return std::min(x_.size(), y_.size()); }
+    bool                   x_is_sorted() const { return x_sorted_; }
 
     // Bring base-class getters into scope (setters below would otherwise hide them)
     using Series::color;
@@ -366,7 +383,8 @@ class ScatterSeries : public Series
     std::span<const float> color_values_data() const { return color_values_; }
     bool                   has_colormap() const
     {
-        return colormap_type_ != ColormapType::None && !color_values_.empty();
+        return colormap_type_ != ColormapType::None && color_values_.size() == x_.size()
+               && x_.size() == y_.size() && !x_.empty();
     }
     float colormap_min() const { return colormap_min_; }
     float colormap_max() const { return colormap_max_; }
@@ -379,6 +397,7 @@ class ScatterSeries : public Series
     std::vector<float> x_;
     std::vector<float> y_;
     float              point_size_ = 4.0f;
+    bool               x_sorted_   = true;
     // Colormap support (Phase 7C)
     std::vector<float> color_values_;
     ColormapType       colormap_type_ = ColormapType::None;

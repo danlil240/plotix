@@ -67,9 +67,10 @@
 #include "perf_metrics.hpp"
 #include "platform/clipboard_image.hpp"
 
-#include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cstdlib>
+#include <filesystem>
 #include <memory>
 
 namespace spectra
@@ -258,10 +259,10 @@ struct App::AppRuntime
     {
         std::vector<uint8_t> pixels;
         std::string          path;
-        uint32_t             width             = 0;
-        uint32_t             height            = 0;
-        bool                 active            = false;
-        bool                 copy_to_clipboard = false;
+        uint32_t             width                = 0;
+        uint32_t             height               = 0;
+        bool                 active               = false;
+        bool                 copy_to_clipboard    = false;
         bool                 awaiting_gpu_capture = false;
     } pending_png_capture;
 
@@ -384,15 +385,15 @@ void App::init_runtime()
             if (config_.backend == RenderBackend::Vulkan)
             {
                 WindowManagerBootstrapOptions wm_opts;
-                wm_opts.backend                 = static_cast<VulkanBackend*>(backend_.get());
-                wm_opts.registry                = &registry_;
-                wm_opts.renderer                = renderer_.get();
-                wm_opts.theme_mgr               = theme_mgr_.get();
-                wm_opts.session                 = &rt.session;
-                wm_opts.settings_store          = rt.settings_store.get();
-                wm_opts.plugin_manager          = &rt.plugin_manager;
-                wm_opts.export_format_registry  = &rt.export_format_registry;
-                rt.window_mgr                   = create_configured_window_manager(wm_opts);
+                wm_opts.backend                = static_cast<VulkanBackend*>(backend_.get());
+                wm_opts.registry               = &registry_;
+                wm_opts.renderer               = renderer_.get();
+                wm_opts.theme_mgr              = theme_mgr_.get();
+                wm_opts.session                = &rt.session;
+                wm_opts.settings_store         = rt.settings_store.get();
+                wm_opts.plugin_manager         = &rt.plugin_manager;
+                wm_opts.export_format_registry = &rt.export_format_registry;
+                rt.window_mgr                  = create_configured_window_manager(wm_opts);
                 rt.window_mgr->set_interactive_frame_handler(
                     [&rt]()
                     {
@@ -461,15 +462,15 @@ void App::init_runtime()
             if (config_.backend == RenderBackend::Vulkan)
             {
                 WindowManagerBootstrapOptions wm_opts;
-                wm_opts.backend                 = static_cast<VulkanBackend*>(backend_.get());
-                wm_opts.registry                = &registry_;
-                wm_opts.renderer                = renderer_.get();
-                wm_opts.theme_mgr               = theme_mgr_.get();
-                wm_opts.session                 = &rt.session;
-                wm_opts.settings_store          = rt.settings_store.get();
-                wm_opts.plugin_manager          = &rt.plugin_manager;
-                wm_opts.export_format_registry  = &rt.export_format_registry;
-                rt.window_mgr                   = create_configured_window_manager(wm_opts);
+                wm_opts.backend                = static_cast<VulkanBackend*>(backend_.get());
+                wm_opts.registry               = &registry_;
+                wm_opts.renderer               = renderer_.get();
+                wm_opts.theme_mgr              = theme_mgr_.get();
+                wm_opts.session                = &rt.session;
+                wm_opts.settings_store         = rt.settings_store.get();
+                wm_opts.plugin_manager         = &rt.plugin_manager;
+                wm_opts.export_format_registry = &rt.export_format_registry;
+                rt.window_mgr                  = create_configured_window_manager(wm_opts);
                 rt.window_mgr->set_interactive_frame_handler(
                     [&rt]()
                     {
@@ -586,7 +587,8 @@ void App::init_runtime()
                              const std::string& /* x_label */,
                              const std::string& y_label,
                              const std::vector<float>* /*z*/,
-                             const std::string* /*z_label*/)
+                             const std::string* /*z_label*/,
+                             double x_offset)
             {
                 FigureId active_id = fig_mgr.active_index();
                 Figure*  fig       = registry_.get(active_id);
@@ -601,8 +603,29 @@ void App::init_runtime()
                 auto& ax   = fig->subplot(1, 1, 1);
                 auto& line = ax.line(x, y);
                 line.label(y_label);
+                // Preserve absolute x values (e.g. epoch timestamps): the
+                // axis shows x_offset + x[i] at full double precision.
+                line.x_offset(x_offset);
                 ax.auto_fit();
             });
+
+        // Wire OS drag-and-drop: CSV/TSV/TXT files trigger the Load from CSV flow.
+        auto* imgui_ui_ptr = imgui_ui.get();
+        if (rt.window_mgr)
+        {
+            rt.window_mgr->set_file_drop_handler(
+                [imgui_ui_ptr](uint32_t /*window_id*/, const std::string& path)
+                {
+                    namespace fs = std::filesystem;
+                    auto ext     = fs::path(path).extension().string();
+                    std::transform(ext.begin(),
+                                   ext.end(),
+                                   ext.begin(),
+                                   [](unsigned char c) { return std::tolower(c); });
+                    if (ext == ".csv" || ext == ".tsv" || ext == ".txt")
+                        imgui_ui_ptr->request_csv_load(path);
+                });
+        }
     }
 #endif
 
@@ -774,7 +797,8 @@ App::StepResult App::step()
             cap.awaiting_gpu_capture = false;
             if (cap.copy_to_clipboard)
             {
-                auto png = ImageExporter::write_png_to_memory(cap.pixels.data(), cap.width, cap.height);
+                auto png =
+                    ImageExporter::write_png_to_memory(cap.pixels.data(), cap.width, cap.height);
                 if (!png.empty())
                 {
                     if (platform::copy_image_to_clipboard(png.data(), png.size()))
@@ -809,12 +833,12 @@ App::StepResult App::step()
             || rt.active_figure->export_req_.copy_to_clipboard)
         && !rt.pending_png_capture.active)
     {
-        uint32_t ew  = rt.active_figure->export_req_.png_width > 0
-                           ? rt.active_figure->export_req_.png_width
-                           : rt.active_figure->width();
-        uint32_t eh  = rt.active_figure->export_req_.png_height > 0
-                           ? rt.active_figure->export_req_.png_height
-                           : rt.active_figure->height();
+        uint32_t ew = rt.active_figure->export_req_.png_width > 0
+                          ? rt.active_figure->export_req_.png_width
+                          : rt.active_figure->width();
+        uint32_t eh = rt.active_figure->export_req_.png_height > 0
+                          ? rt.active_figure->export_req_.png_height
+                          : rt.active_figure->height();
         if (ew == 0 || eh == 0)
         {
             rt.active_figure->export_req_.png_path.clear();
@@ -824,13 +848,13 @@ App::StepResult App::step()
         }
         else
         {
-            auto&    cap = rt.pending_png_capture;
+            auto& cap = rt.pending_png_capture;
             cap.pixels.resize(static_cast<size_t>(ew) * eh * 4);
-            cap.path              = rt.active_figure->export_req_.png_path;
-            cap.width             = ew;
-            cap.height            = eh;
-            cap.active            = true;
-            cap.copy_to_clipboard = rt.active_figure->export_req_.copy_to_clipboard;
+            cap.path                 = rt.active_figure->export_req_.png_path;
+            cap.width                = ew;
+            cap.height               = eh;
+            cap.active               = true;
+            cap.copy_to_clipboard    = rt.active_figure->export_req_.copy_to_clipboard;
             cap.awaiting_gpu_capture = true;
 
             auto* vk = (config_.backend == RenderBackend::Vulkan)

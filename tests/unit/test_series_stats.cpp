@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <spectra/axes.hpp>
 #include <spectra/series_stats.hpp>
 
@@ -7,9 +8,86 @@
 
 using namespace spectra;
 
+TEST(BandSeries, BuildsTwoTrianglesPerFiniteInterval)
+{
+    std::vector<float> x     = {0.0f, 1.0f, 2.0f};
+    std::vector<float> lower = {-1.0f, 0.0f, 1.0f};
+    std::vector<float> upper = {1.0f, 2.0f, 3.0f};
+    BandSeries         band(x, lower, upper);
+
+    EXPECT_EQ(band.sample_count(), 3u);
+    EXPECT_EQ(band.fill_vertex_count(), 12u);
+    EXPECT_EQ(band.point_count(), 7u);
+    EXPECT_TRUE(std::isnan(band.x_data()[3]));
+}
+
+TEST(BandSeries, RejectsMisalignedInputs)
+{
+    std::vector<float> x     = {0.0f, 1.0f};
+    std::vector<float> lower = {0.0f};
+    std::vector<float> upper = {1.0f, 2.0f};
+    EXPECT_THROW(BandSeries(x, lower, upper), std::invalid_argument);
+}
+
+TEST(BandSeries, ParticipatesInAutoscale)
+{
+    Axes               axes;
+    std::vector<float> x     = {10.0f, 20.0f};
+    std::vector<float> lower = {-4.0f, -3.0f};
+    std::vector<float> upper = {7.0f, 9.0f};
+    axes.band(x, lower, upper);
+    axes.auto_fit();
+
+    EXPECT_LE(axes.x_limits().min, 10.0);
+    EXPECT_GE(axes.x_limits().max, 20.0);
+    EXPECT_LE(axes.y_limits().min, -4.0);
+    EXPECT_GE(axes.y_limits().max, 9.0);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // BoxPlotSeries
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Series x_offset — double-precision absolute x (epoch timestamps)
+// ═══════════════════════════════════════════════════════════════════════════
+
+TEST(SeriesXOffset, AxisLimitsIncludeOffset)
+{
+    // Epoch-scale timestamps stored as small relative floats + double offset.
+    // Axis limits must reflect the absolute values at double precision.
+    constexpr double   epoch = 1783350621.752999;
+    std::vector<float> x     = {0.0f, 0.02f, 0.04f};
+    std::vector<float> y     = {1.0f, 2.0f, 3.0f};
+
+    Axes  ax;
+    auto& line = ax.line(x, y);
+    line.x_offset(epoch);
+    ax.auto_fit();
+
+    auto xlim = ax.x_limits();
+    // Limits bracket the absolute range [epoch, epoch + 0.04] with padding.
+    EXPECT_LT(xlim.min, epoch);
+    EXPECT_GT(xlim.max, epoch + 0.04);
+    // Sub-second resolution preserved: the whole span is well under a second.
+    EXPECT_LT(xlim.max - xlim.min, 1.0);
+    EXPECT_NEAR(xlim.min, epoch, 0.1);
+}
+
+TEST(SeriesXOffset, DefaultOffsetIsZero)
+{
+    std::vector<float> x = {1.0f, 2.0f, 3.0f};
+    std::vector<float> y = {1.0f, 2.0f, 3.0f};
+
+    Axes  ax;
+    auto& line = ax.line(x, y);
+    EXPECT_EQ(line.x_offset(), 0.0);
+    ax.auto_fit();
+
+    auto xlim = ax.x_limits();
+    EXPECT_LE(xlim.min, 1.0);
+    EXPECT_GE(xlim.max, 3.0);
+}
 
 TEST(BoxPlotStats, ComputeFromData)
 {

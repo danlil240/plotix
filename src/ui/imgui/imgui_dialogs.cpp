@@ -15,7 +15,7 @@ void ImGuiIntegration::draw_csv_dialog()
 
     ImGuiIO& io       = ImGui::GetIO();
     float    dialog_w = 480.0f;
-    float    dialog_h = 380.0f;
+    float    dialog_h = 520.0f;
     ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
                             ImGuiCond_Appearing,
                             ImVec2(0.5f, 0.5f));
@@ -55,7 +55,7 @@ void ImGuiIntegration::draw_csv_dialog()
             ImGui::Text("Columns: %zu  |  Rows: %zu", csv_data_.num_cols, csv_data_.num_rows);
             ImGui::Spacing();
 
-            // Column combo helper
+            // X Column combo
             auto combo_item = [&](const char* label, int* current, bool allow_none = false)
             {
                 ImGui::SetNextItemWidth(220.0f);
@@ -82,42 +82,85 @@ void ImGuiIntegration::draw_csv_dialog()
                 }
             };
 
-            combo_item("X Column", &csv_col_x_);
-            combo_item("Y Column", &csv_col_y_);
+            combo_item("X Column (shared)", &csv_col_x_);
+
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(colors.text_secondary.r,
+                                      colors.text_secondary.g,
+                                      colors.text_secondary.b,
+                                      1.0f),
+                               "Y Columns (select multiple):");
+
+            // Multi-select Y columns via checkboxes in a scrollable child
+            auto is_selected = [&](int col) {
+                return std::find(csv_selected_y_.begin(), csv_selected_y_.end(), col)
+                       != csv_selected_y_.end();
+            };
+            auto toggle = [&](int col)
+            {
+                auto it = std::find(csv_selected_y_.begin(), csv_selected_y_.end(), col);
+                if (it != csv_selected_y_.end())
+                    csv_selected_y_.erase(it);
+                else
+                    csv_selected_y_.push_back(col);
+            };
+
+            if (ImGui::BeginChild("##csv_y_cols", ImVec2(0, 100), ImGuiChildFlags_Borders))
+            {
+                for (int c = 0; c < static_cast<int>(csv_data_.headers.size()); ++c)
+                {
+                    ImGui::PushID(c);
+                    bool sel = is_selected(c);
+                    if (ImGui::Checkbox(csv_data_.headers[c].c_str(), &sel))
+                        toggle(c);
+                    ImGui::PopID();
+                }
+            }
+            ImGui::EndChild();
+
+            // Select All / None helper buttons
+            if (ImGui::Button("Select All"))
+            {
+                csv_selected_y_.clear();
+                for (int c = 0; c < static_cast<int>(csv_data_.num_cols); ++c)
+                    if (c != csv_col_x_)
+                        csv_selected_y_.push_back(c);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Clear"))
+                csv_selected_y_.clear();
+
+            ImGui::Spacing();
             combo_item("Z Column (optional)", &csv_col_z_, true);
 
             ImGui::Spacing();
 
-            // Data preview
-            if (csv_data_.num_rows > 0)
+            // Data preview — show first selected Y column
+            if (csv_data_.num_rows > 0 && !csv_selected_y_.empty())
             {
                 ImGui::TextColored(ImVec4(colors.text_secondary.r,
                                           colors.text_secondary.g,
                                           colors.text_secondary.b,
                                           1.0f),
-                                   "Preview (first 5 rows):");
+                                   "Preview (first 5 rows, X + first selected Y):");
                 if (ImGui::BeginChild("##csv_preview", ImVec2(0, 90), ImGuiChildFlags_Borders))
                 {
                     size_t preview_rows = std::min(csv_data_.num_rows, size_t(5));
+                    int    first_y      = csv_selected_y_[0];
                     for (size_t r = 0; r < preview_rows; ++r)
                     {
-                        float xv =
-                            (csv_col_x_ >= 0 && csv_col_x_ < static_cast<int>(csv_data_.num_cols))
-                                ? csv_data_.columns[csv_col_x_][r]
-                                : 0.0f;
-                        float yv =
-                            (csv_col_y_ >= 0 && csv_col_y_ < static_cast<int>(csv_data_.num_cols))
-                                ? csv_data_.columns[csv_col_y_][r]
-                                : 0.0f;
-                        if (csv_col_z_ >= 0 && csv_col_z_ < static_cast<int>(csv_data_.num_cols))
-                        {
-                            float zv = csv_data_.columns[csv_col_z_][r];
-                            ImGui::Text("  x=%.4f  y=%.4f  z=%.4f", xv, yv, zv);
-                        }
-                        else
-                        {
-                            ImGui::Text("  x=%.4f  y=%.4f", xv, yv);
-                        }
+                        // Show absolute values: column base offset + stored float
+                        const bool x_ok =
+                            (csv_col_x_ >= 0 && csv_col_x_ < static_cast<int>(csv_data_.num_cols));
+                        double xv =
+                            x_ok ? static_cast<double>(csv_data_.columns[csv_col_x_][r]) : 0.0;
+                        if (x_ok
+                            && static_cast<size_t>(csv_col_x_) < csv_data_.column_offsets.size())
+                            xv += csv_data_.column_offsets[csv_col_x_];
+                        float yv = (first_y >= 0 && first_y < static_cast<int>(csv_data_.num_cols))
+                                       ? csv_data_.columns[first_y][r]
+                                       : 0.0f;
+                        ImGui::Text("  x=%.4f  y=%.4f", xv, yv);
                     }
                 }
                 ImGui::EndChild();
@@ -126,10 +169,8 @@ void ImGuiIntegration::draw_csv_dialog()
             ImGui::Spacing();
 
             // Plot / Cancel buttons
-            bool can_plot =
-                (csv_col_x_ >= 0 && csv_col_y_ >= 0
-                 && csv_col_x_ < static_cast<int>(csv_data_.num_cols)
-                 && csv_col_y_ < static_cast<int>(csv_data_.num_cols) && csv_data_.num_rows > 0);
+            bool can_plot = (csv_col_x_ >= 0 && csv_col_x_ < static_cast<int>(csv_data_.num_cols)
+                             && !csv_selected_y_.empty() && csv_data_.num_rows > 0);
 
             if (!can_plot)
                 ImGui::BeginDisabled();
@@ -139,7 +180,11 @@ void ImGuiIntegration::draw_csv_dialog()
             ImGui::PushStyleColor(
                 ImGuiCol_ButtonHovered,
                 ImVec4(colors.accent_hover.r, colors.accent_hover.g, colors.accent_hover.b, 1.0f));
-            if (ImGui::Button("Plot", ImVec2(120, 32)))
+            std::string plot_label =
+                csv_selected_y_.size() > 1
+                    ? "Plot " + std::to_string(csv_selected_y_.size()) + " Series"
+                    : "Plot";
+            if (ImGui::Button(plot_label.c_str(), ImVec2(140, 32)))
             {
                 if (csv_plot_cb_)
                 {
@@ -152,13 +197,25 @@ void ImGuiIntegration::draw_csv_dialog()
                         z_label     = csv_data_.headers[csv_col_z_];
                         z_label_ptr = &z_label;
                     }
-                    csv_plot_cb_(csv_file_path_,
-                                 csv_data_.columns[csv_col_x_],
-                                 csv_data_.columns[csv_col_y_],
-                                 csv_data_.headers[csv_col_x_],
-                                 csv_data_.headers[csv_col_y_],
-                                 z_ptr,
-                                 z_label_ptr);
+                    // X column base offset (non-zero for datetime/epoch columns)
+                    const double x_offset =
+                        (static_cast<size_t>(csv_col_x_) < csv_data_.column_offsets.size())
+                            ? csv_data_.column_offsets[csv_col_x_]
+                            : 0.0;
+                    // Sort selected Y columns for deterministic order
+                    std::vector<int> sorted_y = csv_selected_y_;
+                    std::sort(sorted_y.begin(), sorted_y.end());
+                    for (int y_col : sorted_y)
+                    {
+                        csv_plot_cb_(csv_file_path_,
+                                     csv_data_.columns[csv_col_x_],
+                                     csv_data_.columns[y_col],
+                                     csv_data_.headers[csv_col_x_],
+                                     csv_data_.headers[y_col],
+                                     z_ptr,
+                                     z_label_ptr,
+                                     x_offset);
+                    }
                 }
                 csv_dialog_open_ = false;
             }
@@ -211,8 +268,8 @@ void ImGuiIntegration::draw_theme_settings()
         {"high_contrast", "High Contrast"},
     };
 
-    ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_AlwaysAutoResize;
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse
+                             | ImGuiWindowFlags_AlwaysAutoResize;
 
     // Modern modal styling
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
@@ -319,8 +376,8 @@ void ImGuiIntegration::draw_theme_settings()
         ImGui::PopFont();
         ImGui::Dummy(ImVec2(0, 4));
 
-        ui::ThemeGlassSettings glass = theme_manager.glass();
-        bool                     glass_changed = false;
+        ui::ThemeGlassSettings glass         = theme_manager.glass();
+        bool                   glass_changed = false;
 
         auto glass_slider = [&](const char* label, float* value)
         {
@@ -342,9 +399,8 @@ void ImGuiIntegration::draw_theme_settings()
             glass_changed = true;
         if (ImGui::IsItemHovered())
         {
-            ImGui::SetTooltip(
-                "Real backdrop blur is not enabled in this build.\n"
-                "Glass styling uses layered translucency and glow instead.");
+            ImGui::SetTooltip("Real backdrop blur is not enabled in this build.\n"
+                              "Glass styling uses layered translucency and glow instead.");
         }
 
         if (glass_changed)
@@ -412,7 +468,7 @@ void ImGuiIntegration::draw_axes_context_menu(Figure& figure)
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && !io.WantCaptureMouse)
     {
         AxesBase* hit       = input_handler_->hit_test_all_axes(static_cast<double>(io.MousePos.x),
-                                                                static_cast<double>(io.MousePos.y));
+                                                          static_cast<double>(io.MousePos.y));
         context_menu_armed_ = (hit != nullptr);
         context_menu_pressed_axes_ = hit;
         context_menu_press_x_      = io.MousePos.x;
@@ -654,9 +710,9 @@ void ImGuiIntegration::draw_axes_context_menu(Figure& figure)
                                            : (grp->axis == LinkAxis::Y) ? "Y"
                                                                         : "XY";
                     ImU32       grp_col  = IM_COL32(static_cast<uint8_t>(grp->color.r * 255),
-                                                    static_cast<uint8_t>(grp->color.g * 255),
-                                                    static_cast<uint8_t>(grp->color.b * 255),
-                                                    255);
+                                             static_cast<uint8_t>(grp->color.g * 255),
+                                             static_cast<uint8_t>(grp->color.b * 255),
+                                             255);
 
                     ImVec2      cursor = ImGui::GetCursorScreenPos();
                     ImDrawList* dl     = ImGui::GetWindowDrawList();
@@ -752,7 +808,7 @@ void ImGuiIntegration::draw_axes_context_menu(Figure& figure)
             ImGui::Dummy(ImVec2(0, 2));
 
             bool   has_sel   = (selection_ctx_.type == ui::SelectionType::Series
-                                && !selection_ctx_.selected_series.empty());
+                            && !selection_ctx_.selected_series.empty());
             size_t sel_count = selection_ctx_.selected_count();
             bool   is_multi  = selection_ctx_.has_multi_selection();
 
@@ -893,9 +949,9 @@ void ImGuiIntegration::draw_axis_link_indicators(Figure& figure)
                 continue;
 
             ImU32 col    = IM_COL32(static_cast<uint8_t>(grp->color.r * 255),
-                                    static_cast<uint8_t>(grp->color.g * 255),
-                                    static_cast<uint8_t>(grp->color.b * 255),
-                                    200);
+                                 static_cast<uint8_t>(grp->color.g * 255),
+                                 static_cast<uint8_t>(grp->color.b * 255),
+                                 200);
             ImU32 bg_col = IM_COL32(0, 0, 0, 100);
 
             float cx = icon_x - gi * 22.0f;

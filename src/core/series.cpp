@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <spectra/event_bus.hpp>
 #include <spectra/series.hpp>
 
@@ -18,11 +20,10 @@ Series::~Series() = default;
 
 Series::Series(const Series& other)
     : label_(other.label_), color_(other.color_), style_(other.style_), visible_(other.visible_),
-      excluded_from_autoscale_(other.excluded_from_autoscale_),
+      x_offset_(other.x_offset_), excluded_from_autoscale_(other.excluded_from_autoscale_),
       show_in_legend_(other.show_in_legend_), is_reference_line_(other.is_reference_line_),
       dirty_(other.dirty_.load(std::memory_order_relaxed)), event_system_(other.event_system_),
-      owning_axes_(other.owning_axes_),   
-      pending_(nullptr)
+      owning_axes_(other.owning_axes_), pending_(nullptr)
 {
 }
 
@@ -30,10 +31,11 @@ Series& Series::operator=(const Series& other)
 {
     if (this != &other)
     {
-        label_   = other.label_;
-        color_   = other.color_;
-        style_   = other.style_;
-        visible_ = other.visible_;
+        label_                   = other.label_;
+        color_                   = other.color_;
+        style_                   = other.style_;
+        visible_                 = other.visible_;
+        x_offset_                = other.x_offset_;
         excluded_from_autoscale_ = other.excluded_from_autoscale_;
         show_in_legend_          = other.show_in_legend_;
         is_reference_line_       = other.is_reference_line_;
@@ -99,7 +101,8 @@ Series& Series::apply_format_string(std::string_view fmt)
 LineSeries::LineSeries(std::span<const float> x, std::span<const float> y)
     : x_(x.begin(), x.end()), y_(y.begin(), y.end())
 {
-    dirty_ = true;
+    x_sorted_ = std::is_sorted(x_.begin(), x_.end());
+    dirty_    = true;
 }
 
 LineSeries& LineSeries::set_x(std::span<const float> x)
@@ -110,7 +113,8 @@ LineSeries& LineSeries::set_x(std::span<const float> x)
         return *this;
     }
     x_.assign(x.begin(), x.end());
-    dirty_ = true;
+    x_sorted_ = std::is_sorted(x_.begin(), x_.end());
+    dirty_    = true;
     return *this;
 }
 
@@ -133,6 +137,8 @@ void LineSeries::append(float x, float y)
         pending_->append(x, y);
         return;
     }
+    if (!x_.empty() && x < x_.back())
+        x_sorted_ = false;
     x_.push_back(x);
     y_.push_back(y);
     dirty_ = true;
@@ -222,7 +228,7 @@ bool LineSeries::commit_pending()
 {
     if (!pending_ || !pending_->has_pending())
         return false;
-    if (pending_->commit(x_, y_))
+    if (pending_->commit(x_, y_, &x_sorted_))
     {
         mark_dirty();
         return true;
@@ -235,7 +241,8 @@ bool LineSeries::commit_pending()
 ScatterSeries::ScatterSeries(std::span<const float> x, std::span<const float> y)
     : x_(x.begin(), x.end()), y_(y.begin(), y.end())
 {
-    dirty_ = true;
+    x_sorted_ = std::is_sorted(x_.begin(), x_.end());
+    dirty_    = true;
 }
 
 ScatterSeries& ScatterSeries::set_x(std::span<const float> x)
@@ -246,7 +253,8 @@ ScatterSeries& ScatterSeries::set_x(std::span<const float> x)
         return *this;
     }
     x_.assign(x.begin(), x.end());
-    dirty_ = true;
+    x_sorted_ = std::is_sorted(x_.begin(), x_.end());
+    dirty_    = true;
     return *this;
 }
 
@@ -269,6 +277,8 @@ void ScatterSeries::append(float x, float y)
         pending_->append(x, y);
         return;
     }
+    if (!x_.empty() && x < x_.back())
+        x_sorted_ = false;
     x_.push_back(x);
     y_.push_back(y);
     dirty_ = true;
@@ -284,7 +294,7 @@ bool ScatterSeries::commit_pending()
 {
     if (!pending_ || !pending_->has_pending())
         return false;
-    if (pending_->commit(x_, y_))
+    if (pending_->commit(x_, y_, &x_sorted_))
     {
         mark_dirty();
         return true;
@@ -297,10 +307,27 @@ ScatterSeries& ScatterSeries::color_values(std::span<const float> values)
     color_values_.assign(values.begin(), values.end());
     if (!colormap_set_ && !color_values_.empty())
     {
-        // Auto-compute range from data
-        auto [vmin, vmax] = std::minmax_element(color_values_.begin(), color_values_.end());
-        colormap_min_     = *vmin;
-        colormap_max_     = *vmax;
+        // Ignore missing samples when deriving the scalar range. NaN values
+        // can still be uploaded, but they must not poison every point's map.
+        float min_value = std::numeric_limits<float>::infinity();
+        float max_value = -std::numeric_limits<float>::infinity();
+        for (float value : color_values_)
+        {
+            if (!std::isfinite(value))
+                continue;
+            min_value = std::min(min_value, value);
+            max_value = std::max(max_value, value);
+        }
+        if (min_value <= max_value)
+        {
+            colormap_min_ = min_value;
+            colormap_max_ = max_value;
+        }
+        else
+        {
+            colormap_min_ = 0.0f;
+            colormap_max_ = 1.0f;
+        }
     }
     dirty_ = true;
     return *this;

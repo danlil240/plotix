@@ -525,6 +525,30 @@ bool VulkanBackend::recreate_swapchain(uint32_t width, uint32_t height)
     auto         old_context   = active_window_->swapchain;   // Copy the entire context
     VkRenderPass reuse_rp      = old_context.render_pass;     // Reuse — format doesn't change
 
+    // Surface lost (compositor restart, display change): the surface itself
+    // is dead, so the old swapchain cannot be reused as oldSwapchain and the
+    // surface must be recreated from the native window before the new
+    // swapchain is created.  Fences were already waited above.
+    const bool surface_was_lost = active_window_->surface_lost;
+    if (surface_was_lost)
+    {
+        SPECTRA_LOG_WARN("vulkan", "Surface lost — recreating surface before swapchain");
+
+        // Destroy the old swapchain first (it belongs to the dead surface)
+        vk::destroy_swapchain(ctx_.device, old_context, /*skip_render_pass=*/true);
+        active_window_->swapchain.swapchain = VK_NULL_HANDLE;
+        old_swapchain                       = VK_NULL_HANDLE;
+
+        destroy_surface_for(*active_window_);
+        // create_surface() also re-queries present-queue support for the new surface
+        if (!create_surface(active_window_->native_window))
+        {
+            SPECTRA_LOG_ERROR("vulkan", "Surface recreation failed after SURFACE_LOST");
+            return false;
+        }
+        active_window_->surface_lost = false;
+    }
+
     try
     {
         SPECTRA_LOG_DEBUG("vulkan", "Creating new swapchain...");
@@ -545,9 +569,13 @@ bool VulkanBackend::recreate_swapchain(uint32_t width, uint32_t height)
             "New swapchain created: " + std::to_string(active_window_->swapchain.extent.width) + "x"
                 + std::to_string(active_window_->swapchain.extent.height));
 
-        // Destroy the old swapchain context (skip render pass — we reused it)
-        SPECTRA_LOG_DEBUG("vulkan", "Destroying old swapchain...");
-        vk::destroy_swapchain(ctx_.device, old_context, /*skip_render_pass=*/true);
+        // Destroy the old swapchain context (skip render pass — we reused it).
+        // Already destroyed in the surface-lost path above.
+        if (!surface_was_lost)
+        {
+            SPECTRA_LOG_DEBUG("vulkan", "Destroying old swapchain...");
+            vk::destroy_swapchain(ctx_.device, old_context, /*skip_render_pass=*/true);
+        }
 
         // Recreate sync objects only if image count changed (rare during resize)
         if (active_window_->swapchain.images.size() != old_context.images.size())
@@ -587,10 +615,10 @@ bool VulkanBackend::create_offscreen_framebuffer(uint32_t width, uint32_t height
         vk::destroy_offscreen(ctx_.device, offscreen_);
         auto vk_msaa = static_cast<VkSampleCountFlagBits>(msaa_samples_);
         offscreen_   = vk::create_offscreen_framebuffer(ctx_.device,
-                                                        ctx_.physical_device,
-                                                        width,
-                                                        height,
-                                                        vk_msaa);
+                                                      ctx_.physical_device,
+                                                      width,
+                                                      height,
+                                                      vk_msaa);
         create_command_buffers();
         create_sync_objects();
         return true;
@@ -728,6 +756,12 @@ VkPipeline VulkanBackend::create_pipeline_for_type(PipelineType type, VkRenderPa
         case PipelineType::Scatter:
             cfg.vert_spirv      = shaders::scatter_vert;
             cfg.vert_spirv_size = shaders::scatter_vert_size;
+            cfg.frag_spirv      = shaders::scatter_frag;
+            cfg.frag_spirv_size = shaders::scatter_frag_size;
+            break;
+        case PipelineType::ScatterColormap:
+            cfg.vert_spirv      = shaders::scatter_colormap_vert;
+            cfg.vert_spirv_size = shaders::scatter_colormap_vert_size;
             cfg.frag_spirv      = shaders::scatter_frag;
             cfg.frag_spirv_size = shaders::scatter_frag_size;
             break;

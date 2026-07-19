@@ -12,6 +12,7 @@
     #include <spectra/series.hpp>
     #include <spectra/series3d.hpp>
 
+    #include "data/sorted_x_query.hpp"
     #include "axes3d_pick.hpp"
     #include "ui/data/axis_link.hpp"
 
@@ -123,20 +124,17 @@ bool DataInteraction::select_point(const Series* series, size_t point_index)
         }
     }
 
+    // Absolute x = series x_offset + stored relative float.
+    const double abs_x = static_cast<double>(x_data[point_index]) + series->x_offset();
+
     markers_.clear();
-    markers_.add(x_data[point_index],
-                 y_data[point_index],
-                 series,
-                 point_index,
-                 target_axes,
-                 dy_dx,
-                 dy_dx_valid);
+    markers_.add(abs_x, y_data[point_index], series, point_index, target_axes, dy_dx, dy_dx_valid);
 
     // Keep nearest cache coherent so tooltip/cursor feedback remains aligned.
     nearest_.found       = true;
     nearest_.series      = series;
     nearest_.point_index = point_index;
-    nearest_.data_x      = x_data[point_index];
+    nearest_.data_x      = abs_x;
     nearest_.data_y      = y_data[point_index];
 
     return true;
@@ -161,10 +159,10 @@ void DataInteraction::update(const CursorReadout& cursor, Figure& figure)
     legend_.update(dt, figure);
 
     // Determine which axes the cursor is over by hit-testing viewports (2D then 3D)
-    active_axes_   = nullptr;
-    active_axes3d_ = nullptr;
-    auto sx        = static_cast<float>(cursor.screen_x);
-    auto sy        = static_cast<float>(cursor.screen_y);
+    active_axes_      = nullptr;
+    active_axes3d_    = nullptr;
+    auto sx           = static_cast<float>(cursor.screen_x);
+    auto sy           = static_cast<float>(cursor.screen_y);
     auto try_axes_hit = [&](AxesBase* axes_base) -> bool
     {
         if (!axes_base || !cursor.valid)
@@ -208,13 +206,13 @@ void DataInteraction::update(const CursorReadout& cursor, Figure& figure)
     if (axis_link_mgr_ && active_axes_ && cursor.valid)
     {
         SharedCursor sc;
-        sc.valid       = true;
-        sc.data_x      = xlim_min_
-                         + (static_cast<float>(cursor.screen_x) - active_viewport_.x)
-                               / active_viewport_.w * (xlim_max_ - xlim_min_);
-        sc.data_y      = ylim_max_
-                         - (static_cast<float>(cursor.screen_y) - active_viewport_.y)
-                               / active_viewport_.h * (ylim_max_ - ylim_min_);
+        sc.valid  = true;
+        sc.data_x = xlim_min_
+                    + (static_cast<float>(cursor.screen_x) - active_viewport_.x)
+                          / active_viewport_.w * (xlim_max_ - xlim_min_);
+        sc.data_y = ylim_max_
+                    - (static_cast<float>(cursor.screen_y) - active_viewport_.y)
+                          / active_viewport_.h * (ylim_max_ - ylim_min_);
         sc.screen_x    = cursor.screen_x;
         sc.screen_y    = cursor.screen_y;
         sc.source_axes = active_axes_;
@@ -354,8 +352,8 @@ void DataInteraction::draw_overlays(float       window_width,
             auto        xl = axes_ptr->x_limits();
             auto        yl = axes_ptr->y_limits();
             markers_.draw(vp,
-                          static_cast<float>(xl.min),
-                          static_cast<float>(xl.max),
+                          xl.min,
+                          xl.max,
                           static_cast<float>(yl.min),
                           static_cast<float>(yl.max),
                           1.0f,
@@ -533,8 +531,10 @@ bool DataInteraction::on_mouse_click_datatip_only(int button, double screen_x, d
     {
         if (active_axes3d_)
         {
-            int marker_hit = markers_.hit_test_3d(
-                static_cast<float>(screen_x), static_cast<float>(screen_y), *active_axes3d_, 10.0f);
+            int marker_hit = markers_.hit_test_3d(static_cast<float>(screen_x),
+                                                  static_cast<float>(screen_y),
+                                                  *active_axes3d_,
+                                                  10.0f);
             if (marker_hit >= 0)
             {
                 markers_.remove(static_cast<size_t>(marker_hit));
@@ -568,8 +568,10 @@ bool DataInteraction::on_mouse_click_datatip_only(int button, double screen_x, d
     {
         if (active_axes3d_)
         {
-            int idx = markers_.hit_test_3d(
-                static_cast<float>(screen_x), static_cast<float>(screen_y), *active_axes3d_, 10.0f);
+            int idx = markers_.hit_test_3d(static_cast<float>(screen_x),
+                                           static_cast<float>(screen_y),
+                                           *active_axes3d_,
+                                           10.0f);
             if (idx >= 0)
             {
                 markers_.remove(static_cast<size_t>(idx));
@@ -632,8 +634,10 @@ bool DataInteraction::on_mouse_click(int button, double screen_x, double screen_
     {
         if (active_axes3d_)
         {
-            int marker_hit = markers_.hit_test_3d(
-                static_cast<float>(screen_x), static_cast<float>(screen_y), *active_axes3d_, 10.0f);
+            int marker_hit = markers_.hit_test_3d(static_cast<float>(screen_x),
+                                                  static_cast<float>(screen_y),
+                                                  *active_axes3d_,
+                                                  10.0f);
             if (marker_hit >= 0)
             {
                 markers_.remove(static_cast<size_t>(marker_hit));
@@ -676,8 +680,10 @@ bool DataInteraction::on_mouse_click(int button, double screen_x, double screen_
     {
         if (active_axes3d_)
         {
-            int idx = markers_.hit_test_3d(
-                static_cast<float>(screen_x), static_cast<float>(screen_y), *active_axes3d_, 10.0f);
+            int idx = markers_.hit_test_3d(static_cast<float>(screen_x),
+                                           static_cast<float>(screen_y),
+                                           *active_axes3d_,
+                                           10.0f);
             if (idx >= 0)
             {
                 markers_.remove(static_cast<size_t>(idx));
@@ -1039,6 +1045,7 @@ void DataInteraction::end_annotation_drag()
 
 NearestPointResult DataInteraction::find_nearest(const CursorReadout& cursor, Figure& figure) const
 {
+    last_query_points_examined_ = 0;
     NearestPointResult best;
     best.found       = false;
     best.distance_px = std::numeric_limits<float>::max();
@@ -1092,34 +1099,65 @@ NearestPointResult DataInteraction::find_nearest(const CursorReadout& cursor, Fi
             if (!series_ptr || !series_ptr->visible())
                 continue;
 
-            const float* x_data = nullptr;
-            const float* y_data = nullptr;
-            size_t       count  = 0;
+            const float* x_data   = nullptr;
+            const float* y_data   = nullptr;
+            size_t       count    = 0;
+            bool         x_sorted = false;
 
             if (auto* ls = dynamic_cast<LineSeries*>(series_ptr.get()))
             {
-                x_data = ls->x_data().data();
-                y_data = ls->y_data().data();
-                count  = ls->point_count();
+                x_data   = ls->x_data().data();
+                y_data   = ls->y_data().data();
+                count    = ls->point_count();
+                x_sorted = ls->x_is_sorted();
             }
             else if (auto* sc = dynamic_cast<ScatterSeries*>(series_ptr.get()))
             {
-                x_data = sc->x_data().data();
-                y_data = sc->y_data().data();
-                count  = sc->point_count();
+                x_data   = sc->x_data().data();
+                y_data   = sc->y_data().data();
+                count    = sc->point_count();
+                x_sorted = sc->x_is_sorted();
             }
 
             if (!x_data || !y_data || count == 0)
                 continue;
 
-            // Linear scan for nearest point (screen-space distance)
-            for (size_t i = 0; i < count; ++i)
+            // x_data is relative to the series x_offset; limits are absolute.
+            const double xoff = series_ptr->x_offset();
+
+            size_t query_begin = 0;
+            size_t query_end   = count;
+
+            // For monotonic X data, only points within the tooltip's horizontal
+            // snap radius can be interactable. Binary search that exact range;
+            // keep one neighbor on either side so nearest-point reporting stays
+            // stable just outside the snap window. Unsorted data retains the
+            // full scan and therefore identical behavior.
+            if (x_sorted && count > 64 && vp.w > 0.0f)
             {
-                // Convert data point to screen coordinates
-                float norm_x = (x_data[i] - xlim.min) / x_range;
-                float norm_y = (y_data[i] - ylim.min) / y_range;
-                float sx     = vp.x + norm_x * vp.w;
-                float sy     = vp.y + (1.0f - norm_y) * vp.h;
+                const double cursor_abs_x =
+                    xlim.min + (static_cast<double>(cx - vp.x) / vp.w) * x_range;
+                const double local_cursor_x = cursor_abs_x - xoff;
+                const double local_radius =
+                    std::abs(x_range) * static_cast<double>(tooltip_.snap_radius()) / vp.w;
+                const auto query = sorted_x_query_range(std::span<const float>(x_data, count),
+                                                        local_cursor_x,
+                                                        local_radius);
+                query_begin      = query.begin;
+                query_end        = query.end;
+            }
+
+            last_query_points_examined_ += query_end - query_begin;
+            for (size_t i = query_begin; i < query_end; ++i)
+            {
+                // Convert data point to screen coordinates.  Compute the
+                // x normalization in double: (x + xoff - xlim.min) stays
+                // small and precise even for epoch-scale offsets.
+                const double abs_x  = static_cast<double>(x_data[i]) + xoff;
+                auto         norm_x = static_cast<float>((abs_x - xlim.min) / x_range);
+                float        norm_y = (y_data[i] - ylim.min) / y_range;
+                float        sx     = vp.x + norm_x * vp.w;
+                float        sy     = vp.y + (1.0f - norm_y) * vp.h;
 
                 float dx    = cx - sx;
                 float dy    = cy - sy;
@@ -1130,7 +1168,7 @@ NearestPointResult DataInteraction::find_nearest(const CursorReadout& cursor, Fi
                     best.found       = true;
                     best.series      = series_ptr.get();
                     best.point_index = i;
-                    best.data_x      = x_data[i];
+                    best.data_x      = abs_x;
                     best.data_y      = y_data[i];
                     best.screen_x    = sx;
                     best.screen_y    = sy;
@@ -1152,8 +1190,7 @@ NearestPointResult DataInteraction::find_nearest(const CursorReadout& cursor, Fi
         if (!axes3d)
             continue;
 
-        const Nearest3DPickCandidate pick =
-            find_nearest_3d_in_axes(*axes3d, cx, cy);
+        const Nearest3DPickCandidate pick = find_nearest_3d_in_axes(*axes3d, cx, cy);
         if (!pick.found)
             continue;
 

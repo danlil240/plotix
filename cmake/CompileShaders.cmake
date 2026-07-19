@@ -46,6 +46,7 @@ set(SHADER_SOURCES
     ${SHADER_SOURCE_DIR}/pointcloud.vert
     ${SHADER_SOURCE_DIR}/scatter.frag
     ${SHADER_SOURCE_DIR}/scatter.vert
+    ${SHADER_SOURCE_DIR}/scatter_colormap.vert
     ${SHADER_SOURCE_DIR}/scatter3d.frag
     ${SHADER_SOURCE_DIR}/scatter3d.vert
     ${SHADER_SOURCE_DIR}/stat_fill.frag

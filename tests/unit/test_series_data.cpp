@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <limits>
 #include <spectra/color.hpp>
 #include <spectra/series.hpp>
 #include <vector>
@@ -29,6 +30,40 @@ TEST(LineSeries, ConstructWithData)
     EXPECT_FLOAT_EQ(xd[0], 1.0f);
     EXPECT_FLOAT_EQ(xd[2], 3.0f);
     EXPECT_FLOAT_EQ(yd[1], 5.0f);
+}
+
+TEST(LineSeries, TracksMonotonicXForIndexedInteraction)
+{
+    std::vector<float> sorted_x = {1.0f, 2.0f, 3.0f};
+    std::vector<float> y        = {0.0f, 0.0f, 0.0f};
+    LineSeries         series(sorted_x, y);
+    EXPECT_TRUE(series.x_is_sorted());
+
+    series.append(4.0f, 0.0f);
+    EXPECT_TRUE(series.x_is_sorted());
+    series.append(2.5f, 0.0f);
+    EXPECT_FALSE(series.x_is_sorted());
+
+    std::vector<float> replacement = {-2.0f, -1.0f, 0.0f};
+    series.set_x(replacement);
+    EXPECT_TRUE(series.x_is_sorted());
+}
+
+TEST(LineSeries, TracksMonotonicXAcrossThreadSafeCommits)
+{
+    std::vector<float> x = {1.0f, 2.0f};
+    std::vector<float> y = {0.0f, 0.0f};
+    LineSeries         series(x, y);
+    series.set_thread_safe(true);
+
+    series.append(3.0f, 0.0f);
+    series.append(4.0f, 0.0f);
+    ASSERT_TRUE(series.commit_pending());
+    EXPECT_TRUE(series.x_is_sorted());
+
+    series.append(3.5f, 0.0f);
+    ASSERT_TRUE(series.commit_pending());
+    EXPECT_FALSE(series.x_is_sorted());
 }
 
 TEST(LineSeries, SetXY)
@@ -172,6 +207,43 @@ TEST(ScatterSeries, DefaultSize)
 {
     ScatterSeries s;
     EXPECT_FLOAT_EQ(s.size(), 4.0f);
+}
+
+TEST(ScatterSeries, ColormapRequiresOneScalarPerPoint)
+{
+    std::vector<float> x      = {0.0f, 1.0f, 2.0f};
+    std::vector<float> y      = {3.0f, 4.0f, 5.0f};
+    std::vector<float> values = {10.0f, 20.0f, 30.0f};
+    ScatterSeries      series(x, y);
+
+    series.color_values(values).colormap(ColormapType::Viridis);
+    EXPECT_TRUE(series.has_colormap());
+    EXPECT_FLOAT_EQ(series.colormap_min(), 10.0f);
+    EXPECT_FLOAT_EQ(series.colormap_max(), 30.0f);
+
+    values.pop_back();
+    series.color_values(values);
+    EXPECT_FALSE(series.has_colormap());
+}
+
+TEST(ScatterSeries, TracksUnsortedXForSafeFallback)
+{
+    std::vector<float> x = {0.0f, 2.0f, 1.0f};
+    std::vector<float> y = {0.0f, 1.0f, 2.0f};
+    ScatterSeries      series(x, y);
+    EXPECT_FALSE(series.x_is_sorted());
+}
+
+TEST(ScatterSeries, ColormapRangeIgnoresMissingScalarValues)
+{
+    std::vector<float> x      = {0.0f, 1.0f, 2.0f};
+    std::vector<float> y      = {3.0f, 4.0f, 5.0f};
+    std::vector<float> values = {std::numeric_limits<float>::quiet_NaN(), -4.0f, 8.0f};
+    ScatterSeries      series(x, y);
+
+    series.color_values(values).colormap(ColormapType::Viridis);
+    EXPECT_FLOAT_EQ(series.colormap_min(), -4.0f);
+    EXPECT_FLOAT_EQ(series.colormap_max(), 8.0f);
 }
 
 TEST(LineSeries, EraseAfter)

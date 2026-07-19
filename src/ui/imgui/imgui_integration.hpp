@@ -197,10 +197,11 @@ class ImGuiIntegration
     bool     is_plot_overlay_dialog_open() const { return plot_overlay_dialog_.is_open(); }
     ui::PlotOverlayDialog&       plot_overlay_dialog() { return plot_overlay_dialog_; }
     const ui::PlotOverlayDialog& plot_overlay_dialog() const { return plot_overlay_dialog_; }
-    bool     is_theme_settings_visible() const { return show_theme_settings_; }
+    bool                         is_theme_settings_visible() const { return show_theme_settings_; }
 
     // Status bar data setters (called by app loop with real data)
-    void set_cursor_data(float x, float y, bool valid)
+    // Double precision: x can sit at epoch scale (~1.7e9).
+    void set_cursor_data(double x, double y, bool valid)
     {
         cursor_data_x_     = x;
         cursor_data_y_     = y;
@@ -352,15 +353,22 @@ class ImGuiIntegration
 
     // CSV data load callback: called when user confirms column selection.
     // Args: file path, x column data, y column data, x header, y header,
-    //       optional z column data, optional z header.
+    //       optional z column data, optional z header, x column base offset.
+    // x_offset is the double-precision base of the x column (non-zero for
+    // datetime/epoch-timestamp columns); absolute x = x_offset + x[i].
     using CsvPlotCallback = std::function<void(const std::string&        path,
                                                const std::vector<float>& x,
                                                const std::vector<float>& y,
                                                const std::string&        x_label,
                                                const std::string&        y_label,
                                                const std::vector<float>* z,
-                                               const std::string*        z_label)>;
+                                               const std::string*        z_label,
+                                               double                    x_offset)>;
     void set_csv_plot_callback(CsvPlotCallback cb) { csv_plot_cb_ = std::move(cb); }
+
+    // Queue a CSV file for loading (e.g. from OS drag-and-drop).
+    // The file is parsed and the column picker dialog is opened on the next build_ui() call.
+    void request_csv_load(const std::string& path) { pending_csv_drop_path_ = path; }
 
     // Extra draw callback — called at the end of build_ui() within the active
     // ImGui frame.  Used by spectra-ros to inject ROS2 panels.
@@ -515,7 +523,7 @@ class ImGuiIntegration
     void render_menubar_menu(const char* label, const std::vector<MenuItem>& items);
 
     ui::shell::SpectraAppShell* app_shell() const { return app_shell_; }
-    void                        set_app_shell(ui::shell::SpectraAppShell* shell) { app_shell_ = shell; }
+    void set_app_shell(ui::shell::SpectraAppShell* shell) { app_shell_ = shell; }
 
     // Called by SpectraCanvasHost — core canvas window + glass frame + scrollbar.
     void draw_canvas_content(Figure& figure);
@@ -597,11 +605,11 @@ class ImGuiIntegration
     bool show_nav_rail_ = true;   // Nav rail toolbar visibility
 
     // Adapter chrome suppression flags (all default true — safe for normal builds)
-    bool command_bar_visible_ = true;   // Spectra command bar / menu
-    bool command_bar_began_   = false;  // ImGui::Begin succeeded for begin_command_bar()
-    bool status_bar_visible_  = true;   // Spectra status bar
-    bool canvas_visible_      = true;   // Plot canvas, overlays, splitters, tab headers
-    bool render_figure_       = true;   // Vulkan figure rendering (independent of canvas UI)
+    bool command_bar_visible_ = true;    // Spectra command bar / menu
+    bool command_bar_began_   = false;   // ImGui::Begin succeeded for begin_command_bar()
+    bool status_bar_visible_  = true;    // Spectra status bar
+    bool canvas_visible_      = true;    // Plot canvas, overlays, splitters, tab headers
+    bool render_figure_       = true;    // Vulkan figure rendering (independent of canvas UI)
 
     enum class Section
     {
@@ -633,11 +641,11 @@ class ImGuiIntegration
     ToolMode interaction_mode_ = ToolMode::Pan;
 
     // Status bar data
-    float cursor_data_x_     = 0.0f;
-    float cursor_data_y_     = 0.0f;
-    bool  cursor_data_valid_ = false;
-    float zoom_level_        = 1.0f;
-    float gpu_time_ms_       = 0.0f;
+    double cursor_data_x_     = 0.0;
+    double cursor_data_y_     = 0.0;
+    bool   cursor_data_valid_ = false;
+    float  zoom_level_        = 1.0f;
+    float  gpu_time_ms_       = 0.0f;
 
     // Injected ThemeManager (not owned)
     ui::ThemeManager* theme_mgr_ = nullptr;
@@ -847,22 +855,23 @@ class ImGuiIntegration
     CsvPlotCallback csv_plot_cb_;
 
     // Extra draw callback (set by spectra-ros or other adapters)
-    ExtraDrawCallback extra_draw_cb_;
+    ExtraDrawCallback           extra_draw_cb_;
     ui::shell::SpectraAppShell* app_shell_ = nullptr;
 
     // Scene render callback (set by spectra-ros for GPU 3D viewport)
     SceneRenderCallback scene_render_cb_;
 
     // CSV column picker dialog state (file selected via native OS dialog)
-    bool        pending_open_csv_ = false;   // Set by welcome screen, handled in draw()
-    bool        csv_dialog_open_  = false;
-    std::string csv_file_path_;
-    CsvData     csv_data_;
-    bool        csv_data_loaded_ = false;
-    int         csv_col_x_       = 0;
-    int         csv_col_y_       = 1;
-    int         csv_col_z_       = -1;   // -1 = no Z column (2D plot)
-    std::string csv_error_;
+    bool             pending_open_csv_ = false;   // Set by welcome screen, handled in draw()
+    std::string      pending_csv_drop_path_;      // Set by OS drag-and-drop, handled in draw()
+    bool             csv_dialog_open_ = false;
+    std::string      csv_file_path_;
+    CsvData          csv_data_;
+    bool             csv_data_loaded_ = false;
+    int              csv_col_x_       = 0;
+    std::vector<int> csv_selected_y_;   // selected Y column indices
+    int              csv_col_z_ = -1;   // -1 = no Z column (2D plot)
+    std::string      csv_error_;
 
     // Menubar hover-switch state: tracks which menu popup is currently open
     // so hovering another menu button auto-opens it

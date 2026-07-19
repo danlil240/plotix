@@ -412,10 +412,10 @@ inline LineSeries& vline(double x, std::string_view fmt = "k--")
 //   spectra::fplot([](double x) { return std::sin(x); }, 0.0, 6.28, 300, "r-");
 //
 inline LineSeries& fplot(std::function<double(double)> func,
-                         double                 xmin,
-                         double                 xmax,
-                         int                    n   = 200,
-                         std::string_view       fmt = "-")
+                         double                        xmin,
+                         double                        xmax,
+                         int                           n   = 200,
+                         std::string_view              fmt = "-")
 {
     return detail::easy_state().ensure_axes().fplot(std::move(func), xmin, xmax, n, fmt);
 }
@@ -456,6 +456,14 @@ inline HistogramSeries& histogram(std::span<const float> values, int bins = 30)
 inline BarSeries& bar(std::span<const float> positions, std::span<const float> heights)
 {
     return detail::easy_state().ensure_axes().bar(positions, heights);
+}
+
+// Filled uncertainty/confidence envelope between lower and upper samples.
+inline BandSeries& band(std::span<const float> x,
+                        std::span<const float> lower,
+                        std::span<const float> upper)
+{
+    return detail::easy_state().ensure_axes().band(x, lower, upper);
 }
 
 // ─── Shape Annotations ──────────────────────────────────────────────────────

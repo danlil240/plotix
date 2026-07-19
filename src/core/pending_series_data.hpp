@@ -99,7 +99,7 @@ class PendingSeriesData
 
     // Apply all pending operations to the live data vectors.
     // Returns true if any data was modified.
-    bool commit(std::vector<float>& x, std::vector<float>& y)
+    bool commit(std::vector<float>& x, std::vector<float>& y, bool* x_sorted = nullptr)
     {
         SpinLockGuard guard(lock_);
 
@@ -113,6 +113,8 @@ class PendingSeriesData
         {
             x = std::move(*pending_x_);
             pending_x_.reset();
+            if (x_sorted)
+                *x_sorted = std::is_sorted(x.begin(), x.end());
             changed = true;
         }
         if (pending_y_.has_value())
@@ -161,6 +163,11 @@ class PendingSeriesData
         // 4. Append accumulated points
         if (!append_x_.empty())
         {
+            if (x_sorted && *x_sorted)
+            {
+                const bool boundary_sorted = x.empty() || x.back() <= append_x_.front();
+                *x_sorted = boundary_sorted && std::is_sorted(append_x_.begin(), append_x_.end());
+            }
             x.insert(x.end(), append_x_.begin(), append_x_.end());
             y.insert(y.end(), append_y_.begin(), append_y_.end());
             append_x_.clear();
@@ -174,7 +181,7 @@ class PendingSeriesData
             const size_t remove = x.size() - trim_max_points_;
             x.erase(x.begin(), x.begin() + static_cast<ptrdiff_t>(remove));
             y.erase(y.begin(), y.begin() + static_cast<ptrdiff_t>(remove));
-            changed = true;
+            changed   = true;
             has_trim_ = false;
         }
         else

@@ -7,6 +7,7 @@ function(add_spectra_example name)
 endfunction()
 
 add_spectra_example(basic_line)
+add_spectra_example(next_level_scientific)
 add_spectra_example(topic_publisher)
 
 # ROS2 UI preview — mock of new spectra-ros panel features (no ROS2 required)
