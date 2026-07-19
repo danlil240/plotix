@@ -358,7 +358,7 @@ if(SPECTRA_USE_GLFW)
     # For Python wheels, prefer building GLFW from source to avoid inheriting
     # ISA requirements from distro-provided binaries in manylinux images.
     if(NOT SPECTRA_PYTHON_WHEEL)
-        find_package(glfw3 3.3 QUIET)
+        find_package(glfw3 3.4 QUIET)
     endif()
     if(NOT glfw3_FOUND)
         include(FetchContent)
@@ -1008,4 +1008,3 @@ if(SPECTRA_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
-

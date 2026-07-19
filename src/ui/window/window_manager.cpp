@@ -150,12 +150,32 @@ bool WindowManager::is_mouse_button_held(int glfw_button) const
     return false;
 }
 
-bool WindowManager::get_global_cursor_pos(double& screen_x, double& screen_y) const
+bool WindowManager::get_global_cursor_pos(double&  screen_x,
+                                          double&  screen_y,
+                                          uint32_t reference_window_id) const
 {
     WindowContext* wctx = nullptr;
+
+    // Prefer the drag source window. During a tab tear-off, the button was
+    // pressed on the source window, so on X11 it holds the implicit pointer
+    // grab and glfwGetCursorPos() returns correct coordinates even when the
+    // cursor is outside its bounds. The preview (tear-off) window must NOT be
+    // used: it is floating and unfocused, never receives cursor-motion events,
+    // and glfwGetCursorPos()/glfwGetWindowPos() on it return stale (0,0).
+    if (reference_window_id != 0)
+    {
+        for (auto& w : windows_)
+        {
+            if (w->id == reference_window_id && w->glfw_window && !w->should_close)
+            {
+                wctx = w.get();
+                break;
+            }
+        }
+    }
     for (auto& w : windows_)
     {
-        if (w->glfw_window && !w->should_close && w->is_focused)
+        if (!wctx && w->glfw_window && !w->should_close && !w->is_preview && w->is_focused)
         {
             wctx = w.get();
             break;
@@ -165,7 +185,7 @@ bool WindowManager::get_global_cursor_pos(double& screen_x, double& screen_y) co
     {
         for (auto& w : windows_)
         {
-            if (w->glfw_window && !w->should_close)
+            if (w->glfw_window && !w->should_close && !w->is_preview)
             {
                 wctx = w.get();
                 break;
@@ -206,10 +226,13 @@ bool WindowManager::is_mouse_button_held(int) const
     return false;
 }
 
-bool WindowManager::get_global_cursor_pos(double& screen_x, double& screen_y) const
+bool WindowManager::get_global_cursor_pos(double&  screen_x,
+                                          double&  screen_y,
+                                          uint32_t reference_window_id) const
 {
     (void)screen_x;
     (void)screen_y;
+    (void)reference_window_id;
     return false;
 }
 

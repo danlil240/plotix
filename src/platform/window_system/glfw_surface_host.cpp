@@ -6,6 +6,8 @@
     #define GLFW_INCLUDE_NONE
     #define GLFW_INCLUDE_VULKAN
     #include <GLFW/glfw3.h>
+
+    #include "ui/window/glfw_utils.hpp"
 #endif
 
 namespace spectra::platform
@@ -33,6 +35,7 @@ void GlfwSurfaceHost::append_instance_extensions(std::vector<const char*>& exten
 #ifdef SPECTRA_USE_GLFW
     // Instance creation can happen before GlfwAdapter::init(), so ensure GLFW
     // is initialized before querying required Vulkan instance extensions.
+    configure_glfw_platform();
     if (!glfwInit())
     {
         return;
@@ -105,6 +108,7 @@ bool GlfwSurfaceHost::query_presentation_support(VkInstance       instance,
     {
         return false;
     }
+    configure_glfw_platform();
     if (!glfwInit())
     {
         return true;   // Can't query — preserve back-compat assumption.

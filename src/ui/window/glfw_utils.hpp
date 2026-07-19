@@ -5,10 +5,13 @@
     #define GLFW_INCLUDE_NONE
     #define GLFW_INCLUDE_VULKAN
     #include <GLFW/glfw3.h>
+    #include <cstdlib>
     #include <cstring>
     #include <spectra/logger.hpp>
     #include <stb_image.h>
     #include <vector>
+
+    #include "glfw_platform_policy.hpp"
 
     #if __has_include("spectra_icon_embedded.hpp")
         #include "spectra_icon_embedded.hpp"
@@ -19,6 +22,39 @@
 
 namespace spectra
 {
+
+// Must run before the first glfwInit(). Vulkan queries can initialize GLFW
+// before GlfwAdapter::init(), so every initialization entry point calls this
+// idempotent helper.
+inline void configure_glfw_platform()
+{
+    static const bool configured = []()
+    {
+    #if GLFW_VERSION_MAJOR > 3 || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 4)
+        const char* wayland = std::getenv("WAYLAND_DISPLAY");
+
+        const auto preference = choose_glfw_platform(wayland ? wayland : "");
+        switch (preference)
+        {
+            case GlfwPlatformPreference::X11:
+            {
+                glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+                SPECTRA_LOG_INFO(
+                    "glfw",
+                    "Wayland session detected; using XWayland for correct tab tear-off behavior");
+                const char* x11 = std::getenv("DISPLAY");
+                if (!x11 || !*x11)
+                    SPECTRA_LOG_ERROR("glfw", "XWayland is required but DISPLAY is not set");
+                break;
+            }
+            case GlfwPlatformPreference::Automatic:
+                break;
+        }
+    #endif
+        return true;
+    }();
+    (void)configured;
+}
 
 // Downscale RGBA image to target_size x target_size using box filter.
 // Returns empty vector if src is already <= target_size.

@@ -421,6 +421,10 @@ void WindowManager::warmup_preview_window(uint32_t width, uint32_t height)
 
     glfwSetWindowUserPointer(glfw_win, this);
     install_glfw_lifecycle_callbacks(glfw_win);
+    // On X11 the implicit pointer grab may transfer from the source window to
+    // this preview when it is mapped. Keep cursor events flowing so the main
+    // loop continues updating the source tab's drag controller.
+    glfwSetCursorPosCallback(glfw_win, glfw_cursor_pos_callback);
     glfwSetMouseButtonCallback(glfw_win, glfw_mouse_button_callback);
 
     if (!init_minimal_window_imgui(*wctx))
@@ -519,22 +523,15 @@ WindowContext* WindowManager::create_preview_window_impl(uint32_t           widt
     }
 
     // ── Slow path: create from scratch (fallback) ──────────────────
-    // Save and restore window hints after creating the preview window
+    // Create hidden, position, then show — same pattern as warmup to avoid
+    // a visible position jump on X11.
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
     glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
     glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
     glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
     glfwWindowHint(GLFW_FOCUSED, GLFW_FALSE);
-
-    // Set suppression window BEFORE creating the window.  The WM may
-    // grab the pointer during glfwCreateWindow (synchronous X11 event
-    // processing), which sends a real ButtonRelease to the source window.
-    // We suppress that artifact for 200ms after creation.
-    if (mouse_release_tracking_)
-    {
-        suppress_release_until_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
-    }
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     GLFWwindow* glfw_win = glfwCreateWindow(static_cast<int>(width),
                                             static_cast<int>(height),
@@ -548,6 +545,7 @@ WindowContext* WindowManager::create_preview_window_impl(uint32_t           widt
     glfwWindowHint(GLFW_FLOATING, GLFW_FALSE);
     glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_TRUE);
     glfwWindowHint(GLFW_FOCUSED, GLFW_TRUE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_TRUE);
 
     if (!glfw_win)
     {
@@ -555,7 +553,7 @@ WindowContext* WindowManager::create_preview_window_impl(uint32_t           widt
         return nullptr;
     }
 
-    // Position the window at the cursor
+    // Position the window at the cursor before showing
     glfwSetWindowPos(glfw_win,
                      screen_x - static_cast<int>(width) / 2,
                      screen_y - static_cast<int>(height) / 3);
@@ -580,6 +578,7 @@ WindowContext* WindowManager::create_preview_window_impl(uint32_t           widt
     // X11 implicit pointer grab transfers to this window during a tab drag.
     glfwSetWindowUserPointer(glfw_win, this);
     install_glfw_lifecycle_callbacks(glfw_win);
+    glfwSetCursorPosCallback(glfw_win, glfw_cursor_pos_callback);
     glfwSetMouseButtonCallback(glfw_win, glfw_mouse_button_callback);
 
     if (!init_minimal_window_imgui(*wctx))
@@ -588,6 +587,16 @@ WindowContext* WindowManager::create_preview_window_impl(uint32_t           widt
         glfwDestroyWindow(glfw_win);
         return nullptr;
     }
+
+    // Suppress spurious mouse release from glfwShowWindow on X11.
+    // The WM grabs the pointer when the window is mapped, sending a real
+    // ButtonRelease to the source window.  Suppress for 200ms after show.
+    if (mouse_release_tracking_)
+    {
+        suppress_release_until_ = std::chrono::steady_clock::now() + std::chrono::milliseconds(200);
+    }
+
+    glfwShowWindow(glfw_win);
 
     preview_window_id_ = wctx->id;
 

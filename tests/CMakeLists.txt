@@ -138,6 +138,7 @@ set(SPECTRA_UNIT_TESTS
     test_3d_regression
     test_multi_window
     test_window_manager
+    test_glfw_platform_policy
     test_window_ui_context_builder
     test_automation_dispatch
     test_figure_registry

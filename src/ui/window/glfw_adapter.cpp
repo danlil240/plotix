@@ -18,6 +18,7 @@ GlfwAdapter::~GlfwAdapter()
 
 bool GlfwAdapter::init(uint32_t width, uint32_t height, const std::string& title)
 {
+    configure_glfw_platform();
     if (!glfwInit())
     {
         SPECTRA_LOG_ERROR("glfw", "Failed to initialize GLFW");

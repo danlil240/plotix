@@ -394,6 +394,7 @@ void WindowManager::shutdown()
         if (wctx.glfw_window)
         {
     #ifdef SPECTRA_USE_GLFW
+            remove_win32_interactive_hook(static_cast<GLFWwindow*>(wctx.glfw_window));
             glfwDestroyWindow(static_cast<GLFWwindow*>(wctx.glfw_window));
     #elif defined(SPECTRA_USE_SDL3)
             SDL_DestroyWindow(static_cast<SDL_Window*>(wctx.glfw_window));
@@ -431,6 +432,7 @@ void WindowManager::shutdown()
         if (pooled_preview_->glfw_window)
         {
     #ifdef SPECTRA_USE_GLFW
+            remove_win32_interactive_hook(static_cast<GLFWwindow*>(pooled_preview_->glfw_window));
             glfwDestroyWindow(static_cast<GLFWwindow*>(pooled_preview_->glfw_window));
     #elif defined(SPECTRA_USE_SDL3)
             SDL_DestroyWindow(static_cast<SDL_Window*>(pooled_preview_->glfw_window));

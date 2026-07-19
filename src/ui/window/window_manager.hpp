@@ -223,10 +223,12 @@ class WindowManager
     void begin_mouse_release_tracking();
     void end_mouse_release_tracking();
 
-    // Get the global screen-space cursor position by querying GLFW.
-    // Uses glfwGetCursorPos + glfwGetWindowPos on the focused (or first) window.
-    // Returns true if a valid position was obtained.
-    bool get_global_cursor_pos(double& screen_x, double& screen_y) const;
+    // Get the global screen-space cursor position by querying GLFW. Pass a
+    // window id to keep the reference frame stable while another window (such
+    // as a tearoff preview) is being shown/moved. Returns true on success.
+    bool get_global_cursor_pos(double&  screen_x,
+                               double&  screen_y,
+                               uint32_t reference_window_id = 0) const;
 
     // Cross-window drag target — set each frame by the active
     // TabDragController so target windows can draw dock highlights.

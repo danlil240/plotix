@@ -314,7 +314,7 @@ bool TabDragController::check_mouse_held() const
 bool TabDragController::get_screen_cursor(double& sx, double& sy) const
 {
     if (window_manager_)
-        return window_manager_->get_global_cursor_pos(sx, sy);
+        return window_manager_->get_global_cursor_pos(sx, sy, source_window_id_);
     return false;
 }
 
