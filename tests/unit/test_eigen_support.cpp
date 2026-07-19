@@ -458,6 +458,15 @@ TEST(EigenExpressions, LinSpacedDirect)
     EXPECT_EQ(span.size(), 50u);
 }
 
+TEST(EigenExpressions, LazyExpressionRetainsEvaluatedStorage)
+{
+    auto expression = Eigen::VectorXf::LinSpaced(4, 1.0f, 4.0f);
+    auto span       = eigen_detail::to_span(expression);
+
+    EXPECT_FLOAT_EQ(span[0], 1.0f);
+    EXPECT_FLOAT_EQ(span[3], 4.0f);
+}
+
 // ─── Auto-Fit Verification ──────────────────────────────────────────────────
 
 TEST(EigenAutoFit, Line2DLimitsFromData)
