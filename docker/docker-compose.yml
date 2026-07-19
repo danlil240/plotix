@@ -1,0 +1,239 @@
+# =============================================================================
+# Spectra — Full Development & Runtime Environment
+#
+# Builds the complete image with ALL features (Vulkan, ROS2, PX4, Qt6, etc.)
+# and provides services for every Spectra component.
+#
+# Usage:
+#   docker compose build                          # Build the full image
+#   docker compose up spectra-backend             # Start headless daemon
+#   docker compose run --rm spectra-app           # Launch GUI (needs X11)
+#   docker compose run --rm spectra-ros           # Launch ROS2 visualizer
+#   docker compose run --rm spectra-px4           # Launch PX4 ULog viewer
+#   docker compose run --rm spectra-tests         # Run unit tests
+#   docker compose run --rm spectra-shell         # Interactive shell
+#
+# Profiles:
+#   (default)  spectra-app, spectra-backend, spectra-shell, spectra-tests
+#   ros2       ros2-bag-replay, spectra-ros
+#   px4        spectra-px4
+#   gpu        enables /dev/dri passthrough (instead of lavapipe)
+#
+# Examples:
+#   docker compose --profile ros2 up
+#   docker compose --profile px4 run --rm spectra-px4
+#   docker compose --profile gpu run --rm spectra-app
+#
+# X11 forwarding (Linux host):
+#   xhost +local:docker
+#   docker compose run --rm spectra-app
+#
+# Wayland host (no xhost needed):
+#   Set WAYLAND_DISPLAY and mount /run/user/$(id -u)/wayland-*
+# =============================================================================
+
+# ─── YAML anchors (reused by all GUI services) ───────────────────────────────
+x-gui-env: &gui-env
+  DISPLAY: ${DISPLAY:-:0}
+  XDG_RUNTIME_DIR: /tmp/spectra-runtime
+  SPECTRA_SOCKET: /tmp/spectra-runtime/spectra-backend.sock
+  ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+  LIBGL_ALWAYS_SOFTWARE: 1
+  XAUTHORITY: /root/.Xauthority
+  # Override with GPU ICD when using --profile gpu
+  VK_ICD_FILENAMES: ${VK_ICD_FILENAMES:-}
+  VK_DRIVER_FILES: ${VK_DRIVER_FILES:-}
+  # Wayland support (optional)
+  WAYLAND_DISPLAY: ${WAYLAND_DISPLAY:-}
+  XDG_SESSION_TYPE: ${XDG_SESSION_TYPE:-}
+
+x-gui-volumes: &gui-volumes
+  - spectra-ipc:/tmp/spectra-runtime
+  - spectra-data:/data
+  # X11 socket + auth cookie for GUI forwarding
+  - /tmp/.X11-unix:/tmp/.X11-unix:ro
+  - ${XAUTHORITY:-/dev/null}:/root/.Xauthority:ro
+  # Wayland socket (optional, no-op if not present)
+  - ${WAYLAND_SOCKET_DIR:-/dev/null}:/run/wayland:ro
+  # Optional: mount host Vulkan ICD for GPU passthrough
+  - ${VULKAN_ICD_DIR:-/dev/null}:/host-vulkan-icd:ro
+
+x-gui-devices: &gui-devices
+  - ${DRI_DEVICE:-/dev/null}:/dev/dri
+
+x-gui-common: &gui-common
+  stdin_open: true
+  tty: true
+  # Run as host user to fix X11 MIT-SHM BadAccess (X server rejects SHM from different UID)
+  user: "${UID:-1000}:${GID:-1000}"
+  # ipc: host is required for X11 MIT-SHM extension (shared memory pixmaps)
+  ipc: host
+  volumes: *gui-volumes
+  devices: *gui-devices
+  networks:
+    - spectra-net
+
+services:
+
+  # ─── Headless IPC daemon ───────────────────────────────────────────────────
+  # Runs spectra-backend on a fixed socket path. Publishers (Python scripts,
+  # topic_publisher, etc.) connect to this daemon via the shared IPC volume.
+  spectra-backend:
+    build:
+      context: ..
+      dockerfile: docker/spectra-full/Dockerfile
+    image: spectra-full
+    container_name: spectra-backend
+    command: ["build/spectra-backend", "--socket", "/tmp/spectra-runtime/spectra-backend.sock"]
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      - XDG_RUNTIME_DIR=/tmp/spectra-runtime
+      - SPECTRA_SOCKET=/tmp/spectra-runtime/spectra-backend.sock
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+    volumes:
+      - spectra-ipc:/tmp/spectra-runtime
+      - spectra-data:/data
+    networks:
+      - spectra-net
+    restart: unless-stopped
+
+  # ─── Main GUI application ──────────────────────────────────────────────────
+  # Launches the full Spectra app with Vulkan rendering + ImGui UI.
+  # Connects to the shared backend daemon via IPC volume.
+  spectra-app:
+    image: spectra-full
+    container_name: spectra-app
+    command: ["build/spectra"]
+    depends_on:
+      - spectra-backend
+    environment: *gui-env
+    <<: *gui-common
+    profiles:
+      - ""
+      - gpu
+
+  # ─── ROS2 visualizer ───────────────────────────────────────────────────────
+  # Standalone ROS2 adapter app — subscribes to live topics, visualizes bags.
+  spectra-ros:
+    image: spectra-full
+    container_name: spectra-ros
+    command: ["build/spectra-ros"]
+    depends_on:
+      - spectra-backend
+    environment: *gui-env
+    <<: *gui-common
+    profiles:
+      - ros2
+
+  # ─── PX4 ULog viewer ───────────────────────────────────────────────────────
+  # Standalone PX4 flight-log viewer. Pass a .ulg file via /data volume.
+  spectra-px4:
+    image: spectra-full
+    container_name: spectra-px4
+    command: ["build/spectra-px4"]
+    depends_on:
+      - spectra-backend
+    environment: *gui-env
+    <<: *gui-common
+    profiles:
+      - px4
+
+  # ─── ROS2 bag replay ───────────────────────────────────────────────────────
+  # Replays a ROS2 bag from /data/bags/ for the ROS2 adapter to visualize.
+  # Set BAG_PATH env or mount your bag into /data/bags/.
+  ros2-bag-replay:
+    image: spectra-full
+    container_name: ros2-bag-replay
+    command: ["ros2", "bag", "play", "${BAG_PATH:-/data/bags/reference_bag}"]
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+    volumes:
+      - spectra-data:/data
+    networks:
+      - spectra-net
+    profiles:
+      - ros2
+    restart: "no"
+
+  # ─── Headless topic publisher (demo) ───────────────────────────────────────
+  # Publishes sample data to the backend daemon for live plotting.
+  spectra-publisher:
+    image: spectra-full
+    container_name: spectra-publisher
+    command: ["build/examples/topic_publisher"]
+    depends_on:
+      - spectra-backend
+    environment:
+      - XDG_RUNTIME_DIR=/tmp/spectra-runtime
+      - SPECTRA_SOCKET=/tmp/spectra-runtime/spectra-backend.sock
+    volumes:
+      - spectra-ipc:/tmp/spectra-runtime
+    networks:
+      - spectra-net
+    profiles:
+      - demo
+    restart: "no"
+
+  # ─── Unit tests ────────────────────────────────────────────────────────────
+  spectra-tests:
+    image: spectra-full
+    container_name: spectra-tests
+    command: ["bash", "-c", "ctest --test-dir /src/spectra/build -LE 'gpu|golden' --output-on-failure -j$(nproc)"]
+    environment:
+      - XDG_RUNTIME_DIR=/tmp/spectra-runtime
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-42}
+    volumes:
+      - spectra-ipc:/tmp/spectra-runtime
+    networks:
+      - spectra-net
+    profiles:
+      - tests
+    restart: "no"
+
+  # ─── Golden image tests (needs lavapipe + Xvfb) ────────────────────────────
+  spectra-golden-tests:
+    image: spectra-full
+    container_name: spectra-golden-tests
+    command:
+      - "bash"
+      - "-c"
+      - |
+        LVP_ICD=$$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -o -name '*lavapipe*.json' | head -1)
+        export VK_ICD_FILENAMES="$$LVP_ICD" VK_DRIVER_FILES="$$LVP_ICD" LIBGL_ALWAYS_SOFTWARE=1
+        export SPECTRA_GOLDEN_BASELINE_DIR=/src/spectra/tests/golden/baseline
+        export SPECTRA_GOLDEN_OUTPUT_DIR=/src/spectra/tests/golden/output
+        xvfb-run -a ctest --test-dir /src/spectra/build -L golden --output-on-failure -j1
+    environment:
+      - XDG_RUNTIME_DIR=/tmp/spectra-runtime
+    volumes:
+      - spectra-ipc:/tmp/spectra-runtime
+    networks:
+      - spectra-net
+    profiles:
+      - tests
+    restart: "no"
+
+  # ─── Interactive shell ─────────────────────────────────────────────────────
+  # Drop into a bash shell with the full build environment ready.
+  spectra-shell:
+    image: spectra-full
+    container_name: spectra-shell
+    command: ["/bin/bash"]
+    environment: *gui-env
+    <<: *gui-common
+
+# ─── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  # Shared IPC socket directory — backend, app, publishers all connect here
+  spectra-ipc:
+    driver: local
+  # Shared data — ROS2 bags, CSV files, ULog files, exported images/video
+  spectra-data:
+    driver: local
+
+# ─── Network ──────────────────────────────────────────────────────────────────
+# ROS2 DDS discovery works on the compose bridge network.
+# All services share ROS_DOMAIN_ID for DDS multicast isolation.
+networks:
+  spectra-net:
+    driver: bridge

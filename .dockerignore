@@ -3,19 +3,37 @@
 .claude
 .vscode
 .windsurf
+.cursor
+.codex
+.devin
+.serena
 Testing
-build
 build-release
 install
 docs
-packaging
 plans
-python
 skills
-tests
-third_party
-*.png
+screenshots
 *.md
 
-!build/examples/topic_publisher
+# Re-include files required by CMake/CPack
+!README.md
+!LICENSE
+!BUILD_ENVIRONMENT.md
+!CLAUDE.md
+!AGENTS.md
+
+# Exclude stale build artifacts but allow the topic_publisher binary
+build/CMakeCache.txt
+build/CMakeFiles
+build/_deps
+build/generated
+build/testing
+build/lib*
+build/spectra
+build/spectra-*
+build/examples/*.o
+build/tests/*.o
+build/compile_commands.json
+
 !docker/**
