@@ -759,6 +759,12 @@ VkPipeline VulkanBackend::create_pipeline_for_type(PipelineType type, VkRenderPa
             cfg.frag_spirv      = shaders::scatter_frag;
             cfg.frag_spirv_size = shaders::scatter_frag_size;
             break;
+        case PipelineType::ScatterColormap:
+            cfg.vert_spirv      = shaders::scatter_colormap_vert;
+            cfg.vert_spirv_size = shaders::scatter_colormap_vert_size;
+            cfg.frag_spirv      = shaders::scatter_frag;
+            cfg.frag_spirv_size = shaders::scatter_frag_size;
+            break;
         case PipelineType::Grid:
             cfg.vert_spirv      = shaders::grid_vert;
             cfg.vert_spirv_size = shaders::grid_vert_size;

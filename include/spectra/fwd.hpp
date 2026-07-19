@@ -20,6 +20,7 @@ class Axes3D;
 class Series;
 class LineSeries;
 class ScatterSeries;
+class BandSeries;
 class LineSeries3D;
 class ScatterSeries3D;
 class SurfaceSeries;

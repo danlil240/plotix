@@ -43,6 +43,7 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
     auto* violin    = dynamic_cast<ViolinSeries*>(&series);
     auto* histogram = dynamic_cast<HistogramSeries*>(&series);
     auto* bar       = dynamic_cast<BarSeries*>(&series);
+    auto* band      = dynamic_cast<BandSeries*>(&series);
     auto* stem      = dynamic_cast<StemSeries*>(&series);
 
     // Try shape series
@@ -79,6 +80,8 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
             gpu.type = SeriesType::Histogram2D;
         else if (bar)
             gpu.type = SeriesType::Bar2D;
+        else if (band)
+            gpu.type = SeriesType::Band2D;
         else if (stem)
             gpu.type = SeriesType::Stem2D;
         else if (shape)
@@ -93,7 +96,7 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
     }
 
     // Handle 2D line/scatter and statistical/shape series (vec2 interleaved)
-    if (line || scatter || boxplot || violin || histogram || bar || stem || shape)
+    if (line || scatter || boxplot || violin || histogram || bar || band || stem || shape)
     {
         const float* x_data = nullptr;
         const float* y_data = nullptr;
@@ -139,6 +142,13 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
             y_data = bar->y_data().data();
             count  = bar->point_count();
         }
+        else if (band)
+        {
+            band->rebuild_geometry();
+            x_data = band->x_data().data();
+            y_data = band->y_data().data();
+            count  = band->point_count();
+        }
         else if (stem)
         {
             stem->rebuild_geometry();
@@ -157,8 +167,11 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
         if (count == 0)
             return;
 
-        size_t byte_size = count * 2 * sizeof(float);
-        if (!gpu.ssbo || gpu.ssbo_capacity < count)
+        const bool use_scatter_colormap =
+            scatter && scatter->has_colormap() && scatter_colormap_pipeline_;
+        const size_t stride_floats = use_scatter_colormap ? 4 : 2;
+        size_t       byte_size     = count * stride_floats * sizeof(float);
+        if (!gpu.ssbo || gpu.ssbo_capacity < count || gpu.ssbo_stride_floats != stride_floats)
         {
             if (gpu.ssbo)
                 backend_.destroy_buffer(gpu.ssbo);
@@ -166,13 +179,14 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
             // counts don't reallocate the GPU buffer every frame. The guard
             // compares against ssbo_capacity (element capacity), not uploaded_count,
             // so the headroom is actually used.
-            size_t alloc_count = count * 2;
-            gpu.ssbo =
-                backend_.create_buffer(BufferUsage::Storage, alloc_count * 2 * sizeof(float));
-            gpu.ssbo_capacity = alloc_count;
+            size_t alloc_count     = count * 2;
+            gpu.ssbo               = backend_.create_buffer(BufferUsage::Storage,
+                                              alloc_count * stride_floats * sizeof(float));
+            gpu.ssbo_capacity      = alloc_count;
+            gpu.ssbo_stride_floats = stride_floats;
         }
 
-        size_t floats_needed = count * 2;
+        size_t floats_needed = count * stride_floats;
         if (upload_scratch_.size() < floats_needed)
             upload_scratch_.resize(floats_needed);
         // Camera-relative upload: subtract origin in double precision
@@ -183,9 +197,15 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
         const double x_org = origin_x - series.x_offset();
         for (size_t i = 0; i < count; ++i)
         {
-            upload_scratch_[i * 2] = static_cast<float>(static_cast<double>(x_data[i]) - x_org);
-            upload_scratch_[i * 2 + 1] =
+            const size_t base     = i * stride_floats;
+            upload_scratch_[base] = static_cast<float>(static_cast<double>(x_data[i]) - x_org);
+            upload_scratch_[base + 1] =
                 static_cast<float>(static_cast<double>(y_data[i]) - origin_y);
+            if (use_scatter_colormap)
+            {
+                upload_scratch_[base + 2] = scatter->color_values_data()[i];
+                upload_scratch_[base + 3] = 0.0f;
+            }
         }
 
         backend_.upload_buffer(gpu.ssbo, upload_scratch_.data(), byte_size);
@@ -215,6 +235,11 @@ void Renderer::upload_series_data(Series& series, double origin_x, double origin
         {
             fill_verts = bar->fill_verts();
             fill_count = bar->fill_vertex_count();
+        }
+        else if (band && band->fill_vertex_count() > 0)
+        {
+            fill_verts = band->fill_verts();
+            fill_count = band->fill_vertex_count();
         }
         else if (shape && shape->fill_vertex_count() > 0)
         {

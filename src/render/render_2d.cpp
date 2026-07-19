@@ -102,11 +102,7 @@ void Renderer::render_series(Series& series,
             {
                 const auto& xd = line->x_data();
                 size_t      n  = xd.size();
-                // Quick check: is x_data sorted? (sample a few points)
-                bool sorted = (n < 2)
-                              || (xd[0] <= xd[n / 4] && xd[n / 4] <= xd[n / 2]
-                                  && xd[n / 2] <= xd[3 * n / 4] && xd[3 * n / 4] <= xd[n - 1]);
-                if (sorted)
+                if (line->x_is_sorted())
                 {
                     const float* begin = xd.data();
                     const float* end   = begin + n;
@@ -199,16 +195,19 @@ void Renderer::render_series(Series& series,
         case SeriesType::Scatter2D:
         {
             auto* scatter = static_cast<ScatterSeries*>(&series);
-            // Colormap support (Phase 7C): encode colormap type + range in
-            // dash_count / dash_pattern, same encoding as 3D surface shader.
-            // TODO: create scatter_colormap pipeline with per-point color SSBO.
-            if (scatter->has_colormap())
+            // Scalar-valued scatter uses a vec4 SSBO (x, y, value, pad) and a
+            // dedicated vertex shader. The fragment shader maps the scalar on
+            // the GPU so changing ranges never requires CPU color expansion.
+            const bool use_colormap = scatter->has_colormap() && scatter_colormap_pipeline_
+                                      && gpu.ssbo_stride_floats == 4;
+            if (use_colormap)
             {
                 pc.dash_count      = static_cast<int>(scatter->colormap());
                 pc.dash_pattern[0] = scatter->colormap_min();
                 pc.dash_pattern[1] = scatter->colormap_max();
+                pc._pad2[0]        = 1.0f;
             }
-            backend_.bind_pipeline(scatter_pipeline_);
+            backend_.bind_pipeline(use_colormap ? scatter_colormap_pipeline_ : scatter_pipeline_);
             pc.point_size  = scatter->size();
             pc.marker_type = static_cast<uint32_t>(style.marker_style);
             if (pc.marker_type == 0)
@@ -444,6 +443,29 @@ void Renderer::render_series(Series& series,
             }
             break;
         }
+        case SeriesType::Band2D:
+        {
+            auto* band = static_cast<BandSeries*>(&series);
+            if (gpu.fill_buffer && gpu.fill_vertex_count > 0)
+            {
+                backend_.bind_pipeline(stat_fill_pipeline_);
+                SeriesPushConstants fill_pc = pc;
+                fill_pc.color[3] *= band->fill_opacity();
+                backend_.push_constants(fill_pc);
+                backend_.bind_buffer(gpu.fill_buffer, 0);
+                backend_.draw(static_cast<uint32_t>(gpu.fill_vertex_count));
+            }
+            if (band->show_edges() && band->edge_width() > 0.0f && band->point_count() > 1)
+            {
+                backend_.bind_pipeline(line_pipeline_);
+                pc.line_width = band->edge_width();
+                backend_.push_constants(pc);
+                backend_.bind_buffer(gpu.ssbo, 0);
+                const uint32_t segments = static_cast<uint32_t>(band->point_count()) - 1;
+                backend_.draw(segments * 6);
+            }
+            break;
+        }
         case SeriesType::Stem2D:
         {
             auto* stem = static_cast<StemSeries*>(&series);
@@ -614,11 +636,7 @@ void Renderer::render_selection_highlight(AxesBase& axes, const Rect& /*viewport
                     {
                         const auto& xd = line->x_data();
                         size_t      n  = xd.size();
-                        bool        sorted =
-                            (n < 2)
-                            || (xd[0] <= xd[n / 4] && xd[n / 4] <= xd[n / 2]
-                                && xd[n / 2] <= xd[3 * n / 4] && xd[3 * n / 4] <= xd[n - 1]);
-                        if (sorted)
+                        if (line->x_is_sorted())
                         {
                             const float* begin  = xd.data();
                             const float* end    = begin + n;
@@ -696,9 +714,12 @@ void Renderer::render_selection_highlight(AxesBase& axes, const Rect& /*viewport
                 auto* scatter = static_cast<const ScatterSeries*>(sel);
                 if (scatter->point_count() == 0)
                     break;
-                backend_.bind_pipeline(scatter_pipeline_);
+                backend_.bind_pipeline(gpu.ssbo_stride_floats == 4 ? scatter_colormap_pipeline_
+                                                                   : scatter_pipeline_);
                 pc.point_size  = scatter->size() + 3.0f;
                 pc.marker_type = static_cast<uint32_t>(MarkerStyle::Circle);
+                pc.dash_count  = 0;
+                pc._pad2[0]    = 0.0f;
                 backend_.push_constants(pc);
                 backend_.bind_buffer(gpu.ssbo, 0);
                 backend_.draw_instanced(6, static_cast<uint32_t>(scatter->point_count()));

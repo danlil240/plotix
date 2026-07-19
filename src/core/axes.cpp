@@ -176,6 +176,13 @@ BarSeries& Axes::bar(std::span<const float> positions, std::span<const float> he
     return add_series<BarSeries>(positions, heights);
 }
 
+BandSeries& Axes::band(std::span<const float> x,
+                       std::span<const float> lower,
+                       std::span<const float> upper)
+{
+    return add_series<BandSeries>(x, lower, upper);
+}
+
 StemSeries& Axes::stem(std::span<const float> x, std::span<const float> y)
 {
     auto& ref = add_series<StemSeries>();
@@ -397,6 +404,8 @@ static void data_extent(const std::vector<std::unique_ptr<Series>>& series,
             try_stat(hs->x_data(), hs->y_data());
         if (auto* bs = dynamic_cast<const BarSeries*>(s.get()))
             try_stat(bs->x_data(), bs->y_data());
+        if (auto* band = dynamic_cast<const BandSeries*>(s.get()))
+            try_stat(band->x_data(), band->y_data());
         if (auto* sh = dynamic_cast<const ShapeSeries*>(s.get()))
             try_stat(sh->x_data(), sh->y_data());
     }
@@ -474,6 +483,26 @@ static void data_extent_with_mode(const std::vector<std::unique_ptr<Series>>& se
                     y_max = std::max(y_max, static_cast<double>(v));
                 }
             }
+            if (auto* band = dynamic_cast<const BandSeries*>(s.get()))
+            {
+                for (auto v : band->x_values())
+                {
+                    if (!std::isfinite(v))
+                        continue;
+                    x_min = std::min(x_min, static_cast<double>(v) + xoff);
+                    x_max = std::max(x_max, static_cast<double>(v) + xoff);
+                }
+                for (auto values : {band->lower_values(), band->upper_values()})
+                {
+                    for (auto v : values)
+                    {
+                        if (!std::isfinite(v))
+                            continue;
+                        y_min = std::min(y_min, static_cast<double>(v));
+                        y_max = std::max(y_max, static_cast<double>(v));
+                    }
+                }
+            }
         }
         if (x_min > x_max)
         {
@@ -547,6 +576,8 @@ static bool latest_x_value(const std::vector<std::unique_ptr<Series>>& series, d
             update_from_span(hs->x_data());
         if (auto* bs = dynamic_cast<const BarSeries*>(s.get()))
             update_from_span(bs->x_data());
+        if (auto* band = dynamic_cast<const BandSeries*>(s.get()))
+            update_from_span(band->x_values());
     }
 
     return has_value;
@@ -599,6 +630,11 @@ static bool windowed_y_extent(const std::vector<std::unique_ptr<Series>>& series
             consume_xy(hs->x_data(), hs->y_data());
         if (auto* bs = dynamic_cast<const BarSeries*>(s.get()))
             consume_xy(bs->x_data(), bs->y_data());
+        if (auto* band = dynamic_cast<const BandSeries*>(s.get()))
+        {
+            consume_xy(band->x_values(), band->lower_values());
+            consume_xy(band->x_values(), band->upper_values());
+        }
         if (auto* sh = dynamic_cast<const ShapeSeries*>(s.get()))
             consume_xy(sh->x_data(), sh->y_data());
     }

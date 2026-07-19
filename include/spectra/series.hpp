@@ -214,6 +214,7 @@ class LineSeries : public Series
     std::span<const float> x_data() const { return x_; }
     std::span<const float> y_data() const { return y_; }
     size_t                 point_count() const { return x_.size(); }
+    bool                   x_is_sorted() const { return x_sorted_; }
 
     // Remove all points with x < x_threshold.  Assumes x is sorted ascending.
     // Returns the number of points removed.
@@ -278,6 +279,7 @@ class LineSeries : public Series
     std::vector<float> x_;
     std::vector<float> y_;
     float              line_width_ = 2.0f;
+    bool               x_sorted_   = true;
 };
 
 class ScatterSeries : public Series
@@ -301,6 +303,7 @@ class ScatterSeries : public Series
     std::span<const float> x_data() const { return x_; }
     std::span<const float> y_data() const { return y_; }
     size_t                 point_count() const { return x_.size(); }
+    bool                   x_is_sorted() const { return x_sorted_; }
 
     // Bring base-class getters into scope (setters below would otherwise hide them)
     using Series::color;
@@ -379,7 +382,8 @@ class ScatterSeries : public Series
     std::span<const float> color_values_data() const { return color_values_; }
     bool                   has_colormap() const
     {
-        return colormap_type_ != ColormapType::None && !color_values_.empty();
+        return colormap_type_ != ColormapType::None && color_values_.size() == x_.size()
+               && x_.size() == y_.size() && !x_.empty();
     }
     float colormap_min() const { return colormap_min_; }
     float colormap_max() const { return colormap_max_; }
@@ -392,6 +396,7 @@ class ScatterSeries : public Series
     std::vector<float> x_;
     std::vector<float> y_;
     float              point_size_ = 4.0f;
+    bool               x_sorted_   = true;
     // Colormap support (Phase 7C)
     std::vector<float> color_values_;
     ColormapType       colormap_type_ = ColormapType::None;

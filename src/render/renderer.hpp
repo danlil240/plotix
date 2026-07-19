@@ -153,6 +153,7 @@ class Renderer
 
     PipelineHandle line_pipeline_;
     PipelineHandle scatter_pipeline_;
+    PipelineHandle scatter_colormap_pipeline_;
     PipelineHandle grid_pipeline_;
     PipelineHandle overlay_pipeline_;   // Triangle-list topology for filled shapes (2D arrowheads)
     PipelineHandle stat_fill_pipeline_;   // Triangle-list, vec2+alpha, per-vertex gradient fills
@@ -257,6 +258,7 @@ class Renderer
         Violin2D,
         Histogram2D,
         Bar2D,
+        Band2D,
         Stem2D,
         Shape2D,
         Shape3D,
@@ -268,8 +270,9 @@ class Renderer
     struct SeriesGpuData
     {
         BufferHandle ssbo;
-        size_t       uploaded_count = 0;
-        size_t       ssbo_capacity  = 0;   // Allocated element capacity (>= uploaded_count)
+        size_t       uploaded_count     = 0;
+        size_t       ssbo_capacity      = 0;   // Allocated element capacity (>= uploaded_count)
+        size_t       ssbo_stride_floats = 0;
         BufferHandle index_buffer;
         size_t       index_count = 0;
         BufferHandle fill_buffer;   // Vertex buffer for filled triangles
@@ -278,7 +281,7 @@ class Renderer
         BufferHandle outlier_buffer;             // SSBO for box plot outlier points
         size_t       outlier_count    = 0;
         size_t       outlier_capacity = 0;   // Allocated outlier capacity
-        SeriesType   type          = SeriesType::Unknown;
+        SeriesType   type             = SeriesType::Unknown;
         // Camera-relative rendering: double-precision origin subtracted
         // from data during upload.  Eliminates catastrophic cancellation
         // at deep zoom by keeping GPU floats small.

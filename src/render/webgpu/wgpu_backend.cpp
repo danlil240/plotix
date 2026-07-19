@@ -724,6 +724,7 @@ WGPUPipelineLayout WebGPUBackend::layout_for_type(PipelineType type) const
     {
         case PipelineType::Line:
         case PipelineType::Scatter:
+        case PipelineType::ScatterColormap:
             return pl_ssbo_;
 
         case PipelineType::Text:
@@ -766,6 +767,12 @@ WGPURenderPipeline WebGPUBackend::create_pipeline_for_type(PipelineType type)
         case PipelineType::Scatter:
             wgsl_source = wgsl::scatter_wgsl;
             break;
+
+        case PipelineType::ScatterColormap:
+            // The production Vulkan backend supports scalar-valued scatter
+            // buffers. WebGPU remains an experimental 2D subset and falls
+            // back to the series' uniform color in Renderer.
+            return nullptr;
 
         case PipelineType::Grid:
             wgsl_source    = wgsl::grid_wgsl;

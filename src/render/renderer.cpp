@@ -223,11 +223,12 @@ Renderer::~Renderer() noexcept
 bool Renderer::init()
 {
     // Create pipelines for each series type
-    line_pipeline_      = backend_.create_pipeline(PipelineType::Line);
-    scatter_pipeline_   = backend_.create_pipeline(PipelineType::Scatter);
-    grid_pipeline_      = backend_.create_pipeline(PipelineType::Grid);
-    overlay_pipeline_   = backend_.create_pipeline(PipelineType::Overlay);
-    stat_fill_pipeline_ = backend_.create_pipeline(PipelineType::StatFill);
+    line_pipeline_             = backend_.create_pipeline(PipelineType::Line);
+    scatter_pipeline_          = backend_.create_pipeline(PipelineType::Scatter);
+    scatter_colormap_pipeline_ = backend_.create_pipeline(PipelineType::ScatterColormap);
+    grid_pipeline_             = backend_.create_pipeline(PipelineType::Grid);
+    overlay_pipeline_          = backend_.create_pipeline(PipelineType::Overlay);
+    stat_fill_pipeline_        = backend_.create_pipeline(PipelineType::StatFill);
 
     // Create 3D pipelines
     line3d_pipeline_         = backend_.create_pipeline(PipelineType::Line3D);
@@ -309,9 +310,9 @@ void Renderer::begin_render_pass()
 
     const auto& theme_colors = theme_mgr_.colors();
     Color       bg_color     = Color(theme_colors.bg_canvas.r,
-                                     theme_colors.bg_canvas.g,
-                                     theme_colors.bg_canvas.b,
-                                     theme_colors.bg_canvas.a);
+                           theme_colors.bg_canvas.g,
+                           theme_colors.bg_canvas.b,
+                           theme_colors.bg_canvas.a);
     backend_.begin_render_pass(bg_color);
     backend_.set_line_width(1.0f);   // Set default for VK_DYNAMIC_STATE_LINE_WIDTH
 }

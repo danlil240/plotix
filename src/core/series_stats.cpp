@@ -4,9 +4,85 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <stdexcept>
 
 namespace spectra
 {
+
+BandSeries::BandSeries(std::span<const float> x,
+                       std::span<const float> lower,
+                       std::span<const float> upper)
+{
+    set_data(x, lower, upper);
+}
+
+BandSeries& BandSeries::set_data(std::span<const float> x,
+                                 std::span<const float> lower,
+                                 std::span<const float> upper)
+{
+    if (x.size() != lower.size() || x.size() != upper.size())
+        throw std::invalid_argument("BandSeries requires equally sized x, lower, and upper arrays");
+
+    x_.assign(x.begin(), x.end());
+    lower_.assign(lower.begin(), lower.end());
+    upper_.assign(upper.begin(), upper.end());
+    rebuild_geometry();
+    dirty_ = true;
+    return *this;
+}
+
+void BandSeries::rebuild_geometry()
+{
+    line_x_.clear();
+    line_y_.clear();
+    fill_verts_.clear();
+
+    if (x_.empty())
+        return;
+
+    line_x_.reserve(x_.size() * 2 + 1);
+    line_y_.reserve(x_.size() * 2 + 1);
+    for (size_t i = 0; i < x_.size(); ++i)
+    {
+        line_x_.push_back(x_[i]);
+        line_y_.push_back(upper_[i]);
+    }
+    line_x_.push_back(std::numeric_limits<float>::quiet_NaN());
+    line_y_.push_back(std::numeric_limits<float>::quiet_NaN());
+    for (size_t i = 0; i < x_.size(); ++i)
+    {
+        line_x_.push_back(x_[i]);
+        line_y_.push_back(lower_[i]);
+    }
+
+    if (x_.size() < 2)
+        return;
+
+    fill_verts_.reserve((x_.size() - 1) * 18);
+    auto push_vertex = [this](float x_value, float y_value)
+    {
+        fill_verts_.push_back(x_value);
+        fill_verts_.push_back(y_value);
+        fill_verts_.push_back(1.0f);
+    };
+
+    for (size_t i = 0; i + 1 < x_.size(); ++i)
+    {
+        if (!std::isfinite(x_[i]) || !std::isfinite(x_[i + 1]) || !std::isfinite(lower_[i])
+            || !std::isfinite(lower_[i + 1]) || !std::isfinite(upper_[i])
+            || !std::isfinite(upper_[i + 1]))
+        {
+            continue;
+        }
+
+        push_vertex(x_[i], lower_[i]);
+        push_vertex(x_[i], upper_[i]);
+        push_vertex(x_[i + 1], upper_[i + 1]);
+        push_vertex(x_[i], lower_[i]);
+        push_vertex(x_[i + 1], upper_[i + 1]);
+        push_vertex(x_[i + 1], lower_[i + 1]);
+    }
+}
 
 // ─── Helper: percentile via linear interpolation ────────────────────────────
 

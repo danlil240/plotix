@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <stdexcept>
 #include <spectra/axes.hpp>
 #include <spectra/series_stats.hpp>
 
@@ -6,6 +7,42 @@
 #include <vector>
 
 using namespace spectra;
+
+TEST(BandSeries, BuildsTwoTrianglesPerFiniteInterval)
+{
+    std::vector<float> x     = {0.0f, 1.0f, 2.0f};
+    std::vector<float> lower = {-1.0f, 0.0f, 1.0f};
+    std::vector<float> upper = {1.0f, 2.0f, 3.0f};
+    BandSeries         band(x, lower, upper);
+
+    EXPECT_EQ(band.sample_count(), 3u);
+    EXPECT_EQ(band.fill_vertex_count(), 12u);
+    EXPECT_EQ(band.point_count(), 7u);
+    EXPECT_TRUE(std::isnan(band.x_data()[3]));
+}
+
+TEST(BandSeries, RejectsMisalignedInputs)
+{
+    std::vector<float> x     = {0.0f, 1.0f};
+    std::vector<float> lower = {0.0f};
+    std::vector<float> upper = {1.0f, 2.0f};
+    EXPECT_THROW(BandSeries(x, lower, upper), std::invalid_argument);
+}
+
+TEST(BandSeries, ParticipatesInAutoscale)
+{
+    Axes               axes;
+    std::vector<float> x     = {10.0f, 20.0f};
+    std::vector<float> lower = {-4.0f, -3.0f};
+    std::vector<float> upper = {7.0f, 9.0f};
+    axes.band(x, lower, upper);
+    axes.auto_fit();
+
+    EXPECT_LE(axes.x_limits().min, 10.0);
+    EXPECT_GE(axes.x_limits().max, 20.0);
+    EXPECT_LE(axes.y_limits().min, -4.0);
+    EXPECT_GE(axes.y_limits().max, 9.0);
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BoxPlotSeries

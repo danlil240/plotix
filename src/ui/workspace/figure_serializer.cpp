@@ -23,7 +23,7 @@ namespace spectra
 
 // ─── Binary format constants ────────────────────────────────────────────────
 static constexpr uint32_t MAGIC   = 0x53504346;   // "SPCF" — Spectra Figure
-static constexpr uint32_t VERSION = 4;
+static constexpr uint32_t VERSION = 5;
 
 // Chunk tags
 enum ChunkTag : uint16_t
@@ -46,6 +46,7 @@ enum ChunkTag : uint16_t
     TAG_SERIES_VIOLIN  = 0x0027,
     TAG_SERIES_HIST    = 0x0028,
     TAG_SERIES_BAR     = 0x0029,
+    TAG_SERIES_BAND    = 0x002A,
 
     TAG_ANNOTATION     = 0x0040,
     TAG_MARKER         = 0x0041,
@@ -281,6 +282,24 @@ static void write_axes_2d(BinaryWriter& w, const Axes& axes, int axes_index)
             w.write_f32(ss->size());
             w.write_floats(ss->x_data());
             w.write_floats(ss->y_data());
+            w.write_u8(static_cast<uint8_t>(ss->colormap()));
+            w.write_f32(ss->colormap_min());
+            w.write_f32(ss->colormap_max());
+            w.write_u8(static_cast<uint8_t>(ss->colormap_range_set()));
+            w.write_floats(ss->color_values_data());
+            w.end_chunk(spos);
+        }
+        else if (auto* band = dynamic_cast<BandSeries*>(sp.get()))
+        {
+            auto spos = w.begin_chunk(TAG_SERIES_BAND);
+            w.write_i32(axes_index);
+            w.write_series_common(*band);
+            w.write_f32(band->fill_opacity());
+            w.write_f32(band->edge_width());
+            w.write_u8(static_cast<uint8_t>(band->show_edges()));
+            w.write_floats(band->x_values());
+            w.write_floats(band->lower_values());
+            w.write_floats(band->upper_values());
             w.end_chunk(spos);
         }
         else if (auto* bp = dynamic_cast<BoxPlotSeries*>(sp.get()))
@@ -891,21 +910,35 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     break;
                 }
 
-                std::string lbl  = r.read_string();
-                Color       col  = r.read_color();
-                bool        vis  = r.read_u8() != 0;
-                auto        ls_e = static_cast<LineStyle>(r.read_u8());
-                auto        ms_e = static_cast<MarkerStyle>(r.read_u8());
-                float       msz  = r.read_f32();
-                float       opac = r.read_f32();
-                float       lw   = r.read_f32();
-                bool        excl = (version >= 2) && (r.read_u8() != 0);
+                std::string lbl   = r.read_string();
+                Color       col   = r.read_color();
+                bool        vis   = r.read_u8() != 0;
+                auto        ls_e  = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e  = static_cast<MarkerStyle>(r.read_u8());
+                float       msz   = r.read_f32();
+                float       opac  = r.read_f32();
+                float       lw    = r.read_f32();
+                bool        excl  = (version >= 2) && (r.read_u8() != 0);
                 bool        inleg = (version >= 3) ? (r.read_u8() != 0) : true;
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
-                float       sz   = r.read_f32();
+                float       sz    = r.read_f32();
 
                 auto x_data = r.read_floats();
                 auto y_data = r.read_floats();
+
+                ColormapType       cmap          = ColormapType::None;
+                float              cmap_min      = 0.0f;
+                float              cmap_max      = 1.0f;
+                bool               cmap_explicit = false;
+                std::vector<float> color_values;
+                if (version >= 5)
+                {
+                    cmap          = static_cast<ColormapType>(r.read_u8());
+                    cmap_min      = r.read_f32();
+                    cmap_max      = r.read_f32();
+                    cmap_explicit = r.read_u8() != 0;
+                    color_values  = r.read_floats();
+                }
 
                 auto& s = axes->scatter(x_data, y_data);
                 s.label(lbl).color(col).visible(vis);
@@ -914,9 +947,59 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                 s.set_excluded_from_autoscale(excl);
                 s.set_show_in_legend(inleg);
                 s.set_reference_line(isref);
+                if (!color_values.empty())
+                    s.color_values(color_values).colormap(cmap);
+                if (cmap_explicit)
+                    s.colormap_range(cmap_min, cmap_max);
                 auto ps       = s.plot_style();
                 ps.line_width = lw;
                 s.plot_style(ps);
+                break;
+            }
+
+            case TAG_SERIES_BAND:
+            {
+                int idx = r.read_i32();
+                if (idx < 0 || idx >= static_cast<int>(axes_ptrs.size()))
+                {
+                    r.skip(len - 4);
+                    break;
+                }
+                auto* axes = dynamic_cast<Axes*>(axes_ptrs[idx]);
+                if (!axes)
+                {
+                    r.skip(len - 4);
+                    break;
+                }
+
+                std::string lbl          = r.read_string();
+                Color       col          = r.read_color();
+                bool        vis          = r.read_u8() != 0;
+                auto        ls_e         = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e         = static_cast<MarkerStyle>(r.read_u8());
+                float       msz          = r.read_f32();
+                float       opac         = r.read_f32();
+                float       lw           = r.read_f32();
+                bool        excl         = (version >= 2) && (r.read_u8() != 0);
+                bool        inleg        = (version >= 3) ? (r.read_u8() != 0) : true;
+                bool        isref        = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
+                float       fill_opacity = r.read_f32();
+                float       edge_width   = r.read_f32();
+                bool        show_edges   = r.read_u8() != 0;
+                auto        x            = r.read_floats();
+                auto        lower        = r.read_floats();
+                auto        upper        = r.read_floats();
+
+                auto& band = axes->band(x, lower, upper);
+                band.label(lbl).color(col).visible(vis);
+                band.line_style(ls_e).marker_style(ms_e).marker_size(msz).opacity(opac);
+                band.fill_opacity(fill_opacity).edge_width(edge_width).show_edges(show_edges);
+                band.set_excluded_from_autoscale(excl);
+                band.set_show_in_legend(inleg);
+                band.set_reference_line(isref);
+                auto ps       = band.plot_style();
+                ps.line_width = lw;
+                band.plot_style(ps);
                 break;
             }
 
@@ -935,15 +1018,15 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     break;
                 }
 
-                std::string lbl  = r.read_string();
-                Color       col  = r.read_color();
-                bool        vis  = r.read_u8() != 0;
-                auto        ls_e = static_cast<LineStyle>(r.read_u8());
-                auto        ms_e = static_cast<MarkerStyle>(r.read_u8());
-                float       msz  = r.read_f32();
-                float       opac = r.read_f32();
-                float       lw   = r.read_f32();
-                bool        excl = (version >= 2) && (r.read_u8() != 0);
+                std::string lbl   = r.read_string();
+                Color       col   = r.read_color();
+                bool        vis   = r.read_u8() != 0;
+                auto        ls_e  = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e  = static_cast<MarkerStyle>(r.read_u8());
+                float       msz   = r.read_f32();
+                float       opac  = r.read_f32();
+                float       lw    = r.read_f32();
+                bool        excl  = (version >= 2) && (r.read_u8() != 0);
                 bool        inleg = (version >= 3) ? (r.read_u8() != 0) : true;
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
 
@@ -994,15 +1077,15 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     break;
                 }
 
-                std::string lbl  = r.read_string();
-                Color       col  = r.read_color();
-                bool        vis  = r.read_u8() != 0;
-                auto        ls_e = static_cast<LineStyle>(r.read_u8());
-                auto        ms_e = static_cast<MarkerStyle>(r.read_u8());
-                float       msz  = r.read_f32();
-                float       opac = r.read_f32();
-                float       lw   = r.read_f32();
-                bool        excl = (version >= 2) && (r.read_u8() != 0);
+                std::string lbl   = r.read_string();
+                Color       col   = r.read_color();
+                bool        vis   = r.read_u8() != 0;
+                auto        ls_e  = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e  = static_cast<MarkerStyle>(r.read_u8());
+                float       msz   = r.read_f32();
+                float       opac  = r.read_f32();
+                float       lw    = r.read_f32();
+                bool        excl  = (version >= 2) && (r.read_u8() != 0);
                 bool        inleg = (version >= 3) ? (r.read_u8() != 0) : true;
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
 
@@ -1048,15 +1131,15 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     break;
                 }
 
-                std::string lbl  = r.read_string();
-                Color       col  = r.read_color();
-                bool        vis  = r.read_u8() != 0;
-                auto        ls_e = static_cast<LineStyle>(r.read_u8());
-                auto        ms_e = static_cast<MarkerStyle>(r.read_u8());
-                float       msz  = r.read_f32();
-                float       opac = r.read_f32();
-                float       lw   = r.read_f32();
-                bool        excl = (version >= 2) && (r.read_u8() != 0);
+                std::string lbl   = r.read_string();
+                Color       col   = r.read_color();
+                bool        vis   = r.read_u8() != 0;
+                auto        ls_e  = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e  = static_cast<MarkerStyle>(r.read_u8());
+                float       msz   = r.read_f32();
+                float       opac  = r.read_f32();
+                float       lw    = r.read_f32();
+                bool        excl  = (version >= 2) && (r.read_u8() != 0);
                 bool        inleg = (version >= 3) ? (r.read_u8() != 0) : true;
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
 
@@ -1095,15 +1178,15 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     break;
                 }
 
-                std::string lbl  = r.read_string();
-                Color       col  = r.read_color();
-                bool        vis  = r.read_u8() != 0;
-                auto        ls_e = static_cast<LineStyle>(r.read_u8());
-                auto        ms_e = static_cast<MarkerStyle>(r.read_u8());
-                float       msz  = r.read_f32();
-                float       opac = r.read_f32();
-                float       lw   = r.read_f32();
-                bool        excl = (version >= 2) && (r.read_u8() != 0);
+                std::string lbl   = r.read_string();
+                Color       col   = r.read_color();
+                bool        vis   = r.read_u8() != 0;
+                auto        ls_e  = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e  = static_cast<MarkerStyle>(r.read_u8());
+                float       msz   = r.read_f32();
+                float       opac  = r.read_f32();
+                float       lw    = r.read_f32();
+                bool        excl  = (version >= 2) && (r.read_u8() != 0);
                 bool        inleg = (version >= 3) ? (r.read_u8() != 0) : true;
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
 
@@ -1143,19 +1226,19 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     break;
                 }
 
-                std::string lbl  = r.read_string();
-                Color       col  = r.read_color();
-                bool        vis  = r.read_u8() != 0;
-                auto        ls_e = static_cast<LineStyle>(r.read_u8());
-                auto        ms_e = static_cast<MarkerStyle>(r.read_u8());
-                float       msz  = r.read_f32();
-                float       opac = r.read_f32();
-                float       lw   = r.read_f32();
-                bool        excl = (version >= 2) && (r.read_u8() != 0);
+                std::string lbl   = r.read_string();
+                Color       col   = r.read_color();
+                bool        vis   = r.read_u8() != 0;
+                auto        ls_e  = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e  = static_cast<MarkerStyle>(r.read_u8());
+                float       msz   = r.read_f32();
+                float       opac  = r.read_f32();
+                float       lw    = r.read_f32();
+                bool        excl  = (version >= 2) && (r.read_u8() != 0);
                 bool        inleg = (version >= 3) ? (r.read_u8() != 0) : true;
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
-                float       wid  = r.read_f32();
-                auto        bm   = static_cast<BlendMode>(r.read_u8());
+                float       wid   = r.read_f32();
+                auto        bm    = static_cast<BlendMode>(r.read_u8());
 
                 auto x = r.read_floats();
                 auto y = r.read_floats();
@@ -1190,19 +1273,19 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     break;
                 }
 
-                std::string lbl  = r.read_string();
-                Color       col  = r.read_color();
-                bool        vis  = r.read_u8() != 0;
-                auto        ls_e = static_cast<LineStyle>(r.read_u8());
-                auto        ms_e = static_cast<MarkerStyle>(r.read_u8());
-                float       msz  = r.read_f32();
-                float       opac = r.read_f32();
-                float       lw   = r.read_f32();
-                bool        excl = (version >= 2) && (r.read_u8() != 0);
+                std::string lbl   = r.read_string();
+                Color       col   = r.read_color();
+                bool        vis   = r.read_u8() != 0;
+                auto        ls_e  = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e  = static_cast<MarkerStyle>(r.read_u8());
+                float       msz   = r.read_f32();
+                float       opac  = r.read_f32();
+                float       lw    = r.read_f32();
+                bool        excl  = (version >= 2) && (r.read_u8() != 0);
                 bool        inleg = (version >= 3) ? (r.read_u8() != 0) : true;
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
-                float       sz   = r.read_f32();
-                auto        bm   = static_cast<BlendMode>(r.read_u8());
+                float       sz    = r.read_f32();
+                auto        bm    = static_cast<BlendMode>(r.read_u8());
 
                 auto x = r.read_floats();
                 auto y = r.read_floats();
@@ -1237,15 +1320,15 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     break;
                 }
 
-                std::string lbl  = r.read_string();
-                Color       col  = r.read_color();
-                bool        vis  = r.read_u8() != 0;
-                auto        ls_e = static_cast<LineStyle>(r.read_u8());
-                auto        ms_e = static_cast<MarkerStyle>(r.read_u8());
-                float       msz  = r.read_f32();
-                float       opac = r.read_f32();
-                float       lw   = r.read_f32();
-                bool        excl = (version >= 2) && (r.read_u8() != 0);
+                std::string lbl   = r.read_string();
+                Color       col   = r.read_color();
+                bool        vis   = r.read_u8() != 0;
+                auto        ls_e  = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e  = static_cast<MarkerStyle>(r.read_u8());
+                float       msz   = r.read_f32();
+                float       opac  = r.read_f32();
+                float       lw    = r.read_f32();
+                bool        excl  = (version >= 2) && (r.read_u8() != 0);
                 bool        inleg = (version >= 3) ? (r.read_u8() != 0) : true;
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
 
@@ -1298,15 +1381,15 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     break;
                 }
 
-                std::string lbl  = r.read_string();
-                Color       col  = r.read_color();
-                bool        vis  = r.read_u8() != 0;
-                auto        ls_e = static_cast<LineStyle>(r.read_u8());
-                auto        ms_e = static_cast<MarkerStyle>(r.read_u8());
-                float       msz  = r.read_f32();
-                float       opac = r.read_f32();
-                float       lw   = r.read_f32();
-                bool        excl = (version >= 2) && (r.read_u8() != 0);
+                std::string lbl   = r.read_string();
+                Color       col   = r.read_color();
+                bool        vis   = r.read_u8() != 0;
+                auto        ls_e  = static_cast<LineStyle>(r.read_u8());
+                auto        ms_e  = static_cast<MarkerStyle>(r.read_u8());
+                float       msz   = r.read_f32();
+                float       opac  = r.read_f32();
+                float       lw    = r.read_f32();
+                bool        excl  = (version >= 2) && (r.read_u8() != 0);
                 bool        inleg = (version >= 3) ? (r.read_u8() != 0) : true;
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
 
@@ -1418,10 +1501,10 @@ bool FigureSerializer::save_with_dialog(const Figure& figure, const OverlaySnaps
     std::string home_dir = (home_env ? std::string(home_env) + "/" : "/") + "figure.spectra";
     const char* home     = home_dir.c_str();
     char*       result   = tinyfd_saveFileDialog("Save Figure",
-                                                 home,
-                                                 1,
-                                                 filter_patterns,
-                                                 "Spectra Figure (*.spectra)");
+                                         home,
+                                         1,
+                                         filter_patterns,
+                                         "Spectra Figure (*.spectra)");
 
     if (!result)
         return false;
@@ -1444,11 +1527,11 @@ bool FigureSerializer::load_with_dialog(Figure& figure, OverlaySnapshot* overlay
     std::string home_dir          = home_env ? std::string(home_env) + "/" : "/";
     const char* home              = home_dir.c_str();
     char*       result            = tinyfd_openFileDialog("Open Figure",
-                                                          home,
-                                                          1,
-                                                          filter_patterns,
-                                                          "Spectra Figure (*.spectra)",
-                                                          0);
+                                         home,
+                                         1,
+                                         filter_patterns,
+                                         "Spectra Figure (*.spectra)",
+                                         0);
 
     if (!result)
         return false;

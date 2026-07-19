@@ -12,6 +12,7 @@
     #include <spectra/series.hpp>
     #include <spectra/series3d.hpp>
 
+    #include "data/sorted_x_query.hpp"
     #include "axes3d_pick.hpp"
     #include "ui/data/axis_link.hpp"
 
@@ -1044,6 +1045,7 @@ void DataInteraction::end_annotation_drag()
 
 NearestPointResult DataInteraction::find_nearest(const CursorReadout& cursor, Figure& figure) const
 {
+    last_query_points_examined_ = 0;
     NearestPointResult best;
     best.found       = false;
     best.distance_px = std::numeric_limits<float>::max();
@@ -1097,21 +1099,24 @@ NearestPointResult DataInteraction::find_nearest(const CursorReadout& cursor, Fi
             if (!series_ptr || !series_ptr->visible())
                 continue;
 
-            const float* x_data = nullptr;
-            const float* y_data = nullptr;
-            size_t       count  = 0;
+            const float* x_data   = nullptr;
+            const float* y_data   = nullptr;
+            size_t       count    = 0;
+            bool         x_sorted = false;
 
             if (auto* ls = dynamic_cast<LineSeries*>(series_ptr.get()))
             {
-                x_data = ls->x_data().data();
-                y_data = ls->y_data().data();
-                count  = ls->point_count();
+                x_data   = ls->x_data().data();
+                y_data   = ls->y_data().data();
+                count    = ls->point_count();
+                x_sorted = ls->x_is_sorted();
             }
             else if (auto* sc = dynamic_cast<ScatterSeries*>(series_ptr.get()))
             {
-                x_data = sc->x_data().data();
-                y_data = sc->y_data().data();
-                count  = sc->point_count();
+                x_data   = sc->x_data().data();
+                y_data   = sc->y_data().data();
+                count    = sc->point_count();
+                x_sorted = sc->x_is_sorted();
             }
 
             if (!x_data || !y_data || count == 0)
@@ -1120,8 +1125,30 @@ NearestPointResult DataInteraction::find_nearest(const CursorReadout& cursor, Fi
             // x_data is relative to the series x_offset; limits are absolute.
             const double xoff = series_ptr->x_offset();
 
-            // Linear scan for nearest point (screen-space distance)
-            for (size_t i = 0; i < count; ++i)
+            size_t query_begin = 0;
+            size_t query_end   = count;
+
+            // For monotonic X data, only points within the tooltip's horizontal
+            // snap radius can be interactable. Binary search that exact range;
+            // keep one neighbor on either side so nearest-point reporting stays
+            // stable just outside the snap window. Unsorted data retains the
+            // full scan and therefore identical behavior.
+            if (x_sorted && count > 64 && vp.w > 0.0f)
+            {
+                const double cursor_abs_x =
+                    xlim.min + (static_cast<double>(cx - vp.x) / vp.w) * x_range;
+                const double local_cursor_x = cursor_abs_x - xoff;
+                const double local_radius =
+                    std::abs(x_range) * static_cast<double>(tooltip_.snap_radius()) / vp.w;
+                const auto query = sorted_x_query_range(std::span<const float>(x_data, count),
+                                                        local_cursor_x,
+                                                        local_radius);
+                query_begin      = query.begin;
+                query_end        = query.end;
+            }
+
+            last_query_points_examined_ += query_end - query_begin;
+            for (size_t i = query_begin; i < query_end; ++i)
             {
                 // Convert data point to screen coordinates.  Compute the
                 // x normalization in double: (x + xoff - xlim.min) stays

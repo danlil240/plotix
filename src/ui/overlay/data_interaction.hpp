@@ -56,6 +56,7 @@ class DataInteraction
 
     // Nearest-point result from the last update
     const NearestPointResult& nearest_point() const { return nearest_; }
+    size_t last_query_points_examined() const { return last_query_points_examined_; }
 
     // Crosshair control
     bool crosshair_active() const { return crosshair_.enabled(); }
@@ -262,7 +263,8 @@ class DataInteraction
 
     // Region selection: remember which axes the ROI was started in
     // so it stays in the correct subplot when the cursor moves.
-    Axes* region_axes_ = nullptr;
+    Axes*          region_axes_                = nullptr;
+    mutable size_t last_query_points_examined_ = 0;
 };
 
 }   // namespace spectra
