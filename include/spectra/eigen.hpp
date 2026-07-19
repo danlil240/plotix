@@ -42,6 +42,7 @@
 #include <spectra/series.hpp>
 #include <spectra/series3d.hpp>
 #include <type_traits>
+#include <utility>
 
 namespace spectra
 {
@@ -71,18 +72,39 @@ struct is_eigen_float_vector<
 template <typename T>
 inline constexpr bool is_eigen_float_vector_v = is_eigen_float_vector<T>::value;
 
+template <typename PlainObject>
+class EvaluatedSpan
+{
+   public:
+    explicit EvaluatedSpan(PlainObject values) : values_(std::move(values)) {}
+
+    [[nodiscard]] const float* data() const { return values_.data(); }
+    [[nodiscard]] size_t       size() const { return static_cast<size_t>(values_.size()); }
+    [[nodiscard]] const float& operator[](size_t index) const { return data()[index]; }
+
+    operator std::span<const float>() const { return {data(), size()}; }
+
+   private:
+    PlainObject values_;
+};
+
 // Convert any contiguous Eigen float vector expression to std::span<const float>.
-// For non-contiguous expressions (e.g. strided maps), the caller must .eval() first.
+// Plain vectors remain zero-copy. Lazy expressions own their evaluated storage for
+// the lifetime of the returned proxy.
 template <typename Derived>
-std::span<const float> to_span(const Eigen::DenseBase<Derived>& v)
+auto to_span(const Eigen::DenseBase<Derived>& v)
 {
     static_assert(std::is_same_v<typename Derived::Scalar, float>,
                   "Spectra Eigen adapter requires float scalar type. "
                   "Use .cast<float>() to convert.");
-    // Evaluate lazy expressions into a temporary if needed.
-    // For plain vectors this is a no-op (returns a const ref).
-    const auto& evaluated = v.derived().eval();
-    return {evaluated.data(), static_cast<size_t>(evaluated.size())};
+    if constexpr (std::is_same_v<std::decay_t<Derived>, typename Derived::PlainObject>)
+    {
+        return std::span<const float>(v.derived().data(), static_cast<size_t>(v.size()));
+    }
+    else
+    {
+        return EvaluatedSpan<typename Derived::PlainObject>(v.derived().eval());
+    }
 }
 
 // Overload for Eigen::VectorXf and fixed-size vectors (already evaluated).
