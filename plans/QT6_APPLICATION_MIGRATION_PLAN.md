@@ -1,27 +1,28 @@
 # Spectra Qt 6 Application Migration Plan
 
 **Status:** Proposed  
-**Scope:** Production desktop frontend migration  
+**Scope:** Production desktop frontend migration and cross-platform release architecture  
 **Repository baseline:** `main` at `d6fd85633a941440938cff3e44f5c32dc2fed8cc`  
 **Primary goal:** Make Qt 6 the production cross-platform desktop platform for Spectra, including multiple native OS windows, detachable/dockable panels, native Wayland operation, menus, shortcuts, dialogs, accessibility, and high-DPI behavior, while retaining Spectra's Vulkan renderer and framework-neutral core.
 
 ---
 
-## 1. Executive decision
+## 1. Executive decisions
 
-Implement the desktop application using:
+Implement the production desktop application using:
 
-- **Qt 6.8+ Widgets** for the application shell and native desktop integration.
+- **Qt 6.8.x Widgets** for the application shell and native desktop integration.
 - **Direct Vulkan rendering into `QWindow` canvases**, embedded where needed with `QWidget::createWindowContainer()`.
-- **Spectra-owned Vulkan instance/device/renderer**, not `QVulkanWindow`, Qt RHI, or a Qt-owned render graph.
+- **Spectra-owned Vulkan instance, device, renderer, swapchains, and synchronization**, not `QVulkanWindow`, Qt RHI, or a Qt-owned render graph.
 - **Qt-owned event loop and native window lifecycle**.
 - **A docking-provider interface**:
-  - preferred advanced provider: **KDDockWidgets**, after an explicit licensing decision;
-  - mandatory dependency-free fallback: `QMainWindow` + `QDockWidget` + Spectra's own figure-tab/document host;
-  - Qt Advanced Docking System may remain an optional X11/Windows-oriented experiment, but must not be the native-Wayland default.
-- **A staged dual-frontend transition**. The existing GLFW/SDL3 + ImGui application remains buildable until the Qt frontend reaches parity and passes release gates.
+  - preferred advanced provider: **KDDockWidgets**, only after an explicit licensing decision;
+  - mandatory dependency-free fallback: `QMainWindow` + `QDockWidget` + Spectra's own document/figure host;
+  - Qt Advanced Docking System remains optional until independently validated against the native-Wayland acceptance matrix.
+- **A staged dual-frontend transition**. The existing GLFW/SDL3 + ImGui application remains buildable until the Qt frontend reaches parity and passes all release gates.
+- **A controlled Qt runtime for official releases**. Official packages must not depend on whichever Qt minor version happens to be installed by the operating system.
 
-This is **not** a rendering rewrite. The migration should preserve:
+This is **not** a rendering rewrite. Preserve:
 
 - `spectra-core`;
 - the Vulkan backend and renderer;
@@ -29,17 +30,234 @@ This is **not** a rendering rewrite. The migration should preserve:
 - the current public C++ plotting API;
 - the in-process and daemon/window-agent runtime modes.
 
-The migration replaces or retires:
+Replace or retire:
 
 - GLFW/SDL3 as the production desktop shell;
 - the custom `WindowManager` as the owner of native desktop windows;
 - ImGui as the primary application chrome, docking, panels, menus, dialogs, and settings UI;
 - custom cross-window drag logic based on global screen coordinates;
-- duplicated platform branches inside `App::init_runtime()`.
+- duplicated platform branches inside `App::init_runtime()`;
+- release packages that rely on an uncontrolled system Qt installation.
 
 ---
 
-## 2. Why this migration is justified
+## 2. Cross-platform release and Qt runtime policy
+
+### 2.1 Supported desktop targets
+
+The initial production support matrix is:
+
+| Platform | Architecture | Native window system | Official artifact |
+|---|---:|---|---|
+| Ubuntu 22.04 LTS | x86-64 | X11/XCB and Wayland | `.deb`, APT repository, AppImage |
+| Ubuntu 24.04 LTS | x86-64 | X11/XCB and Wayland | `.deb`, APT repository, AppImage |
+| Ubuntu 24.04 LTS | ARM64 | Wayland/X11 | later phase after x86-64 stabilization |
+| Windows 10/11 | x86-64 | Win32 | installer and portable ZIP |
+| macOS 12+ | Apple Silicon | Cocoa + MoltenVK | signed/notarized DMG |
+| macOS 12+ | Intel | Cocoa + MoltenVK | signed/notarized DMG while maintained |
+
+Windows ARM64 is not part of the first release gate. It may be added as a separate target after x86-64 reaches parity.
+
+### 2.2 Why official packages cannot rely on system Qt
+
+Ubuntu 22.04 and Ubuntu 24.04 provide different Qt minor versions, and both are older than the selected Qt 6.8 application baseline. Therefore, the official Spectra package must not assume that `apt install spectra` can safely link against the distribution's default Qt libraries.
+
+Official release policy:
+
+- pin a tested Qt **6.8.x patch version** per Spectra release train;
+- build and test Spectra against that exact runtime;
+- ship the required Qt runtime libraries and plugins privately with Spectra;
+- isolate them from KDE and other system applications;
+- allow source builds to use another compatible Qt only when explicitly configured and tested.
+
+This gives Spectra one predictable Qt API/ABI and platform-plugin behavior across supported operating systems.
+
+### 2.3 Ubuntu packaging model
+
+The user-facing installation remains:
+
+```bash
+sudo apt update
+sudo apt install spectra
+```
+
+The user does **not** manually install Qt development packages or run the Qt installer.
+
+Recommended package split:
+
+```text
+spectra
+  ├── Qt desktop executable
+  ├── depends on spectra-qt-runtime (= matching release)
+  ├── depends on libspectra runtime components
+  └── depends on Vulkan loader and normal OS libraries
+
+spectra-qt-runtime
+  ├── private Qt Core/Gui/Widgets libraries
+  ├── XCB and Wayland QPA plugins
+  ├── only the image/icon plugins Spectra uses
+  ├── Qt license notices
+  └── no global replacement of the distribution Qt
+
+spectra-backend
+  ├── daemon/headless executable
+  └── no Qt dependency
+
+libspectra-core
+  └── no Qt dependency
+
+libspectra-dev
+  ├── public headers and CMake package
+  └── Qt required only for the optional Qt adapter component
+```
+
+An equivalent single-package layout is acceptable initially, but the private runtime must remain isolated under a Spectra-owned directory, for example:
+
+```text
+/usr/bin/spectra
+/usr/lib/spectra/
+/usr/lib/spectra/qt/lib/
+/usr/lib/spectra/qt/plugins/platforms/
+/usr/share/spectra/
+```
+
+Use relative runtime search paths such as `$ORIGIN`-based RPATH/RUNPATH. Do not modify global `LD_LIBRARY_PATH` and do not install private Qt libraries into the generic `/usr/lib` namespace.
+
+### 2.4 Separate Ubuntu build baselines
+
+Produce separate `.deb` artifacts for Ubuntu 22.04 and Ubuntu 24.04.
+
+Do not build the only Linux artifact on Ubuntu 24.04 and assume it will execute on Ubuntu 22.04. A newer build environment can introduce a newer glibc and other system-symbol requirements.
+
+Required build strategy:
+
+```text
+Ubuntu 22.04 package:
+  build in a clean Ubuntu 22.04 container/runner
+  use the pinned Qt 6.8.x runtime built for that baseline
+  test on Ubuntu 22.04 and Ubuntu 24.04 where useful
+
+Ubuntu 24.04 package:
+  build in a clean Ubuntu 24.04 container/runner
+  use the same pinned Qt patch level, built for 24.04
+  test X11, GNOME Wayland, and KDE Wayland
+```
+
+The two packages may contain the same Spectra source revision but are independent binary artifacts.
+
+### 2.5 Linux runtime contents
+
+The private runtime should contain only required modules, typically:
+
+```text
+Qt6Core
+Qt6Gui
+Qt6Widgets
+Qt6DBus, only if used
+Qt6Svg, only if runtime SVG support is used
+QPA platform plugins:
+  xcb
+  wayland
+  wayland-egl or the applicable Qt 6.8 plugin set
+image format plugins actually used
+TLS/network plugins only if required
+```
+
+System-level libraries remain APT dependencies where appropriate:
+
+- glibc and libstdc++;
+- Vulkan loader;
+- XCB/X11 libraries;
+- Wayland client libraries;
+- xkbcommon;
+- fontconfig/freetype;
+- OpenGL/EGL libraries required by Qt platform plugins;
+- audio libraries only when used.
+
+Packaging tests must verify that CPack or `dpkg-shlibdeps` does not accidentally convert the private Qt runtime into dependencies on the distribution's older Qt packages.
+
+### 2.6 Windows deployment
+
+Build official Windows packages with MSVC 2022.
+
+Bundle:
+
+```text
+spectra.exe
+Qt6Core.dll
+Qt6Gui.dll
+Qt6Widgets.dll
+platforms/qwindows.dll
+required image/icon plugins
+Spectra libraries and assets
+Vulkan loader/runtime requirements not guaranteed by the OS
+```
+
+Use Qt's CMake deployment support or `windeployqt` as an input to packaging, then filter and validate the result. Do not copy an entire Qt installation blindly.
+
+Release artifacts:
+
+- signed installer, preferably WiX, Inno Setup, or an equivalent reproducible pipeline;
+- portable ZIP containing the same tested runtime;
+- optional symbols package for crash diagnostics.
+
+Test on clean Windows 10 and Windows 11 machines without a developer Qt installation or Vulkan SDK.
+
+### 2.7 macOS deployment
+
+macOS has no native Vulkan driver. Spectra must bundle and validate **MoltenVK**, which maps the Vulkan portability subset onto Metal.
+
+Bundle inside `Spectra.app`:
+
+```text
+Contents/MacOS/Spectra
+Contents/Frameworks/QtCore.framework
+Contents/Frameworks/QtGui.framework
+Contents/Frameworks/QtWidgets.framework
+Contents/Frameworks/MoltenVK.framework or libMoltenVK.dylib
+Contents/PlugIns/platforms/libqcocoa.dylib
+Contents/Resources/...
+```
+
+Vulkan initialization on macOS must:
+
+- enable `VK_KHR_portability_enumeration` when available;
+- set `VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR`;
+- accept devices exposing `VK_KHR_portability_subset`;
+- query features instead of assuming full desktop Vulkan support;
+- validate formats, MSAA, synchronization, shader behavior, and presentation under MoltenVK.
+
+Use `macdeployqt` or Qt CMake deployment support for the Qt frameworks, then explicitly add MoltenVK and Spectra assets. Sign nested libraries correctly, sign the final application, notarize it, staple the notarization ticket, and create the DMG.
+
+Create native ARM64 and x86-64 artifacts initially. A universal binary is optional after both native builds are stable.
+
+### 2.8 AppImage and portable Linux artifacts
+
+The AppImage must bundle the same controlled Qt version and required QPA plugins. It must be tested under:
+
+- Ubuntu 22.04 X11;
+- Ubuntu 22.04 Wayland;
+- Ubuntu 24.04 GNOME Wayland;
+- Ubuntu 24.04 KDE Wayland.
+
+The AppImage must not silently fall back to XWayland when native Wayland is available unless the user explicitly selects X11.
+
+### 2.9 Licensing obligations
+
+The deployment ADR must cover:
+
+- Qt LGPL/GPL or commercial-license obligations;
+- dynamic-linking and replacement/relinkability requirements;
+- inclusion of license notices and corresponding-source information where required;
+- MoltenVK Apache-2.0 notice;
+- KDDockWidgets GPL/commercial implications when enabled;
+- third-party plugin and font licenses.
+
+No packaging implementation is complete until license artifacts are present in every release format.
+
+---
+
+## 3. Why the migration is justified
 
 Spectra already supports multiple Vulkan swapchains and stable figure ownership, but the current frontend implements desktop behavior itself. That creates substantial platform-specific code for:
 
@@ -51,7 +269,7 @@ Spectra already supports multiple Vulkan swapchains and stable figure ownership,
 - DPI, monitor movement, resize, and surface lifecycle;
 - menus, shortcuts, dialogs, clipboard, drag-and-drop, and accessibility.
 
-Qt already provides the platform abstraction needed for Windows, macOS, X11, and native Wayland. The renderer should consume Qt-created surfaces while remaining independent of Qt above the adapter boundary.
+Qt provides the platform abstraction needed for Windows, macOS, X11, and native Wayland. The renderer should consume Qt-created surfaces while remaining independent of Qt above the adapter boundary.
 
 The repository is well-positioned for an incremental migration because it already contains:
 
@@ -65,9 +283,9 @@ The repository is well-positioned for an incremental migration because it alread
 
 ---
 
-## 3. Current architecture assessment
+## 4. Current architecture assessment
 
-### 3.1 Build graph
+### 4.1 Build graph
 
 Current root options include:
 
@@ -99,14 +317,13 @@ spectra_qt_adapter
 
 Problems:
 
-- `spectra` is still a large mixed target containing renderer, application runtime, platform code, automation, and UI.
-- `spectra_qt_adapter` links the full `spectra` target instead of a clean renderer/application-services layer.
+- `spectra` is still a mixed target containing renderer, application runtime, platform code, automation, and UI;
+- `spectra_qt_adapter` links the full `spectra` target rather than a clean renderer/application-services layer;
 - the production `spectra-app` target is only created when GLFW or SDL3 is enabled;
-- ImGui is only configured when GLFW or SDL3 is enabled;
-- many framework-neutral UI services are listed under the ImGui source block;
-- the root CMake file is overburdened and makes frontend ownership difficult to reason about.
+- many framework-neutral services are compiled under the ImGui source block;
+- root CMake is overburdened and frontend ownership is difficult to reason about.
 
-### 3.2 Application lifecycle
+### 4.2 Application lifecycle
 
 `src/app/main.cpp` currently performs:
 
@@ -121,13 +338,13 @@ Problems:
 - in-process and multiprocess dispatch;
 - `init_runtime()`, `step()`, and `shutdown_runtime()`;
 - headless support;
-- stable figure registry access;
+- stable figure-registry access;
 - graceful signal-driven shutdown.
 
 The principal lifecycle problem is `src/ui/app/app_step.cpp`. It currently combines:
 
 - backend and renderer construction;
-- settings and plugin service setup;
+- settings and plugin-service setup;
 - GLFW/SDL3 initialization;
 - window-manager creation;
 - UI-context construction;
@@ -137,19 +354,19 @@ The principal lifecycle problem is `src/ui/app/app_step.cpp`. It currently combi
 - frame scheduling;
 - capture/export state.
 
-It also contains nearly duplicated GLFW and SDL3 startup branches. This file must be decomposed before Qt becomes the default application frontend.
+It also contains nearly duplicated GLFW and SDL3 startup branches. Decompose it before Qt becomes the default frontend.
 
-### 3.3 Vulkan and native surfaces
+### 4.3 Vulkan and native surfaces
 
-The current per-window design is fundamentally correct:
+The current resource split is fundamentally correct:
 
 ```text
-Shared:
+Shared per process:
   VkInstance
   VkPhysicalDevice
   VkDevice
   queues
-  command pool strategy
+  command-pool strategy
   pipelines
   descriptor infrastructure
   uploaded series resources
@@ -172,27 +389,25 @@ Per canvas/native render window:
 - surface creation;
 - framebuffer size;
 - presentation support;
-- surface lifecycle/destruction policy.
+- surface lifecycle and destruction policy.
 
-`QtSurfaceHost` already uses `QWindow`, `QVulkanInstance`, and physical-pixel sizing through the window device-pixel ratio.
+`QtSurfaceHost` already uses `QWindow`, `QVulkanInstance`, and physical-pixel sizing through device-pixel ratio.
 
-The remaining renderer/platform debt is:
+Remaining renderer/platform debt:
 
-- the legacy `WindowContext::glfw_window`;
-- ImGui context ownership inside renderer-facing `WindowContext`;
-- mutable global `VulkanBackend::set_active_window()` behavior;
-- frontend-specific flags such as preview/panel/title-bar drag state inside `WindowContext`;
-- incomplete surface-generation handling during Qt platform-surface destruction and recreation.
+- legacy `WindowContext::glfw_window`;
+- ImGui ownership inside renderer-facing `WindowContext`;
+- global mutable `VulkanBackend::set_active_window()` behavior;
+- frontend-only preview/panel/title-bar state in `WindowContext`;
+- incomplete surface-generation handling during Qt surface destruction and recreation.
 
-### 3.4 Existing Qt implementation
-
-The current Qt work is not placeholder-only.
+### 4.4 Existing Qt implementation
 
 `QtRuntime` already supports:
 
 - one shared Vulkan backend and renderer;
 - multiple attached `QWindow` objects;
-- a distinct `WindowContext` per `QWindow`;
+- one `WindowContext` per `QWindow`;
 - per-window begin/render/end APIs;
 - resize debounce;
 - detach and reattach;
@@ -201,17 +416,17 @@ The current Qt work is not placeholder-only.
 
 `examples/qt_embed_demo.cpp` already demonstrates:
 
-- a `QWindow` with `QSurface::VulkanSurface`;
+- `QSurface::VulkanSurface`;
 - `QPlatformSurfaceEvent` handling;
 - expose/minimize/restore behavior;
-- device-pixel-ratio tracking;
+- DPR tracking;
 - Qt input forwarding;
-- multiple Vulkan canvases sharing one runtime;
+- multiple canvases sharing one runtime;
 - detach/reattach behavior.
 
-The correct next step is to **promote and refactor this implementation into production components**, not create a second Qt renderer path.
+Promote and refactor this implementation into production components. Do not create a second Qt renderer path.
 
-### 3.5 UI and application services
+### 4.5 UI and application services
 
 Useful framework-neutral components already exist:
 
@@ -225,18 +440,13 @@ Useful framework-neutral components already exist:
 - transforms and export registries;
 - data-source and custom-series registries;
 - plugin manager;
-- automation command handlers.
+- automation handlers.
 
-However, several of these are currently:
+Several are currently compiled only under `SPECTRA_USE_IMGUI`, owned by `WindowUIContext`, wired directly to `ImGuiIntegration`, or expressed as immediate-mode `draw()` callbacks.
 
-- compiled only under `SPECTRA_USE_IMGUI`;
-- owned by `WindowUIContext`;
-- wired directly to `ImGuiIntegration`;
-- represented by immediate-mode `draw()` callbacks.
+Extract models/controllers before replacing views. Qt widgets must invoke the same services rather than duplicating business logic.
 
-The migration must extract models/controllers from rendering widgets. Qt widgets should observe and invoke the same underlying services rather than duplicating business logic.
-
-### 3.6 Custom native-window stack to retire
+### 4.6 Native-window stack to retire
 
 `WindowManager` currently owns:
 
@@ -254,62 +464,40 @@ The migration must extract models/controllers from rendering widgets. Qt widgets
 
 Do not mechanically port this class to Qt.
 
-Retain only the reusable concepts:
+Retain only reusable concepts:
 
-- stable `WindowId`/`CanvasId`;
+- stable `WindowId` and `CanvasId`;
 - figure-to-window assignment;
-- close-request deferral where required by the renderer;
+- deferred close requests where required by renderer safety;
 - shared versus per-window Vulkan resource rules;
 - semantic events for figure detach, attach, move, focus, and close.
 
-Qt and the selected docking provider should own native drag, docking, focus, activation, top-level windows, and window-manager interaction.
-
-### 3.7 Workspace and plugins
-
-`WorkspaceData` is currently format version 4 and contains:
-
-- figures and axes;
-- panel visibility;
-- custom `dock_state`;
-- shortcut overrides;
-- plugins;
-- transforms;
-- timeline and theme state.
-
-The Qt migration requires workspace format version 5 with separate fields for:
-
-- framework-neutral document/figure state;
-- Qt main-window geometry;
-- Qt toolbar/dock state or docking-provider layout;
-- multiple main-window topology;
-- floating-group topology;
-- per-window active figure;
-- per-screen restoration hints.
-
-The stable C plugin ABI must remain compatible. Direct plugin UI callbacks are frontend-specific and require a compatibility strategy rather than an immediate ABI break.
+Qt and the docking provider own native drag, docking, focus, activation, top-level windows, and window-manager interaction.
 
 ---
 
-## 4. Architecture principles
+## 5. Architecture principles
 
 1. **Qt is the desktop platform, not the renderer.**
 2. **No Qt types in public core/render headers.**
-3. **No GLFW, SDL3, or ImGui types below frontend adapter targets.**
+3. **No GLFW, SDL3, or ImGui types below frontend-adapter targets.**
 4. **One Vulkan device and renderer per process by default.**
 5. **One render context per Vulkan canvas.**
 6. **Figures and application services outlive individual windows.**
 7. **Native windows are created and destroyed only by Qt/docking code.**
-8. **Rendering happens only while a valid Qt platform surface generation exists.**
-9. **No production feature may depend on global desktop coordinates.**
-10. **Semantic commands are the single source of truth for menus, shortcuts, command palette, automation, and plugins.**
+8. **Rendering occurs only while a valid Qt platform-surface generation exists.**
+9. **No production feature depends on global desktop coordinates.**
+10. **Semantic commands are the source of truth for menus, shortcuts, automation, plugins, and the command palette.**
 11. **The legacy frontend remains buildable until Qt parity is demonstrated.**
-12. **Headless, library, Python, and daemon use cases must not acquire a Qt dependency.**
-13. **UI migration is model-first: extract state and operations before replacing views.**
-14. **Wayland is a supported native target, not an XWayland fallback mode.**
+12. **Headless, library, Python, and daemon use cases remain Qt-free.**
+13. **UI migration is model-first.**
+14. **Native Wayland is a supported target, not an XWayland fallback.**
+15. **Official packages use a pinned, controlled Qt runtime.**
+16. **Release artifacts are built and tested separately per supported OS baseline.**
 
 ---
 
-## 5. Target dependency graph
+## 6. Target dependency graph
 
 ```text
                          ┌────────────────────────────┐
@@ -346,16 +534,14 @@ The stable C plugin ABI must remain compatible. Direct plugin UI callbacks are f
 Optional compatibility frontend:
 
 spectra-legacy-frontend
-  └── GLFW or SDL3 + ImGui, linked to the same app services and renderer
+  └── GLFW or SDL3 + ImGui, linked to the same services and renderer
 ```
-
-Recommended target names may be adjusted during implementation, but the dependency direction is mandatory.
 
 ---
 
-## 6. Ownership model
+## 7. Ownership model
 
-### 6.1 Process-scoped ownership
+### 7.1 Process-scoped services
 
 Create a framework-neutral owner, tentatively:
 
@@ -390,7 +576,7 @@ It owns or coordinates:
 
 It must not include Qt, GLFW, SDL, or ImGui headers.
 
-### 6.2 Qt application ownership
+### 7.2 Qt application ownership
 
 ```text
 QApplication
@@ -414,17 +600,15 @@ Qt owns:
 - native focus/activation;
 - docking-provider objects.
 
-### 6.3 Canvas ownership
-
-Each visible plot canvas should have:
+### 7.3 Canvas ownership
 
 ```text
 FigureCanvasWidget
   └── QWidget::createWindowContainer(...)
        └── SpectraVulkanWindow : QWindow
-            ├── stable CanvasId
-            ├── FigureId or pane/document model
-            ├── InputRouter
+            ├── CanvasId
+            ├── FigureId/view model
+            ├── QtInputRouter
             └── surface-generation token
 
 QtRenderRuntime
@@ -432,15 +616,13 @@ QtRenderRuntime
        └── WindowContext
 ```
 
-Avoid using `QWindow*` as the long-term application identity. Use stable IDs and treat pointers as adapter-local handles.
+Do not use `QWindow*` as application identity. Use stable IDs and keep pointers adapter-local.
 
 ---
 
-## 7. Docking decision and licensing gate
+## 8. Docking decision and licensing gate
 
-### 7.1 Required abstraction
-
-Introduce:
+### 8.1 Required abstraction
 
 ```cpp
 class DockingHost {
@@ -455,105 +637,99 @@ public:
 };
 ```
 
-The application must not directly depend on `QDockWidget` or KDDockWidgets APIs outside provider implementations.
+The application must not directly depend on provider APIs outside provider implementations.
 
-### 7.2 Provider A: KDDockWidgets
+### 8.2 KDDockWidgets provider
 
 Preferred for advanced IDE-style behavior:
 
 - grouped floating windows;
-- dock widgets inside floating windows;
+- docks inside floating windows;
 - redocking groups;
 - multiple main windows;
-- stronger layout model and customization;
-- explicit support for Qt Widgets and native Wayland.
+- stronger layout model;
+- Qt Widgets and native-Wayland support.
 
-**Mandatory gate:** KDDockWidgets is GPL-2.0/GPL-3.0 or commercially licensed. Spectra is MIT. Before making it a required dependency, choose one:
+**Mandatory gate:** choose and record one policy:
 
-1. accept GPL distribution requirements for the application frontend;
+1. accept applicable GPL distribution requirements;
 2. obtain a commercial license;
-3. keep it optional and ship the native Qt provider by default.
+3. keep the provider optional and ship native Qt by default.
 
-The repository must document the selected policy in an ADR and packaging metadata.
+### 8.3 Native Qt provider
 
-### 7.3 Provider B: native Qt
-
-Mandatory fallback with no additional docking dependency:
+Mandatory fallback:
 
 - `QMainWindow`;
 - `QDockWidget` for tool panels;
-- custom central figure/document tab host;
+- custom central document/figure tab host;
 - detached figures become another `QMainWindow` or top-level document window;
-- `QMainWindow::saveState()` and `saveGeometry()` for layout persistence.
+- `saveState()` and `saveGeometry()` for persistence.
 
-This provider may have less sophisticated grouped floating behavior, but it provides a reliable baseline and protects the project from licensing or dependency blockers.
+### 8.4 Qt Advanced Docking System
 
-### 7.4 Provider C: Qt Advanced Docking System
-
-Optional only. Do not make it the native-Wayland baseline until its Wayland limitations are independently validated against Spectra's acceptance matrix.
+Optional until native-Wayland detach/redock behavior, licensing, maintenance, and packaging pass Spectra's acceptance matrix.
 
 ---
 
-## 8. Proposed source layout
+## 9. Proposed source layout
 
 ```text
 src/
   app/
-    application_services.hpp/.cpp
-    application_bootstrap.hpp/.cpp
-    session_controller.hpp/.cpp
-    shutdown_coordinator.hpp/.cpp
+    application_services.*
+    application_bootstrap.*
+    session_controller.*
+    shutdown_coordinator.*
 
   ui/
     model/
-      panel_descriptor.hpp
-      document_model.hpp/.cpp
-      main_window_model.hpp/.cpp
-      selection_model.hpp/.cpp
-      application_state.hpp/.cpp
+      panel_descriptor.*
+      document_model.*
+      main_window_model.*
+      selection_model.*
+      application_state.*
     controllers/
-      figure_controller.hpp/.cpp
-      workspace_controller.hpp/.cpp
-      panel_controller.hpp/.cpp
-      command_controller.hpp/.cpp
+      figure_controller.*
+      workspace_controller.*
+      panel_controller.*
+      command_controller.*
 
-  render/
-    vulkan/
-      render_window_state.hpp
-      window_context.hpp
-      vk_backend.*
-      renderer.*
+  render/vulkan/
+    render_window_state.*
+    window_context.*
+    vk_backend.*
+    renderer.*
 
-  adapters/
-    qt/
-      qt_application.hpp/.cpp
-      qt_main_window.hpp/.cpp
-      qt_main_window_registry.hpp/.cpp
-      qt_render_runtime.hpp/.cpp
-      qt_surface_host.hpp/.cpp
-      spectra_vulkan_window.hpp/.cpp
-      figure_canvas_widget.hpp/.cpp
-      qt_render_scheduler.hpp/.cpp
-      qt_input_router.hpp/.cpp
-      qt_action_bridge.hpp/.cpp
-      qt_dialog_service.hpp/.cpp
-      qt_clipboard_service.hpp/.cpp
-      qt_workspace_bridge.hpp/.cpp
-      qt_theme_bridge.hpp/.cpp
+  adapters/qt/
+    qt_application.*
+    qt_main_window.*
+    qt_main_window_registry.*
+    qt_render_runtime.*
+    qt_surface_host.*
+    spectra_vulkan_window.*
+    figure_canvas_widget.*
+    qt_render_scheduler.*
+    qt_input_router.*
+    qt_action_bridge.*
+    qt_dialog_service.*
+    qt_clipboard_service.*
+    qt_workspace_bridge.*
+    qt_theme_bridge.*
 
-      docking/
-        docking_host.hpp
-        native_qt_docking_host.hpp/.cpp
-        kddockwidgets_host.hpp/.cpp
+    docking/
+      docking_host.hpp
+      native_qt_docking_host.*
+      kddockwidgets_host.*
 
-      panels/
-        inspector_widget.hpp/.cpp
-        topics_widget.hpp/.cpp
-        settings_widget.hpp/.cpp
-        timeline_widget.hpp/.cpp
-        data_sources_widget.hpp/.cpp
-        command_palette_dialog.hpp/.cpp
-        welcome_widget.hpp/.cpp
+    panels/
+      inspector_widget.*
+      topics_widget.*
+      settings_widget.*
+      timeline_widget.*
+      data_sources_widget.*
+      command_palette_dialog.*
+      welcome_widget.*
 
   legacy/
     imgui/
@@ -561,18 +737,19 @@ src/
     sdl3/
 ```
 
-Do not move all files at once. Create clean targets and migrate ownership before large directory moves.
+Do not move all files at once. Establish target and ownership boundaries first.
 
 ---
 
-## 9. CMake plan
+## 10. CMake plan
 
-### 9.1 New options
+### 10.1 Options
 
 ```cmake
 option(SPECTRA_BUILD_QT_APP "Build the production Qt 6 desktop app" ON)
 option(SPECTRA_BUILD_LEGACY_APP "Build the legacy GLFW/SDL3 + ImGui app" ON)
 option(SPECTRA_BUILD_QT_TESTS "Build Qt GUI and integration tests" ON)
+option(SPECTRA_PACKAGE_PRIVATE_QT "Package the controlled private Qt runtime" ON)
 
 set(SPECTRA_QT_DOCKING_PROVIDER "native"
     CACHE STRING "Qt docking provider: native | kddockwidgets | qtads")
@@ -580,11 +757,9 @@ set_property(CACHE SPECTRA_QT_DOCKING_PROVIDER
              PROPERTY STRINGS native kddockwidgets qtads)
 ```
 
-During migration, keep the default Qt app option `OFF` for one or more phases if required to protect release packaging. Switch it to `ON` only after the cutover gate.
+During migration, the Qt app may remain default-OFF until the cutover gate. Official release builds must explicitly enable the private-runtime packaging path.
 
-### 9.2 Qt components
-
-Initial production target:
+### 10.2 Qt discovery
 
 ```cmake
 find_package(Qt6 6.8 REQUIRED COMPONENTS
@@ -595,53 +770,72 @@ find_package(Qt6 6.8 REQUIRED COMPONENTS
 )
 ```
 
-Add `Svg` only when SVG icons are actually used at runtime. Avoid unnecessary modules.
+Add modules only when needed. Enable `AUTOMOC`, `AUTOUIC`, and `AUTORCC` only on Qt targets.
 
-Enable `AUTOMOC`, `AUTOUIC`, and `AUTORCC` only on Qt targets.
+Source/developer builds may point `CMAKE_PREFIX_PATH` to a compatible Qt installation. Official release builds must use the pinned Qt toolchain/runtime revision.
 
-### 9.3 Target separation
+### 10.3 Target separation
 
 Required end state:
 
-- `spectra-core`: unchanged framework-free target;
-- `spectra-render-vulkan`: Vulkan renderer and surface-host interface;
-- `spectra-app-services`: application/session/workspace/plugin/automation services;
-- `spectra-qt-platform`: Qt GUI and Vulkan surface/canvas integration;
-- `spectra-qt-widgets`: shell, panels, docking, actions;
-- `spectra-app`: Qt executable;
-- `spectra-legacy-app`: optional compatibility executable.
+- `spectra-core`;
+- `spectra-render-vulkan`;
+- `spectra-app-services`;
+- `spectra-qt-platform`;
+- `spectra-qt-widgets`;
+- `spectra-app`;
+- `spectra-legacy-app`;
+- optional `spectra-qt-runtime` packaging component.
 
-The installed C++ library package must not require Qt unless consumers explicitly request the Qt adapter component.
+The installed library and headless packages must not depend on Qt unless consumers request the Qt adapter.
 
-### 9.4 Dependency acquisition
+### 10.4 Deployment integration
+
+Add deployment helpers under `cmake/deployment/`:
+
+```text
+QtRuntimeManifest.cmake
+DeployQtLinux.cmake
+DeployQtWindows.cmake
+DeployQtMacOS.cmake
+ValidateRuntimeClosure.cmake
+```
+
+They must:
+
+- collect only required Qt libraries/plugins;
+- preserve private runtime layout;
+- configure relative RPATH/RUNPATH;
+- generate license manifests;
+- fail if developer paths leak into artifacts;
+- validate missing shared-library dependencies;
+- produce deterministic file manifests for CI comparison.
+
+### 10.5 Docking dependency acquisition
 
 For KDDockWidgets:
 
-- prefer `find_package(KDDockWidgets CONFIG)` for system/vcpkg/package-manager builds;
-- optionally provide a pinned `FetchContent` path;
+- prefer `find_package(KDDockWidgets CONFIG)`;
+- optionally provide a pinned `FetchContent` source;
 - never follow an unpinned branch;
 - expose an offline build path;
-- record license artifacts in packages;
-- make the dependency optional until the licensing gate is closed.
+- include license artifacts;
+- keep it optional until the licensing gate closes.
 
 ---
 
-## 10. Event loop and frame scheduling
+## 11. Event loop and frame scheduling
 
-Qt owns the event loop. Remove the concept that the production frontend must run a blocking manual event-poll loop.
-
-### 10.1 Scheduling rules
+Qt owns the event loop. The production frontend must not run a blocking manual poll loop.
 
 Use event-driven rendering:
 
 - `QWindow::requestUpdate()` for redraw requests;
 - queued Qt signals for thread-to-GUI notifications;
-- a precise timer only while animation or high-rate streaming requires continuous frames;
+- a timer only while animation or high-rate streaming requires continuous frames;
 - stop continuous timers while idle, hidden, minimized, or fully occluded where detectable;
-- coalesce multiple data and resize notifications into one frame;
-- preserve `FrameScheduler` as the policy engine.
-
-Suggested flow:
+- coalesce data and resize notifications;
+- preserve `FrameScheduler` as policy engine.
 
 ```text
 data/input/animation/workspace event
@@ -660,66 +854,57 @@ SpectraVulkanWindow::event(UpdateRequest)
 QtRenderRuntime::render(canvas_id)
 ```
 
-### 10.2 Thread policy
+Initial threading policy:
 
-Initial implementation:
+- Qt objects stay on the GUI thread;
+- Vulkan recording/submission stays on the GUI thread during migration;
+- ingestion and background services remain on worker threads;
+- workers publish synchronized model updates and queued redraw requests.
 
-- all Qt objects remain on the GUI thread;
-- Vulkan recording/submission remains on the GUI thread to minimize migration risk;
-- data ingestion and existing background services continue on worker threads;
-- worker threads publish immutable or synchronized model changes and queued redraw requests.
-
-A dedicated render thread is a later optimization and is explicitly out of scope until the Qt frontend is stable and profiled.
+A dedicated render thread is out of scope until the Qt frontend is stable and profiled.
 
 ---
 
-## 11. Vulkan lifecycle requirements
+## 12. Vulkan lifecycle requirements
 
-### 11.1 QVulkan ownership
+### 12.1 QVulkan ownership
 
-Continue using the existing strategy:
+Continue the existing strategy:
 
-- Spectra creates the `VkInstance`;
-- the instance is adopted by `QVulkanInstance`;
-- each canvas is a `QWindow` with `QSurface::VulkanSurface`;
-- Qt creates/owns the platform `VkSurfaceKHR` returned for the `QWindow`;
-- Spectra owns swapchain and all device-level resources.
+- Spectra creates `VkInstance`;
+- `QVulkanInstance` adopts it;
+- each canvas is a Vulkan `QWindow`;
+- Qt creates/owns the platform surface associated with the `QWindow`;
+- Spectra owns swapchain and device-level resources.
 
-Do not introduce `QVulkanWindow`; it would duplicate or override Spectra's renderer/device/swapchain lifecycle.
+Do not introduce `QVulkanWindow`.
 
-### 11.2 Surface generations
+### 12.2 Surface generations
 
-Add a monotonically increasing surface generation to each canvas.
+Add a monotonically increasing generation to each canvas.
 
-On `QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed`:
+On `SurfaceAboutToBeDestroyed`:
 
-1. stop scheduling new frames for that canvas;
-2. mark generation invalid;
-3. wait only for that canvas's relevant fences;
+1. stop new frames for that canvas;
+2. invalidate its generation;
+3. wait only for relevant fences;
 4. destroy swapchain-dependent resources;
-5. release the Qt-associated surface reference according to `QtSurfaceHost` ownership rules;
-6. retain the `FigureId` and UI document state.
+5. release surface references according to adapter ownership;
+6. retain figure and document state.
 
-On `SurfaceCreated` or first valid exposure:
+On surface creation or first exposure:
 
 1. increment generation;
 2. create/retrieve the surface;
-3. verify queue-family presentation support;
-4. create swapchain resources from physical pixel size;
+3. verify presentation support;
+4. create swapchain resources from physical-pixel size;
 5. request a full redraw.
 
-Every asynchronous frame request must carry or validate the generation to prevent rendering to a destroyed surface.
+Every asynchronous frame request validates the generation.
 
-### 11.3 Explicit render target
+### 12.3 Explicit render target
 
 Phase out global mutable active-window state.
-
-Transitional API:
-
-```cpp
-RenderWindowScope scope = backend.activate(window_context);
-renderer.render(scope, figure, frame_state);
-```
 
 Target API:
 
@@ -729,26 +914,32 @@ renderer.render_figure(window_context, figure, frame_state);
 backend.end_frame(window_context);
 ```
 
-No renderer call should silently depend on a previously selected global window after the migration is complete.
+### 12.4 Resize and DPR
 
-### 11.4 Resize and DPR
-
-- logical Qt size is not swapchain size;
-- always calculate physical extent from current `QWindow::devicePixelRatio()`;
-- respond to resize, screen change, and device-pixel-ratio change;
+- derive swapchain extent from logical size and current DPR;
+- respond to resize, screen, and DPR changes;
 - coalesce interactive resize events;
-- handle zero-size/minimized windows without swapchain recreation loops;
-- recreate immediately for Vulkan `OUT_OF_DATE`;
-- recover cleanly from `SURFACE_LOST`;
-- do not call `vkDeviceWaitIdle()` for routine per-window resize.
+- handle zero-size/minimized windows without recreation loops;
+- recreate immediately for `OUT_OF_DATE`;
+- recover from `SURFACE_LOST`;
+- avoid `vkDeviceWaitIdle()` for routine resize.
+
+### 12.5 MoltenVK portability
+
+Add a portability policy to Vulkan bootstrap:
+
+- enumerate extensions before instance creation;
+- conditionally enable portability enumeration;
+- select devices exposing portability subset;
+- make unsupported optional features degrade explicitly;
+- add macOS renderer capability reports to diagnostics;
+- maintain a MoltenVK-specific test list for line width, MSAA, depth, blending, text, timestamp queries, and swapchain formats.
 
 ---
 
-## 12. Input and interaction migration
+## 13. Input and interaction migration
 
-### 12.1 Framework-neutral input vocabulary
-
-Create explicit Spectra input types independent of GLFW numeric values:
+Create framework-neutral input types independent of GLFW values:
 
 ```cpp
 enum class PointerButton;
@@ -758,51 +949,39 @@ enum class PointerEventType;
 enum class KeyEventType;
 ```
 
-Events should contain:
+Events carry:
 
-- logical position;
-- physical-pixel position;
+- logical and physical-pixel position;
 - local canvas position;
 - pointer type;
 - pressure/tilt where available;
 - modifiers;
 - timestamp;
-- device-pixel ratio;
+- DPR;
 - canvas ID.
-
-### 12.2 Qt input router
 
 `QtInputRouter` maps:
 
 - mouse move/press/release/double-click;
-- wheel pixel and angle deltas;
+- pixel and angle wheel deltas;
 - key press/release;
-- text/IME events;
-- tablet/stylus events;
-- touch/gesture events;
-- drag-and-drop;
+- text and IME;
+- tablet/stylus;
+- touch/gesture;
+- drag/drop;
 - focus enter/leave.
 
-Preserve current pan, zoom, selection, measurement, annotations, 3D orbit, and keyboard navigation by routing into existing controllers.
+Preserve pan, zoom, selection, measurement, annotations, 3D orbit, and keyboard navigation through existing controllers.
 
-Do not use global cursor position for docking. Qt/docking-provider operations must use native framework drag APIs.
+Do not use global cursor position for docking.
 
-### 12.3 Shortcuts
+### 13.1 Shortcuts and actions
 
-`CommandRegistry` remains the source of truth.
-
-`QtActionBridge` creates and updates `QAction` objects from command descriptors:
-
-- label;
-- category/menu path;
-- icon;
-- enabled/checked state;
-- shortcut;
-- application/window/widget shortcut context.
+`CommandRegistry` remains the source of truth. `QtActionBridge` creates and updates `QAction` objects from command descriptors.
 
 The same command ID remains callable from:
 
-- menus/toolbars;
+- menus and toolbars;
 - command palette;
 - plugin API;
 - automation/MCP;
@@ -811,11 +990,11 @@ The same command ID remains callable from:
 
 ---
 
-## 13. Qt shell design
+## 14. Qt shell design
 
-### 13.1 Main window
+### 14.1 Main window
 
-`SpectraMainWindow` should contain:
+`SpectraMainWindow` contains:
 
 - native menu bar;
 - configurable toolbars;
@@ -825,9 +1004,9 @@ The same command ID remains callable from:
 - command palette action;
 - welcome page when no figures are open.
 
-No special "primary renderer window" semantics should leak into models. A main window is a host for documents and panels.
+No primary-renderer-window semantics may leak into models.
 
-### 13.2 Figure documents
+### 14.2 Figure documents
 
 Each figure is a document identified by `FigureId`.
 
@@ -843,18 +1022,14 @@ Required operations:
 - restore from workspace;
 - focus/activate without changing ownership.
 
-The document model must distinguish:
+Distinguish:
 
 - figure identity;
-- view instance identity;
-- native main-window identity;
+- view-instance identity;
+- main-window identity;
 - canvas identity.
 
-This prevents future limitations such as showing the same figure in two synchronized views.
-
-### 13.3 Panels
-
-Convert panels incrementally:
+### 14.3 Panel migration order
 
 1. Inspector;
 2. Topics/data sources;
@@ -863,26 +1038,24 @@ Convert panels incrementally:
 5. Series/data editor;
 6. export/recording;
 7. plugin diagnostics;
-8. ROS2/PX4-specific tools.
+8. ROS2/PX4 tools.
 
-Each panel should use a controller/view-model and avoid direct renderer mutation from widget paint code.
+Each panel uses a controller/view-model and avoids direct renderer mutation from widget paint code.
 
-### 13.4 Themes and icons
+### 14.4 Themes and icons
 
-- map Spectra theme tokens to a Qt palette and style sheet;
+- map Spectra tokens to Qt palette/style sheet;
 - preserve plot/data colors in `ThemeManager`;
-- use `QIcon` resources with high-DPI variants;
-- avoid hardcoded pixel sizes;
-- test system light/dark theme changes;
-- retain a Spectra-specific theme override.
+- use high-DPI `QIcon` resources;
+- avoid fixed pixel assumptions;
+- test system theme changes;
+- retain Spectra theme override.
 
 ---
 
-## 14. Workspace version 5
+## 15. Workspace version 5
 
-Add a versioned Qt layout section without corrupting old workspaces.
-
-Suggested structure:
+Add a versioned Qt desktop-layout section without corrupting older workspaces.
 
 ```cpp
 struct DesktopLayoutState {
@@ -897,63 +1070,49 @@ struct DesktopLayoutState {
 
 Migration rules:
 
-- v4 files load figure, axis, series, interaction, shortcut, plugin, and theme state;
-- legacy ImGui `dock_state` is ignored or converted only where deterministic;
-- a sensible default Qt layout is generated;
-- v5 files retain a legacy-compatible subset where possible;
-- invalid or unavailable monitor geometry is clamped to an available screen;
-- native Wayland restores topology and sizes but does not promise exact absolute floating positions;
-- layout-provider changes fall back to a default layout while preserving figures and panels.
+- v4 loads figure, axis, series, interaction, shortcut, plugin, and theme state;
+- legacy ImGui `dock_state` is converted only where deterministic;
+- otherwise generate a sensible Qt layout;
+- v5 retains a legacy-compatible subset where possible;
+- invalid monitor geometry is clamped to available screens;
+- native Wayland restores topology and sizes but does not promise exact absolute positions;
+- unavailable providers fall back without losing figures/panels.
 
-Add explicit round-trip and corruption tests.
+Add round-trip, corruption, provider-mismatch, and missing-monitor tests.
 
 ---
 
-## 15. Plugin compatibility strategy
-
-### 15.1 Preserve stable ABI
+## 16. Plugin compatibility
 
 Do not break plugin API v2.0 merely to migrate the frontend.
 
-Keep:
+Preserve:
 
-- command registration;
+- commands;
 - transforms;
 - overlays;
 - exporters;
 - data sources;
 - custom series;
-- backend handle contracts where already supported.
+- current backend-handle contracts.
 
-### 15.2 UI callbacks
-
-`SpectraDataSourceBuildUIFn` and any immediate-mode extension points are frontend-specific.
+Immediate-mode plugin UI callbacks are frontend-specific.
 
 Migration policy:
 
-1. retain the callback in the legacy frontend;
-2. in Qt, show a compatibility notice or a generic controls panel when no portable schema exists;
-3. introduce a new optional, versioned UI-description API:
-   - properties;
-   - actions;
-   - enum choices;
-   - validation;
-   - status text;
-   - model updates;
-4. render that schema in both Qt and legacy frontends;
-5. deprecate direct immediate-mode UI callbacks in a future major plugin API version.
+1. retain them in the legacy frontend;
+2. show a compatibility notice or generic controls panel in Qt;
+3. introduce an optional versioned UI-description API for properties, actions, enums, validation, status, and model updates;
+4. render that schema in both frontends;
+5. deprecate immediate-mode callbacks only in a future major plugin API.
 
-Overlay drawing helpers should remain renderer-neutral and continue to avoid requiring plugins to link Qt or ImGui.
+Overlay helpers remain renderer-neutral and must not require plugin linkage to Qt or ImGui.
 
 ---
 
-## 16. Automation, MCP, and testability
+## 17. Automation and testability
 
-The Qt migration must not regress automated control.
-
-### 16.1 Semantic automation first
-
-Prefer operations such as:
+Prefer semantic operations:
 
 ```text
 execute_command("file.open")
@@ -964,23 +1123,17 @@ set_axis_limits(...)
 capture_canvas(...)
 ```
 
-over raw pixel clicks.
-
-### 16.2 Qt-specific test seam
-
-Introduce object names and stable test IDs for:
+Introduce stable Qt object names/test IDs for:
 
 - windows;
-- menus and actions;
+- actions;
 - panels;
 - figure tabs;
-- canvas containers;
+- canvases;
 - dialogs;
 - status indicators.
 
-Create a `QtAutomationAdapter` that maps current automation requests to Qt objects while preserving the existing external protocol.
-
-### 16.3 Native dialogs
+`QtAutomationAdapter` maps the existing external protocol to Qt objects and shared services.
 
 Continue honoring:
 
@@ -988,24 +1141,15 @@ Continue honoring:
 - `SPECTRA_NO_NATIVE_DIALOGS`;
 - `SPECTRA_AUTOMATION`.
 
-Use injectable dialog services so tests can supply deterministic file paths without opening modal OS dialogs.
+Use injectable dialog services for deterministic tests.
 
 ---
 
-## 17. Multiprocess, Python, ROS2, and PX4 behavior
+## 18. Multiprocess, Python, ROS2, and PX4
 
-### 17.1 In-process application
+### 18.1 Multiprocess
 
-Qt app hosts:
-
-- application services;
-- Qt frontend;
-- renderer;
-- in-process topic server.
-
-### 17.2 Multiprocess window agent
-
-Replace the GLFW/ImGui window agent frontend with the same Qt application shell configured as an IPC client.
+Replace the legacy window agent frontend with the same Qt shell configured as an IPC client.
 
 Preserve:
 
@@ -1015,22 +1159,20 @@ Preserve:
 - versioned IPC;
 - publisher-first attach behavior.
 
-Do not create separate UI implementations for `spectra`, `spectra-window`, `spectra-ros`, and `spectra-px4`. Use shell composition and adapter-provided panel factories.
+Do not create separate UI implementations for `spectra`, `spectra-window`, `spectra-ros`, and `spectra-px4`.
 
-### 17.3 Python
+### 18.2 Python
 
 Python remains independent of Qt:
 
-- plotting/model calls use the existing IPC or in-process API;
-- launching the desktop frontend starts the Qt executable;
+- model calls use existing IPC/in-process APIs;
+- launching desktop UI starts the Qt executable;
 - headless export remains Qt-free;
-- wheel packaging should not unintentionally bundle Qt unless a deliberate optional extra is introduced.
+- wheels do not bundle Qt unless a deliberate optional desktop extra is introduced.
 
-### 17.4 ROS2 and PX4
+### 18.3 ROS2 and PX4
 
-Move adapter UI code behind frontend-neutral panel/controller interfaces.
-
-The adapters should contribute:
+Adapters contribute:
 
 - commands;
 - models;
@@ -1038,449 +1180,452 @@ The adapters should contribute:
 - panel descriptors/factories;
 - status providers.
 
-Qt widgets render those models. Core adapter libraries must not include Qt headers unless split into an explicit `*_qt_ui` target.
+Qt widgets render those models. Core adapters do not include Qt headers unless split into explicit `*_qt_ui` targets.
 
 ---
 
-## 18. Migration phases
+## 19. Migration phases
 
-## Phase 0 — Decisions, baselines, and guardrails
+### Phase 0 — Decisions, baselines, and packaging guardrails
 
 Deliverables:
 
 - ADR: Qt Widgets + direct `QWindow` Vulkan;
 - ADR: docking provider and licensing;
-- ADR: Qt minimum version and packaging policy;
-- baseline performance and startup measurements;
-- validated legacy build/test baseline;
-- Qt build-only CI job;
-- inventory of GLFW/SDL/ImGui type leakage.
+- ADR: Qt 6.8.x pinning and private-runtime policy;
+- ADR: Ubuntu 22.04/24.04 separate binary baselines;
+- ADR: Windows deployment and signing;
+- ADR: macOS MoltenVK, signing, and notarization;
+- baseline performance/startup measurements;
+- legacy build/test baseline;
+- Qt build-only CI jobs;
+- inventory of frontend type leakage;
+- license-manifest prototype.
 
 Acceptance:
 
-- all architectural decisions documented;
-- no code behavior change;
-- branch can build legacy and Qt demo configurations;
-- licensing decision has a named owner and deadline.
+- decisions documented;
+- no behavior change;
+- legacy and Qt demo builds pass;
+- packaging and docking licensing have owners and deadlines.
 
-## Phase 1 — Extract application services
-
-Refactor without replacing the visible frontend.
+### Phase 1 — Extract application services
 
 Work:
 
 - create `ApplicationServices`;
-- move settings, commands, shortcuts, undo, plugin registries, workspace, and automation ownership out of `WindowUIContext`;
-- split `app_step.cpp` into lifecycle/services/frontend pieces;
-- move framework-neutral source files out of the ImGui-only CMake block;
-- create frontend interfaces for dialogs, clipboard, redraw requests, and windows;
+- move settings, commands, shortcuts, undo, plugins, workspace, and automation ownership out of `WindowUIContext`;
+- split `app_step.cpp`;
+- move neutral sources out of ImGui-only CMake blocks;
+- create interfaces for dialogs, clipboard, redraw, and windows;
 - preserve `App::init_runtime()/step()/shutdown_runtime()`.
 
 Acceptance:
 
-- legacy app behavior unchanged;
+- legacy behavior unchanged;
 - headless tests remain Qt-free;
-- `ApplicationServices` compiles without frontend headers;
-- no duplicate GLFW/SDL initialization branches in application services.
+- services compile without frontend headers;
+- no duplicate platform initialization inside services.
 
-## Phase 2 — Production Qt Vulkan canvas
-
-Promote the demo implementation.
+### Phase 2 — Production Qt Vulkan canvas
 
 Work:
 
-- rename/refactor `QtRuntime` into production `QtRenderRuntime`;
-- extract `SpectraVulkanWindow`;
-- extract `FigureCanvasWidget`;
-- add surface-generation tracking;
-- add explicit per-window render-target APIs;
+- promote `QtRuntime` to production `QtRenderRuntime`;
+- extract `SpectraVulkanWindow` and `FigureCanvasWidget`;
+- add surface generations;
+- add explicit render-target APIs;
 - implement event-driven scheduling;
 - add Qt input router;
-- remove optional ImGui initialization from Qt render runtime;
-- add a minimal `spectra-qt-smoke` executable.
+- remove ImGui initialization from Qt runtime;
+- add a minimal Qt smoke executable.
 
 Acceptance:
 
-- two or more Qt canvases render concurrently from one Vulkan device;
+- multiple canvases render from one device;
 - independent resize/input/focus;
-- detach/reattach and surface recreation pass validation layers;
-- no permanent timer while idle;
+- detach/reattach passes validation layers;
+- no permanent idle timer;
 - no GLFW/SDL symbols in Qt targets.
 
-## Phase 3 — Native Qt shell and command system
+### Phase 3 — Native Qt shell and commands
 
 Work:
 
-- create `SpectraMainWindow`;
-- create welcome page and central figure tab host;
-- bind `CommandRegistry` to `QAction`;
-- implement native menus/toolbars/status bar;
-- implement Qt dialogs and clipboard services;
-- implement command palette;
-- implement settings persistence;
-- add basic Inspector and Topics panels.
+- create main window and welcome page;
+- create central document tabs;
+- bind commands to actions;
+- implement menus/toolbars/status bar;
+- implement dialogs/clipboard;
+- implement command palette and settings;
+- migrate basic Inspector and Topics panels.
 
 Acceptance:
 
 - create/open/close figures;
-- open CSV through injected/native dialog paths;
-- menus, shortcuts, command palette, and automation execute identical command IDs;
-- main window works with no figure;
-- keyboard-only navigation smoke test passes.
+- CSV open through native/injected paths;
+- command IDs are shared across UI and automation;
+- no-figure state works;
+- keyboard navigation smoke test passes.
 
-## Phase 4 — Multi-window and docking
+### Phase 4 — Multi-window and docking
 
 Work:
 
-- implement `DockingHost`;
-- implement native Qt provider first;
-- optionally implement KDDockWidgets provider after license gate;
-- support document detach into a new native main window;
-- support moving documents between main windows;
-- support detached and grouped tool panels per provider capabilities;
-- remove custom preview-window and global-cursor docking dependencies from Qt path.
+- implement `DockingHost` and native provider;
+- optionally implement KDDockWidgets after licensing gate;
+- support document detach and cross-main-window movement;
+- support provider-specific floating panel groups;
+- remove custom preview/global-cursor logic from Qt path.
 
 Acceptance:
 
 - Windows, macOS, X11, KDE Wayland, and GNOME Wayland smoke tests;
 - no XWayland requirement;
-- no arbitrary top-level positioning requirement;
-- layout topology save/restore;
-- repeated detach/redock stress test without Vulkan or lifetime errors.
+- topology save/restore;
+- repeated detach/redock without lifetime or Vulkan errors.
 
-## Phase 5 — Feature parity
+### Phase 5 — Feature parity
 
-Migrate remaining user-facing features:
+Migrate:
 
 - split panes/subplots;
 - inspector and series controls;
 - timeline and animation curves;
-- data editor and transforms;
-- annotations, measurement, selection, tooltip, crosshair;
-- settings and shortcut editor;
-- export preview, image copy, video recording;
-- plugin/data-source panels;
-- accessibility summaries and sonification controls;
+- editor/transforms;
+- annotations/measurement/selection/tooltips/crosshair;
+- shortcut editor;
+- export preview, image copy, recording;
+- plugins/data sources;
+- accessibility/sonification controls;
 - ROS2/PX4 panels.
 
 Acceptance:
 
 - parity checklist signed off;
-- no critical workflow requires the legacy frontend;
-- golden images remain renderer-equivalent;
-- frontend-specific visual tests added for Qt.
+- no critical workflow requires legacy UI;
+- renderer golden output remains equivalent;
+- Qt frontend visual tests exist.
 
-## Phase 6 — Workspace, plugins, and automation
+### Phase 6 — Workspace, plugins, and automation
 
 Work:
 
-- add workspace v5;
-- add provider-specific layout serialization;
-- add v4 migration;
-- add Qt automation adapter;
-- add portable plugin UI schema;
-- preserve plugin ABI compatibility;
-- add crash-recovery restore.
+- workspace v5 and v4 migration;
+- provider-specific layout serialization;
+- Qt automation adapter;
+- portable plugin UI schema;
+- crash-recovery restore.
 
 Acceptance:
 
-- v4 and v5 workspace test fixtures load;
-- multi-window layout round-trip;
+- v4/v5 fixtures load;
+- multi-window round-trip;
 - provider mismatch degrades safely;
-- automation suite passes against Qt frontend;
-- existing binary plugins continue to load where ABI-compatible.
+- automation passes;
+- ABI-compatible plugins load.
 
-## Phase 7 — Runtime variants and adapters
+### Phase 7 — Runtime variants and adapters
 
 Work:
 
 - Qt in-process app;
-- Qt `spectra-window` agent;
-- Qt ROS2 shell;
-- Qt PX4 shell;
-- preserve daemon discovery and IPC;
-- remove frontend duplication across executables.
+- Qt window agent;
+- Qt ROS2/PX4 shell composition;
+- daemon discovery and IPC preservation.
 
 Acceptance:
 
-- Python publisher-first workflow opens Qt frontend;
-- multiprocess reconnect/restart works;
-- ROS2 and PX4 builds remain optional;
-- headless backend packages do not require a display or Qt.
+- Python publisher-first flow opens Qt frontend;
+- reconnect/restart works;
+- ROS2/PX4 remain optional;
+- backend/headless packages remain Qt-free.
 
-## Phase 8 — CI, packaging, and release hardening
+### Phase 8 — Cross-platform packaging and release hardening
 
 Work:
 
-- platform CI matrix;
-- GUI integration tests;
-- package Qt runtime dependencies;
-- AppImage, `.deb`, `.rpm`, `.dmg`, and Windows zip/installer validation;
-- plugin path and icon/theme resource validation;
-- startup/performance regression tests;
-- Wayland package smoke tests.
+- build pinned Qt 6.8.x runtimes for Ubuntu 22.04 and 24.04;
+- produce distro-specific `.deb` packages and APT metadata;
+- package XCB and Wayland plugins;
+- build and validate AppImage;
+- deploy Windows DLL closure and installer;
+- bundle MoltenVK and macOS frameworks;
+- sign Windows artifacts;
+- sign/notarize/staple macOS artifacts;
+- generate third-party license manifests;
+- add clean-machine launch tests;
+- validate runtime closure and RPATHs;
+- run startup/performance regressions.
 
 Acceptance:
 
-- release artifacts launch on clean systems;
-- no missing Qt platform plugins;
-- no accidental RPATH/plugin-path dependence on developer machines;
-- validation layers clean under stress;
-- startup and idle-resource budgets met.
+- `apt install spectra` requires no manual Qt installation;
+- Ubuntu 22.04 and 24.04 packages launch on clean systems;
+- native Wayland and X11 both launch from official packages;
+- Windows installer and ZIP launch without Qt/Vulkan SDK;
+- macOS ARM64 and Intel apps launch with bundled MoltenVK;
+- no missing platform plugins;
+- no developer paths;
+- license artifacts are complete;
+- validation layers and performance budgets pass.
 
-## Phase 9 — Default switch and legacy retirement
+### Phase 9 — Default switch and legacy retirement
 
 Work:
 
 - make Qt app the `spectra` executable;
-- retain legacy executable under an explicit name for one release;
-- publish migration notes;
-- gather issue telemetry;
-- remove custom WindowManager and ImGui shell after the deprecation window;
-- keep ImGui only where it remains intentionally useful, such as internal debug tooling.
+- retain legacy executable under explicit name for one release;
+- publish migration and deployment notes;
+- collect issue telemetry;
+- remove custom WindowManager/ImGui shell after deprecation;
+- retain ImGui only for intentional internal/debug uses.
 
 Acceptance:
 
-- Qt frontend is the release default on all desktop platforms;
-- legacy frontend has no unique supported workflow;
-- all removal conditions below are met.
+- Qt is release default on all supported platforms;
+- legacy has no unique supported workflow;
+- all removal gates are met.
 
 ---
 
-## 19. PR-sized implementation sequence
+## 20. PR-sized implementation sequence
 
-### PR 1 — Build graph and application-services extraction
+1. **Build graph and application-services extraction** — no visible UI change.
+2. **Production Qt canvas library** — surface lifecycle, scheduler, input, tests.
+3. **Minimal Qt application shell** — main window, tabs, actions, dialogs.
+4. **Native docking and multiple main windows** — layout persistence.
+5. **Controlled Qt runtime packaging prototype** — Ubuntu 22.04 and 24.04 package skeletons.
+6. **Conditional KDDockWidgets provider** — only after licensing ADR.
+7. **Panel migrations** — one coherent panel/workflow per PR.
+8. **Workspace v5 and automation**.
+9. **Windows deployment pipeline**.
+10. **macOS MoltenVK deployment pipeline**.
+11. **Release cutover and legacy deprecation**.
 
-Files:
-
-- root `CMakeLists.txt`;
-- new `src/app/application_services.*`;
-- split portions of `src/ui/app/app_step.cpp`;
-- `WindowUIContext` ownership cleanup;
-- CMake source-list cleanup.
-
-No visible UI change.
-
-### PR 2 — Production Qt canvas library
-
-Files:
-
-- refactor `src/adapters/qt/qt_runtime.*`;
-- extract `spectra_vulkan_window.*`;
-- extract `figure_canvas_widget.*`;
-- add Qt render scheduler and input router;
-- convert demo to use production classes;
-- add Qt surface lifecycle tests.
-
-### PR 3 — Minimal Qt application shell
-
-Files:
-
-- Qt `main`;
-- `SpectraMainWindow`;
-- welcome page;
-- central figure tabs;
-- `QtActionBridge`;
-- native dialog/clipboard services;
-- minimal settings.
-
-### PR 4 — Native docking and multiple main windows
-
-Files:
-
-- `DockingHost`;
-- native Qt provider;
-- document detach/move;
-- window registry;
-- layout persistence.
-
-### PR 5 — KDDockWidgets provider, conditional
-
-Only after the license ADR is resolved.
-
-### PR 6+ — Panel migrations
-
-One coherent panel/workflow per PR, including controller extraction and tests.
+Every PR must include a rollback path and preserve the legacy build until Phase 9.
 
 ---
 
-## 20. Testing strategy
+## 21. Testing strategy
 
-### 20.1 Unit tests
+### 21.1 Unit tests
 
 Add tests for:
 
-- application-services ownership and shutdown order;
-- command-to-QAction mapping;
+- application-service ownership/shutdown;
+- command-to-action mapping;
 - key/modifier mapping;
-- physical-pixel extent calculation;
+- physical extent calculation;
 - workspace v4-to-v5 migration;
 - docking layout model;
 - window/document registry;
 - surface-generation state machine;
-- redraw request coalescing;
-- provider fallback.
+- redraw coalescing;
+- provider fallback;
+- runtime-manifest generation;
+- private Qt path resolution;
+- MoltenVK capability fallback.
 
-### 20.2 Qt integration tests
+### 21.2 Qt integration tests
 
 Use Qt Test for:
 
 - action invocation;
 - panel visibility;
 - tab create/close/move;
-- detach and attach;
-- native-window close order;
+- detach/attach;
+- close order;
 - focus switching;
-- dialog-service injection;
+- dialog injection;
 - shortcut scopes;
-- workspace restore.
+- workspace restore;
+- platform-surface destroy/recreate.
 
-### 20.3 Vulkan GUI stress tests
+### 21.3 Vulkan GUI stress tests
 
-Scenarios:
-
-- two to eight concurrent canvases;
+- two to eight canvases;
 - continuous resize for five minutes;
 - minimize/restore loops;
 - hide/show;
-- close during active animation;
+- close during animation;
 - detach during streaming;
-- monitor movement across different DPRs;
-- display hot-plug where CI/manual infrastructure permits;
-- swapchain `OUT_OF_DATE` and `SURFACE_LOST` recovery;
-- application exit with multiple floating windows;
+- mixed-DPI monitor movement;
+- display hot-plug where possible;
+- `OUT_OF_DATE` and `SURFACE_LOST` recovery;
+- application exit with floating windows;
 - daemon disconnect/reconnect.
 
-### 20.4 Platform matrix
+### 21.4 Platform and artifact matrix
 
-Minimum:
-
-| Platform | Window system | Compiler |
+| Artifact | Build environment | Required runtime tests |
 |---|---|---|
-| Ubuntu 22.04/24.04 | X11/XCB | GCC + Clang |
-| Ubuntu 24.04 | KDE Wayland | GCC |
-| Ubuntu 24.04 | GNOME Wayland | GCC |
-| Windows 10/11 | Win32 | MSVC |
-| macOS supported runner | Cocoa/Metal Vulkan portability | Apple Clang |
+| Ubuntu 22.04 x86-64 `.deb` | clean Ubuntu 22.04 | X11, GNOME Wayland where available, clean APT install |
+| Ubuntu 24.04 x86-64 `.deb` | clean Ubuntu 24.04 | X11, GNOME Wayland, KDE Wayland |
+| Linux AppImage | oldest supported baseline | Ubuntu 22.04/24.04 X11 and Wayland |
+| Windows x86-64 | MSVC 2022 | Windows 10 and 11 clean VMs |
+| macOS ARM64 | current supported Xcode | supported minimum macOS and current macOS |
+| macOS Intel | supported Xcode/runner | supported minimum macOS and current macOS |
 
-Where full GUI CI is unavailable, retain build tests and run a documented manual release checklist.
+For every packaged artifact:
 
-### 20.5 Performance budgets
+- launch with no developer Qt installation;
+- inspect dynamic dependencies;
+- run with `QT_DEBUG_PLUGINS=1` in CI diagnostics;
+- verify platform-plugin selection;
+- verify Vulkan device and surface creation;
+- open multiple windows;
+- detach/redock;
+- save and restore workspace;
+- export an image;
+- close cleanly.
 
-Measure against the legacy frontend:
+### 21.5 Performance budgets
+
+Measure against legacy frontend:
 
 - cold startup;
-- first rendered frame;
-- idle CPU;
-- idle GPU;
-- steady 60 FPS frame time;
+- first frame;
+- idle CPU/GPU;
+- 60 FPS frame time;
 - input-to-present latency;
-- memory per additional canvas;
+- memory per canvas;
 - detach/redock latency;
-- workspace load time.
+- workspace load time;
+- private Qt runtime package size.
 
-A Qt frontend regression greater than 10% in steady rendering requires investigation. Shell startup regressions may be accepted only with an explicit rationale.
-
----
-
-## 21. Packaging and deployment risks
-
-Qt deployment must include the correct:
-
-- platform plugin;
-- image/icon plugins actually used;
-- Wayland/XCB dependencies on Linux;
-- Vulkan loader and portability requirements;
-- translations if added;
-- styles/themes;
-- KDDockWidgets library/license when enabled.
-
-Use platform deployment tooling where appropriate, but validate produced artifacts on clean machines or containers/VMs.
-
-Do not rely on:
-
-- developer `QT_PLUGIN_PATH`;
-- source-tree assets;
-- absolute RPATHs;
-- system Qt versions newer than the declared minimum;
-- XWayland for native Linux operation.
+A steady-rendering regression over 10% requires investigation. Package-size and shell-startup regressions require explicit rationale.
 
 ---
 
-## 22. Major risks and mitigations
+## 22. Packaging validation checklist
+
+### Linux
+
+- package installs with `apt` on a clean image;
+- private Qt libraries resolve before system Qt without global environment variables;
+- `qxcb` launches under X11;
+- Wayland plugin launches natively under GNOME and KDE;
+- system Qt/KDE applications remain unaffected;
+- `spectra-backend` installs without Qt;
+- RPATH/RUNPATH contains only approved relative paths;
+- `ldd` contains no build-directory paths;
+- package uninstall removes private runtime cleanly;
+- APT upgrades replace the Qt runtime atomically with a matching Spectra version.
+
+### Windows
+
+- installer and ZIP contain identical runtime closure;
+- `qwindows.dll` is found from packaged plugin path;
+- no PATH dependency on Qt or Vulkan SDK;
+- signing verifies;
+- uninstall is clean;
+- user settings/workspaces are preserved according to policy.
+
+### macOS
+
+- `otool -L` contains only system or bundled paths;
+- MoltenVK is bundled and discovered;
+- app passes `codesign --verify --deep --strict`;
+- notarization and stapling pass;
+- Gatekeeper launch succeeds on a clean machine;
+- both ARM64 and Intel packages render the validation scene.
+
+---
+
+## 23. Major risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
 | Big-bang rewrite stalls feature work | Dual frontend and PR-sized vertical slices |
-| Renderer duplicated between `App` and `QtRuntime` | Single `ApplicationServices` owner and one backend/renderer |
+| Renderer duplicated between `App` and `QtRuntime` | One `ApplicationServices` owner and one backend/renderer |
 | Qt surface destruction races GPU work | Surface generations and per-canvas fence shutdown |
-| Global active-window state causes cross-window bugs | Explicit `WindowContext` render parameters |
-| KDDockWidgets license conflicts with MIT distribution | Mandatory ADR, optional provider, native fallback |
-| Wayland breaks custom global-coordinate drag logic | Do not port it; use Qt/provider-native user-driven docking |
-| Workspace layouts become incompatible | Version 5 with provider ID and safe v4 migration |
-| Plugins contain ImGui-only UI callbacks | Compatibility path plus portable UI schema |
-| Automation depends on pixels and ImGui internals | Semantic commands and Qt object/test IDs |
-| Qt leaks into headless/Python packages | Separate targets and dependency tests |
-| Idle timer wastes resources | Event-driven scheduler with active-animation timer only |
-| ROS2/PX4 UI forks the shell | Adapter-contributed models, commands, and panel factories |
+| Global active-window state causes cross-window bugs | Explicit render-window parameters |
+| KDDockWidgets license conflicts with MIT | ADR, optional provider, native fallback |
+| Wayland breaks global-coordinate drag logic | Use Qt/provider-native user-driven docking |
+| Workspace layouts become incompatible | Workspace v5 and safe v4 migration |
+| Plugins contain ImGui-only callbacks | Compatibility path plus portable UI schema |
+| Automation depends on pixels | Semantic commands and stable Qt object IDs |
+| Qt leaks into headless/Python packages | Separate targets and package dependency tests |
+| Ubuntu system Qt is older than required | Bundle pinned private Qt runtime |
+| Ubuntu 24.04 binary fails on 22.04 | Separate distro build baselines |
+| Private Qt conflicts with KDE/system Qt | Isolated paths and relative RPATH; no global environment changes |
+| Missing QPA plugins break launch | Runtime manifest and clean-machine smoke tests |
+| macOS lacks native Vulkan | Bundle/test MoltenVK portability subset |
+| Windows machine lacks Vulkan runtime | Define and package/test loader requirements |
+| Qt licensing obligations are missed | License ADR, manifests, legal review, source information |
+| Idle timer wastes resources | Event-driven scheduler |
 | Mixed-DPI windows render incorrectly | Per-window DPR and physical extent tests |
-| Native dialogs block tests | Injectable dialog service and existing no-dialog policy |
+| Native dialogs block tests | Injectable dialog service |
 
 ---
 
-## 23. Removal criteria for legacy frontend
+## 24. Legacy removal criteria
 
-Do not delete the legacy GLFW/SDL3 + ImGui path until all are true:
+Do not delete the GLFW/SDL3 + ImGui frontend until all are true:
 
-- Qt app ships successfully on Windows, macOS, X11, and native Wayland;
-- all primary workflows have parity;
+- Qt app ships on Ubuntu 22.04, Ubuntu 24.04, Windows, and supported macOS targets;
+- X11 and native Wayland packages pass;
 - multi-window detach/redock is stable;
 - workspace migration is released;
 - automation passes;
 - Python, ROS2, PX4, and multiprocess flows pass;
-- packaging is validated;
-- no critical unresolved Qt frontend issue remains for one release cycle;
+- APT, AppImage, Windows, and macOS packages are validated on clean systems;
+- users do not need to install Qt manually;
+- no critical Qt issue remains for one release cycle;
 - performance budgets are accepted;
-- plugin compatibility policy is published.
+- plugin and licensing policies are published.
 
 ---
 
-## 24. Definition of done
+## 25. Definition of done
 
 The migration is complete when:
 
 1. `spectra` launches the Qt 6 desktop application.
-2. Multiple native main windows and render canvases work on all supported platforms.
+2. Multiple native main windows and Vulkan canvases work on every supported platform.
 3. Detachable documents and tool panels use Qt/provider-native behavior.
 4. Native Wayland is first-class.
-5. Vulkan remains owned by Spectra and uses one shared device by default.
-6. Core, renderer, headless, IPC, and Python use cases do not require Qt.
-7. Application commands, undo, shortcuts, plugins, and automation use shared semantic services.
-8. Workspaces preserve figures and Qt desktop layout through a versioned format.
+5. Spectra owns Vulkan and shares one device by default.
+6. Core, renderer, headless, IPC, backend, and Python use cases remain Qt-free.
+7. Commands, undo, shortcuts, plugins, and automation use shared semantic services.
+8. Workspaces preserve figures and desktop layouts through a versioned format.
 9. ROS2 and PX4 compose into the same Qt shell.
-10. CI, packages, validation-layer tests, and performance gates pass.
-11. The custom desktop `WindowManager` and ImGui application shell can be removed without losing a supported feature.
+10. Ubuntu users install through APT without manually installing Qt.
+11. Ubuntu 22.04 and 24.04 receive separately built, pinned-runtime packages.
+12. Windows artifacts bundle and validate their Qt runtime closure.
+13. macOS artifacts bundle MoltenVK and pass signing/notarization.
+14. CI, package, validation-layer, license, and performance gates pass.
+15. The custom WindowManager and ImGui application shell can be removed without losing a supported feature.
 
 ---
 
-## 25. Immediate next actions
+## 26. Immediate next actions
 
-1. Approve the architecture and decide the docking license/provider policy.
-2. Create the three ADRs from Phase 0.
-3. Implement PR 1: application-services extraction and target separation.
-4. Convert `qt_embed_demo` production classes into PR 2 without changing renderer output.
-5. Add Qt build and surface-lifecycle tests before beginning shell migration.
-6. Keep feature development model/controller-oriented so new work can serve both frontends during the transition.
+1. Approve Qt 6.8.x pinning and the private-runtime policy.
+2. Decide whether Linux Qt runtime is embedded in `spectra` or split into `spectra-qt-runtime`.
+3. Create the architecture, docking-license, and deployment ADRs.
+4. Implement application-services extraction.
+5. Promote `qt_embed_demo` classes into production Qt platform components.
+6. Add Ubuntu 22.04 and 24.04 package-build prototypes early, before broad UI migration.
+7. Add a macOS MoltenVK capability smoke target before claiming renderer portability.
+8. Keep new feature work model/controller-oriented for dual-frontend use.
 
 ---
 
-## 26. Reference documentation
+## 27. Reference documentation
 
+- Qt 6.8 supported platforms: <https://doc.qt.io/qt-6.8/supported-platforms.html>
 - Qt 6.8 `QVulkanInstance`: <https://doc.qt.io/qt-6.8/qvulkaninstance.html>
 - Qt 6.8 `QWindow`: <https://doc.qt.io/qt-6.8/qwindow.html>
-- Qt 6.8 Vulkan examples and classes: <https://doc.qt.io/qt-6.8/vulkan.html>
+- Qt 6.8 Vulkan integration: <https://doc.qt.io/qt-6.8/vulkan.html>
 - Qt 6.8 high-DPI behavior: <https://doc.qt.io/qt-6.8/highdpi.html>
-- Qt 6.8 `QMainWindow` state persistence: <https://doc.qt.io/qt-6.8/qmainwindow.html>
+- Qt 6.8 `QMainWindow`: <https://doc.qt.io/qt-6.8/qmainwindow.html>
+- Qt deployment for Windows: <https://doc.qt.io/qt-6/windows-deployment.html>
+- Qt deployment for macOS: <https://doc.qt.io/qt-6/macos-deployment.html>
+- Ubuntu 22.04 Qt package baseline: <https://packages.ubuntu.com/jammy/qt6-base-dev>
+- Ubuntu 24.04 Qt package baseline: <https://packages.ubuntu.com/noble/qt6-base-dev>
+- MoltenVK: <https://github.com/KhronosGroup/MoltenVK>
 - KDDockWidgets documentation: <https://kdab.github.io/KDDockWidgets/>
-- KDDockWidgets repository and licensing: <https://github.com/KDAB/KDDockWidgets>
+- KDDockWidgets repository/licensing: <https://github.com/KDAB/KDDockWidgets>
 - Qt Advanced Docking System: <https://github.com/githubuser0xFFFF/Qt-Advanced-Docking-System>
