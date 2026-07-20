@@ -7,6 +7,12 @@
 namespace spectra
 {
 
+class PluginUIRegistry;
+}
+
+namespace spectra
+{
+
 class CommandQueue;
 class FrameScheduler;
 class SessionRuntime;
@@ -89,6 +95,7 @@ class ApplicationServices
 #endif
 
     PluginManager&        plugins()       { return *plugin_mgr_; }
+    PluginUIRegistry&     plugin_ui()     { return *plugin_ui_registry_; }
     ExportFormatRegistry& export_formats() { return *export_format_registry_; }
     DataSourceRegistry&   data_sources()  { return *data_source_registry_; }
     SeriesTypeRegistry&   series_types()  { return *series_type_registry_; }
@@ -156,6 +163,7 @@ class ApplicationServices
 #endif
 
     std::unique_ptr<PluginManager>         plugin_mgr_;
+    std::unique_ptr<PluginUIRegistry>      plugin_ui_registry_;
     std::unique_ptr<ExportFormatRegistry>  export_format_registry_;
     std::unique_ptr<DataSourceRegistry>    data_source_registry_;
     std::unique_ptr<SeriesTypeRegistry>    series_type_registry_;

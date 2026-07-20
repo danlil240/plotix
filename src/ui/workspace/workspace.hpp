@@ -18,7 +18,7 @@ class Figure;
 struct WorkspaceData
 {
     // File format version for migration support
-    static constexpr uint32_t FORMAT_VERSION = 4;
+    static constexpr uint32_t FORMAT_VERSION = 5;
 
     struct AxisState
     {
@@ -157,6 +157,25 @@ struct WorkspaceData
     // v4: Mode transition state (serialized JSON from ModeTransition)
     std::string mode_transition_state;
 
+    // v5: Qt desktop layout state (provider-specific window/panel arrangement)
+    struct DesktopLayoutState
+    {
+        std::string provider;                   // "native", "kddockwidgets", etc.
+        std::string provider_version;
+        std::string main_window_state_base64;   // QMainWindow::saveState()
+        std::string main_window_geometry_base64; // QMainWindow::saveGeometry()
+        std::string provider_layout;            // provider-specific extra layout data
+
+        struct WindowState
+        {
+            std::string state_base64;
+            std::string geometry_base64;
+            std::string title;
+        };
+        std::vector<WindowState> windows;       // additional/detached windows
+    };
+    DesktopLayoutState desktop_layout;
+
     // Last directory used for image/video export. Empty = use $HOME.
     std::string last_export_dir;
 };
@@ -217,9 +236,11 @@ class Workspace
     // Delete the autosave file.
     static void clear_autosave();
 
+    // Serialize workspace data to JSON string.
+    static std::string serialize_json(const WorkspaceData& data);
+
    private:
     // JSON serialization helpers (minimal, no external dependency)
-    static std::string serialize_json(const WorkspaceData& data);
     static bool        deserialize_json(const std::string& json, WorkspaceData& data);
 
     // Simple JSON value parser

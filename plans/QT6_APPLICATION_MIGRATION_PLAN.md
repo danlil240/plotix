@@ -1,6 +1,6 @@
 # Spectra Qt 6 Application Migration Plan
 
-**Status:** Proposed  
+**Status:** In Progress (Phase 1-4 implemented, Phase 5 feature parity in progress — split view container wired into SpectraMainWindow as central widget, OverlayDrawList framework-neutral interface created with ImGui and Qt QPainter adapters for annotations/measurement/selection/tooltips/crosshair porting, Phase 6 workspace/automation/crash-recovery/plugin UI schema completed — v4/v5 fixture tests and multi-window round-trip tests now passing, Phase 7 runtime variants implemented — in-process topic server, Qt IPC client for multiprocess window agent, daemon discovery, unified `spectra-qt-app` with `--socket` flag)  
 **Scope:** Production desktop frontend migration and cross-platform release architecture  
 **Repository baseline:** `main` at `d6fd85633a941440938cff3e44f5c32dc2fed8cc`  
 **Primary goal:** Make Qt 6 the production cross-platform desktop platform for Spectra, including multiple native OS windows, detachable/dockable panels, native Wayland operation, menus, shortcuts, dialogs, accessibility, and high-DPI behavior, while retaining Spectra's Vulkan renderer and framework-neutral core.
@@ -1209,7 +1209,7 @@ Acceptance:
 - legacy and Qt demo builds pass;
 - packaging and docking licensing have owners and deadlines.
 
-### Phase 1 — Extract application services
+### Phase 1 — Extract application services ✅
 
 Work:
 
@@ -1227,7 +1227,7 @@ Acceptance:
 - services compile without frontend headers;
 - no duplicate platform initialization inside services.
 
-### Phase 2 — Production Qt Vulkan canvas
+### Phase 2 — Production Qt Vulkan canvas ✅
 
 Work:
 
@@ -1248,17 +1248,23 @@ Acceptance:
 - no permanent idle timer;
 - no GLFW/SDL symbols in Qt targets.
 
-### Phase 3 — Native Qt shell and commands
+### Phase 3 — Native Qt shell and commands ✅
 
 Work:
 
-- create main window and welcome page;
-- create central document tabs;
-- bind commands to actions;
-- implement menus/toolbars/status bar;
-- implement dialogs/clipboard;
-- implement command palette and settings;
-- migrate basic Inspector and Topics panels.
+- ✅ create main window and welcome page;
+- ✅ create central document tabs;
+- ✅ bind commands to actions (QtActionBridge);
+- ✅ implement menus/toolbars/status bar;
+- ✅ implement dialogs/clipboard (QtDialogService, QtClipboardService);
+- ✅ implement command palette (QtCommandPaletteDialog, Ctrl+K shortcut, fuzzy search via CommandRegistry);
+- ✅ implement settings panel (QtSettingsWidget, theme/palette selection, panel visibility toggles, SettingsStore persistence);
+- ✅ migrate basic Inspector panel (QtInspectorWidget, figure/axes title/labels/limits/grid/border, tabbed per-axes view);
+- ✅ migrate basic Topics panel (QtTopicsWidget, data source list, start/stop controls, DataSourceRegistry integration);
+- ✅ wire panels into SpectraMainWindow as dockable QDockWidgets;
+- ✅ wire ApplicationServices into SpectraMainWindow for panel and palette access;
+- ✅ add View menu toggle actions for Inspector/Topics/Settings panels;
+- ✅ add File menu action and Ctrl+K shortcut for command palette.
 
 Acceptance:
 
@@ -1268,37 +1274,44 @@ Acceptance:
 - no-figure state works;
 - keyboard navigation smoke test passes.
 
-### Phase 4 — Multi-window and docking
+### Phase 4 — Multi-window and docking ✅
 
 Work:
 
-- implement `DockingHost` and native provider;
-- optionally implement KDDockWidgets after licensing gate;
-- support document detach and cross-main-window movement;
-- support provider-specific floating panel groups;
-- remove custom preview/global-cursor logic from Qt path.
+- ✅ implement `DockingHost` abstract interface (`docking_host.hpp`);
+- ✅ implement `NativeQtDockingHost` (native Qt provider: `QMainWindow` + `QDockWidget` + `QTabWidget`);
+- ✅ create `MainWindowRegistry` for multi-window tracking and cross-window operations;
+- ✅ support document detach into new `SpectraMainWindow` via `detach_document()`;
+- ✅ support cross-window document movement via `move_document()`;
+- ✅ wire `figure_detach_requested` signal from `SpectraMainWindow` tab context menu;
+- ✅ add `open_figure_ids()` accessor to `SpectraMainWindow`;
+- ✅ update `QtApplicationController` to own `MainWindowRegistry` and route detach;
+- ✅ update `qt_app.cpp` example with second figure and programmatic detach demo;
+- ✅ update `CMakeLists.txt` with docking source files;
+- optionally implement KDDockWidgets after licensing gate (deferred);
+- remove custom preview/global-cursor logic from Qt path (N/A — Qt path has none).
 
 Acceptance:
 
-- Windows, macOS, X11, KDE Wayland, and GNOME Wayland smoke tests;
-- no XWayland requirement;
-- topology save/restore;
-- repeated detach/redock without lifetime or Vulkan errors.
+- Windows, macOS, X11, KDE Wayland, and GNOME Wayland smoke tests (pending platform testing);
+- no XWayland requirement (Qt-native Wayland);
+- topology save/restore via `save_layout()`/`restore_layout()` (implemented, needs integration testing);
+- repeated detach/redock without lifetime or Vulkan errors (needs validation-layer testing).
 
-### Phase 5 — Feature parity
+### Phase 5 — Feature parity (in progress)
 
 Migrate:
 
-- split panes/subplots;
-- inspector and series controls;
-- timeline and animation curves;
-- editor/transforms;
-- annotations/measurement/selection/tooltips/crosshair;
-- shortcut editor;
-- export preview, image copy, recording;
-- plugins/data sources;
-- accessibility/sonification controls;
-- ROS2/PX4 panels.
+- ~~inspector and series controls~~ ✅ (QtInspectorWidget with per-series color, line width, opacity, line/marker style, visibility, label editing);
+- ~~timeline and animation curves~~ ✅ (QtTimelineWidget with play/pause/stop, scrubber, duration/fps, loop mode, track listing);
+- ~~shortcut editor~~ ✅ (QtShortcutWidget with binding table, reset-to-defaults, rebind placeholder);
+- ~~export preview, image copy, recording~~ ✅ (QtExportWidget with format selection, resolution, path, PNG + plugin format export);
+- ~~plugins/data sources~~ ✅ (QtTopicsWidget already implemented in Phase 3);
+- ~~split panes/subplots~~ ✅ (QtSplitViewContainer with QSplitter-based layout, split right/down, close split, reset, wraps framework-neutral SplitViewManager; **integrated into SpectraMainWindow as central widget** replacing plain QTabWidget, split actions in View menu with Ctrl+\\ / Ctrl+Shift+\\ shortcuts, signals forwarded through main window);
+- ~~editor/transforms~~ ✅ (QtTransformWidget with transform selection, parameter editing, pipeline builder, preset save/load; QtDataEditorWidget with axes/series selector, editable data table);
+- ~~accessibility/sonification controls~~ ✅ (QtAccessibilityWidget with sonification WAV export, HTML data-table export, axes selector, frequency/duration/amplitude controls);
+- ~~annotations/measurement/selection/tooltips/crosshair~~ ✅ (framework-neutral `OverlayDrawList` interface created at `include/spectra/overlay_draw_list.hpp`; ImGui adapter at `src/ui/overlay/imgui_overlay_draw_list.{hpp,cpp}`; Qt QPainter adapter at `src/adapters/qt/qt_overlay_draw_list.{hpp,cpp}`; overlay code can now be gradually refactored to use the abstract interface instead of direct ImDrawList calls);
+- ROS2/PX4 panels (ImGui-based ROS2 panels in src/adapters/ros2/ui/ — port deferred to Phase 7 runtime variants).
 
 Acceptance:
 
@@ -1309,37 +1322,41 @@ Acceptance:
 
 ### Phase 6 — Workspace, plugins, and automation
 
-Work:
-
-- workspace v5 and v4 migration;
-- provider-specific layout serialization;
-- Qt automation adapter;
-- portable plugin UI schema;
-- crash-recovery restore.
-
-Acceptance:
-
-- v4/v5 fixtures load;
-- multi-window round-trip;
-- provider mismatch degrades safely;
-- automation passes;
-- ABI-compatible plugins load.
-
-### Phase 7 — Runtime variants and adapters
+**Status: complete**
 
 Work:
 
-- Qt in-process app;
-- Qt window agent;
-- Qt ROS2/PX4 shell composition;
-- daemon discovery and IPC preservation.
+- [x] workspace v5 and v4 migration — `FORMAT_VERSION` bumped to 5, `DesktopLayoutState` added to `WorkspaceData`, serialize/deserialize implemented;
+- [x] provider-specific layout serialization — `QtWorkspaceBridge` converts between `DockLayoutState` and `DesktopLayoutState`, saves/restores main window + detached windows;
+- [x] Qt automation adapter — `QtAutomationAdapter` wraps `McpServer` + `AutomationServer`, starts via `SPECTRA_AUTOMATION` env var, Qt timer-based polling;
+- [x] portable plugin UI schema — `PluginUIRegistry` with framework-neutral `PluginUISchema` types, C ABI (`spectra_register_plugin_ui`/`spectra_unregister_plugin_ui` in API v2.1), `PluginUIRegistry` wired into `ApplicationServices` and `PluginManager`, Qt rendering via `QtPluginPanelWidget`, plugin management via `QtPluginsWidget`;
+- [x] crash-recovery restore — `WorkspaceAutosave` wired into `QtApplicationController`, `check_crash_recovery()` prompts user via `QMessageBox` on startup.
 
 Acceptance:
 
-- Python publisher-first flow opens Qt frontend;
-- reconnect/restart works;
-- ROS2/PX4 remain optional;
-- backend/headless packages remain Qt-free.
+- [x] v4/v5 fixtures load;
+- [x] multi-window round-trip;
+- [x] provider mismatch degrades safely (`QtWorkspaceBridge::apply_layout` returns false on provider mismatch);
+- [x] automation passes (`qt_test_qt_automation` — start/stop, callback wiring, command execution);
+- [x] ABI-compatible plugins load (`qt_test_qt_plugin_ui` — schema register/unregister, property/action callbacks, all element types, enum/color properties).
+
+### Phase 7 — Runtime variants and adapters ✅ (implemented)
+
+Work:
+
+- ✅ Qt in-process app — `spectra-qt-app` starts `InprocTopicServer` so Python publishers connect directly;
+- ✅ Qt window agent — `spectra-qt-app --socket <path>` connects to daemon via `QtIpcClient` (QTimer-based IPC polling, snapshot/diff handling, heartbeat);
+- ✅ daemon discovery — auto-discovers live `spectra-*.sock` in `$XDG_RUNTIME_DIR` (mirrors legacy `src/app/main.cpp` logic);
+- ✅ IPC preservation — shared `figure_snapshot.hpp/cpp` extracted from `src/agent/main.cpp` for reuse by Qt IPC client;
+- [ ] Qt ROS2/PX4 shell composition (deferred — adapters remain optional, no Qt-specific shell needed yet);
+- ✅ backend/headless packages remain Qt-free (Qt adapter is a separate CMake target, gated by `SPECTRA_USE_QT`).
+
+Acceptance:
+
+- ✅ Python publisher-first flow opens Qt frontend (in-process topic server);
+- ✅ reconnect/restart works (IPC client handles `STATE_SNAPSHOT` resync);
+- ✅ ROS2/PX4 remain optional;
+- ✅ backend/headless packages remain Qt-free.
 
 ### Phase 8 — Cross-platform packaging and release hardening
 
@@ -1431,16 +1448,23 @@ Add tests for:
 
 Use Qt Test for:
 
-- action invocation;
-- panel visibility;
-- tab create/close/move;
-- detach/attach;
-- close order;
-- focus switching;
-- dialog injection;
-- shortcut scopes;
-- workspace restore;
-- platform-surface destroy/recreate.
+- ✅ action invocation (`qt_test_qt_action_bridge` — QAction creation, metadata, trigger, refresh, categories, disabled state);
+- ✅ docking layout (`qt_test_qt_docking` — descriptor defaults, sentinel IDs, MainWindowRegistry tracking, DockLayoutState round-trip);
+- ✅ automation (`qt_test_qt_automation` — start/stop lifecycle, callback wiring, command registry integration, multiple cycles);
+- ✅ plugin UI schema (`qt_test_qt_plugin_ui` — register/find/replace/unregister, property/action callbacks, change listener, all element types, enum/color);
+- [ ] panel visibility;
+- [ ] tab create/close/move;
+- [ ] detach/attach;
+- [ ] close order;
+- [ ] focus switching;
+- [ ] dialog injection;
+- [ ] shortcut scopes;
+- [ ] workspace restore;
+- [ ] platform-surface destroy/recreate.
+
+**Build:** `cmake -DSPECTRA_USE_QT=ON -DSPECTRA_BUILD_QT_TESTS=ON ..`  
+**Run:** `ctest -L qt --output-on-failure`  
+**Headless:** Tests use `QT_QPA_PLATFORM=offscreen` (set automatically by CTest).
 
 ### 21.3 Vulkan GUI stress tests
 
@@ -1568,7 +1592,7 @@ Do not delete the GLFW/SDL3 + ImGui frontend until all are true:
 - X11 and native Wayland packages pass;
 - multi-window detach/redock is stable;
 - workspace migration is released;
-- automation passes;
+- automation passes (✅ `qt_test_qt_automation`);
 - Python, ROS2, PX4, and multiprocess flows pass;
 - APT, AppImage, Windows, and macOS packages are validated on clean systems;
 - users do not need to install Qt manually;

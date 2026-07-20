@@ -63,9 +63,9 @@ TEST(WorkspaceSeries3D, TypeStrings)
 
 // ─── Format Version ─────────────────────────────────────────────────────────
 
-TEST(WorkspaceVersion, FormatVersionIs4)
+TEST(WorkspaceVersion, FormatVersionIs5)
 {
-    EXPECT_EQ(WorkspaceData::FORMAT_VERSION, 4u);
+    EXPECT_EQ(WorkspaceData::FORMAT_VERSION, 5u);
 }
 
 // ─── Serialization Round-Trip ───────────────────────────────────────────────
@@ -80,7 +80,7 @@ TEST(Workspace3DRoundTrip, EmptyWorkspace)
 
     WorkspaceData loaded;
     ASSERT_TRUE(Workspace::load(path, loaded));
-    EXPECT_EQ(loaded.version, 4u);
+    EXPECT_EQ(loaded.version, WorkspaceData::FORMAT_VERSION);
     std::filesystem::remove(path);
 }
 
@@ -581,7 +581,7 @@ TEST(Workspace3DFull, CompleteStateRoundTrip)
     WorkspaceData loaded;
     ASSERT_TRUE(Workspace::load(path, loaded));
 
-    EXPECT_EQ(loaded.version, 4u);
+    EXPECT_EQ(loaded.version, WorkspaceData::FORMAT_VERSION);
     EXPECT_EQ(loaded.theme_name, "light");
     EXPECT_FALSE(loaded.mode_transition_state.empty());
 

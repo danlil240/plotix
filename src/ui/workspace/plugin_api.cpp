@@ -1,5 +1,7 @@
 #include "plugin_api.hpp"
 
+#include "plugin_ui_schema.hpp"
+
 #include <bit>
 #include <chrono>
 #include <cstdlib>
@@ -703,6 +705,127 @@ extern "C"
         b->draw_indexed(index_count, first_index, vertex_offset);
     }
 
+    // ─── Portable plugin UI schema C ABI (API v2.1) ──────────────────────────
+
+    // Thread-local storage for the last schema ID returned by register_plugin_ui.
+    // The C ABI returns a const char* that the caller must not free, so we
+    // keep it in a thread-local std::string that stays valid until the next call.
+    static thread_local std::string tl_last_schema_id;
+
+    const char* spectra_register_plugin_ui(
+        SpectraPluginUIRegistry              registry,
+        const SpectraPluginUISchemaDesc*     schema_desc,
+        SpectraPluginUIPropertyChangedFn     on_changed,
+        SpectraPluginUIActionTriggeredFn     on_action,
+        void*                                user_data)
+    {
+        if (!registry || !schema_desc || !schema_desc->plugin_name || !schema_desc->panel_title)
+            return nullptr;
+
+        auto* reg = static_cast<PluginUIRegistry*>(registry);
+
+        PluginUISchema schema;
+        schema.plugin_name = schema_desc->plugin_name;
+        schema.panel_title = schema_desc->panel_title;
+        schema.version     = 1;
+
+        for (uint32_t i = 0; i < schema_desc->element_count; ++i)
+        {
+            const auto& src = schema_desc->elements[i];
+            PluginUIElement elem;
+
+            switch (src.type)
+            {
+                case SPECTRA_UI_ELEM_PROPERTY:
+                {
+                    elem.type = PluginUIElementType::Property;
+                    elem.property.id    = src.prop_id ? src.prop_id : "";
+                    elem.property.label = src.prop_label ? src.prop_label : "";
+                    elem.property.type  = static_cast<PluginUIPropertyType>(src.prop_type);
+                    elem.property.value = src.prop_value ? src.prop_value : "";
+                    elem.property.min_value = src.prop_min ? src.prop_min : "";
+                    elem.property.max_value = src.prop_max ? src.prop_max : "";
+                    elem.property.default_value = src.prop_default ? src.prop_default : "";
+                    elem.property.read_only = src.prop_read_only != 0;
+                    elem.property.tooltip = src.prop_tooltip ? src.prop_tooltip : "";
+                    for (uint32_t j = 0; j < src.enum_count && src.enum_options; ++j)
+                    {
+                        if (src.enum_options[j])
+                            elem.property.enum_options.push_back(src.enum_options[j]);
+                    }
+                    break;
+                }
+                case SPECTRA_UI_ELEM_ACTION:
+                {
+                    elem.type = PluginUIElementType::Action;
+                    elem.action.id       = src.action_id ? src.action_id : "";
+                    elem.action.label    = src.action_label ? src.action_label : "";
+                    elem.action.tooltip  = src.action_tooltip ? src.action_tooltip : "";
+                    elem.action.enabled  = src.action_enabled != 0;
+                    break;
+                }
+                case SPECTRA_UI_ELEM_LABEL:
+                {
+                    elem.type = PluginUIElementType::Label;
+                    elem.label.text  = src.label_text ? src.label_text : "";
+                    elem.label.style_hint = src.label_style ? src.label_style : "";
+                    break;
+                }
+                case SPECTRA_UI_ELEM_SEPARATOR:
+                {
+                    elem.type = PluginUIElementType::Separator;
+                    break;
+                }
+                case SPECTRA_UI_ELEM_GROUP:
+                {
+                    elem.type = PluginUIElementType::Group;
+                    elem.group.title     = src.group_title ? src.group_title : "";
+                    elem.group.collapsed = src.group_collapsed != 0;
+                    break;
+                }
+                default:
+                    continue;
+            }
+
+            schema.elements.push_back(std::move(elem));
+        }
+
+        PluginUICallbacks callbacks;
+        if (on_changed)
+        {
+            callbacks.on_property_changed =
+                [on_changed, user_data](const std::string& sid,
+                                        const std::string& pid,
+                                        const std::string& val) -> std::string
+            {
+                const char* result = on_changed(sid.c_str(), pid.c_str(),
+                                                val.c_str(), user_data);
+                return result ? std::string(result) : val;
+            };
+        }
+        if (on_action)
+        {
+            callbacks.on_action_triggered =
+                [on_action, user_data](const std::string& sid,
+                                       const std::string& aid)
+            {
+                on_action(sid.c_str(), aid.c_str(), user_data);
+            };
+        }
+
+        tl_last_schema_id = reg->register_schema(schema, std::move(callbacks));
+        return tl_last_schema_id.c_str();
+    }
+
+    void spectra_unregister_plugin_ui(
+        SpectraPluginUIRegistry registry, const char* plugin_name)
+    {
+        if (!registry || !plugin_name)
+            return;
+        auto* reg = static_cast<PluginUIRegistry*>(registry);
+        reg->unregister_plugin(plugin_name);
+    }
+
 }   // extern "C"
 
 // ─── PluginManager ───────────────────────────────────────────────────────────
@@ -726,6 +849,7 @@ SpectraPluginContext PluginManager::make_context(uint32_t minor_version) const
     ctx.data_source_registry   = static_cast<SpectraDataSourceRegistry>(data_source_reg_);
     ctx.series_type_registry   = static_cast<SpectraSeriesTypeRegistry>(series_type_reg_);
     ctx.backend_handle         = static_cast<void*>(backend_);
+    ctx.plugin_ui_registry     = static_cast<SpectraPluginUIRegistry>(plugin_ui_reg_);
     return ctx;
 }
 

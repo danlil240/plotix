@@ -124,6 +124,7 @@ set(SPECTRA_UNIT_TESTS
     test_shell_app_shell
     test_plugin_api
     test_workspace_v3
+    test_workspace_v5
     test_phase3_integration
     test_math3d
     test_3d_pipelines
@@ -1662,6 +1663,55 @@ if(SPECTRA_USE_PX4)
         )
         add_test(NAME unit_test_px4_app_shell COMMAND unit_test_px4_app_shell)
         set_tests_properties(unit_test_px4_app_shell PROPERTIES LABELS "px4")
+    endif()
+endif()
+
+# Qt integration tests — built when SPECTRA_BUILD_QT_TESTS is ON.
+# Requires Qt6 (Core, Gui, Widgets) and the spectra_qt_adapter library.
+# Tests run headless via QT_QPA_PLATFORM=offscreen.
+if(SPECTRA_BUILD_QT_TESTS AND SPECTRA_USE_QT)
+    find_package(Qt6 REQUIRED COMPONENTS Gui Widgets)
+
+    function(add_qt_test name)
+        add_executable(qt_${name} qt/${name}.cpp)
+        target_link_libraries(qt_${name} PRIVATE
+            spectra_qt_adapter
+            spectra
+            Qt6::Gui
+            Qt6::Widgets
+            GTest::gtest_main
+        )
+        target_compile_features(qt_${name} PRIVATE cxx_std_20)
+        target_include_directories(qt_${name} PRIVATE
+            ${CMAKE_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/util
+            ${CMAKE_BINARY_DIR}/generated
+        )
+        target_compile_definitions(qt_${name} PRIVATE SPECTRA_HAS_QT6)
+        set_target_properties(qt_${name} PROPERTIES
+            AUTOMOC ON
+            AUTOUIC ON
+            AUTORCC ON
+        )
+        add_test(NAME qt_${name} COMMAND qt_${name}
+            ENVIRONMENT QT_QPA_PLATFORM=offscreen)
+        set_tests_properties(qt_${name} PROPERTIES LABELS "qt")
+    endfunction()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_action_bridge.cpp)
+        add_qt_test(test_qt_action_bridge)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_docking.cpp)
+        add_qt_test(test_qt_docking)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_automation.cpp)
+        add_qt_test(test_qt_automation)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_plugin_ui.cpp)
+        add_qt_test(test_qt_plugin_ui)
     endif()
 endif()
 

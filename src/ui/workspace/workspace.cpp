@@ -291,6 +291,29 @@ std::string Workspace::serialize_json(const WorkspaceData& data)
     // v4: Mode transition state
     os << R"(  "mode_transition_state": ")" << escape_json(data.mode_transition_state) << "\",\n";
 
+    // v5: Desktop layout state
+    os << "  \"desktop_layout\": {\n";
+    os << R"(    "provider": ")" << escape_json(data.desktop_layout.provider) << "\",\n";
+    os << R"(    "provider_version": ")" << escape_json(data.desktop_layout.provider_version) << "\",\n";
+    os << R"(    "main_window_state_base64": ")" << escape_json(data.desktop_layout.main_window_state_base64) << "\",\n";
+    os << R"(    "main_window_geometry_base64": ")" << escape_json(data.desktop_layout.main_window_geometry_base64) << "\",\n";
+    os << R"(    "provider_layout": ")" << escape_json(data.desktop_layout.provider_layout) << "\",\n";
+    os << "    \"windows\": [\n";
+    for (size_t wi = 0; wi < data.desktop_layout.windows.size(); ++wi)
+    {
+        const auto& w = data.desktop_layout.windows[wi];
+        os << "      {\n";
+        os << R"(        "state_base64": ")" << escape_json(w.state_base64) << "\",\n";
+        os << R"(        "geometry_base64": ")" << escape_json(w.geometry_base64) << "\",\n";
+        os << R"(        "title": ")" << escape_json(w.title) << "\"\n";
+        os << "      }";
+        if (wi + 1 < data.desktop_layout.windows.size())
+            os << ",";
+        os << "\n";
+    }
+    os << "    ]\n";
+    os << "  },\n";
+
     // Last export directory
     os << R"(  "last_export_dir": ")" << escape_json(data.last_export_dir) << "\"\n";
     os << "}\n";
@@ -774,6 +797,59 @@ bool Workspace::deserialize_json(const std::string& json, WorkspaceData& data)
     if (data.version >= 4)
     {
         data.mode_transition_state = read_string_value(json, "mode_transition_state");
+    }
+
+    // v5: Desktop layout state
+    if (data.version >= 5)
+    {
+        // Find the desktop_layout object
+        auto dl_pos = json.find("\"desktop_layout\"");
+        if (dl_pos != std::string::npos)
+        {
+            auto brace = json.find('{', dl_pos);
+            if (brace != std::string::npos)
+            {
+                int    depth = 0;
+                size_t end   = brace;
+                for (size_t i = brace; i < json.size(); ++i)
+                {
+                    if (json[i] == '{')
+                        ++depth;
+                    else if (json[i] == '}')
+                    {
+                        --depth;
+                        if (depth == 0)
+                        {
+                            end = i;
+                            break;
+                        }
+                    }
+                }
+                std::string dl_json = json.substr(brace, end - brace + 1);
+
+                data.desktop_layout.provider =
+                    read_string_value(dl_json, "provider");
+                data.desktop_layout.provider_version =
+                    read_string_value(dl_json, "provider_version");
+                data.desktop_layout.main_window_state_base64 =
+                    read_string_value(dl_json, "main_window_state_base64");
+                data.desktop_layout.main_window_geometry_base64 =
+                    read_string_value(dl_json, "main_window_geometry_base64");
+                data.desktop_layout.provider_layout =
+                    read_string_value(dl_json, "provider_layout");
+
+                // Parse windows array
+                auto win_objects = parse_json_array(dl_json, "windows");
+                for (const auto& w_json : win_objects)
+                {
+                    WorkspaceData::DesktopLayoutState::WindowState ws;
+                    ws.state_base64    = read_string_value(w_json, "state_base64");
+                    ws.geometry_base64 = read_string_value(w_json, "geometry_base64");
+                    ws.title           = read_string_value(w_json, "title");
+                    data.desktop_layout.windows.push_back(std::move(ws));
+                }
+            }
+        }
     }
 
     // Last export directory (versionless — graceful default for old files)

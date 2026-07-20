@@ -7,6 +7,7 @@
 #include "ui/app/session_runtime.hpp"
 #include "ui/settings/settings_store.hpp"
 #include "ui/workspace/plugin_api.hpp"
+#include "ui/workspace/plugin_ui_schema.hpp"
 #include "io/export_registry.hpp"
 #include "render/series_type_registry.hpp"
 #include "adapters/data_source_registry.hpp"
@@ -57,6 +58,7 @@ void ApplicationServices::init(FigureRegistry&   registry,
 
     // Plugin and data registries
     plugin_mgr_           = std::make_unique<PluginManager>();
+    plugin_ui_registry_   = std::make_unique<PluginUIRegistry>();
     export_format_registry_ = std::make_unique<ExportFormatRegistry>();
     data_source_registry_ = std::make_unique<DataSourceRegistry>();
     series_type_registry_ = std::make_unique<SeriesTypeRegistry>();
@@ -79,6 +81,15 @@ void ApplicationServices::init(FigureRegistry&   registry,
     session_              = std::make_unique<SessionRuntime>(backend, renderer, registry);
 
     shortcut_mgr_->set_command_registry(cmd_registry_.get());
+
+    // Wire plugin manager to registries
+    plugin_mgr_->set_command_registry(cmd_registry_.get());
+    plugin_mgr_->set_shortcut_manager(shortcut_mgr_.get());
+    plugin_mgr_->set_undo_manager(undo_mgr_.get());
+    plugin_mgr_->set_export_format_registry(export_format_registry_.get());
+    plugin_mgr_->set_data_source_registry(data_source_registry_.get());
+    plugin_mgr_->set_series_type_registry(series_type_registry_.get());
+    plugin_mgr_->set_plugin_ui_registry(plugin_ui_registry_.get());
 
 #ifdef SPECTRA_USE_IMGUI
     cmd_palette_ = std::make_unique<CommandPalette>();
@@ -112,6 +123,7 @@ void ApplicationServices::shutdown()
         plugin_mgr_->set_export_format_registry(nullptr);
         plugin_mgr_->set_data_source_registry(nullptr);
         plugin_mgr_->set_series_type_registry(nullptr);
+        plugin_mgr_->set_plugin_ui_registry(nullptr);
         plugin_mgr_->set_backend(nullptr);
     }
 
@@ -126,6 +138,7 @@ void ApplicationServices::shutdown()
     series_type_registry_.reset();
     data_source_registry_.reset();
     export_format_registry_.reset();
+    plugin_ui_registry_.reset();
     plugin_mgr_.reset();
 
 #ifdef SPECTRA_USE_IMGUI

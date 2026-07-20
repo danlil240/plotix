@@ -28,6 +28,7 @@ class ExportFormatRegistry;
 class DataSourceRegistry;
 class SeriesTypeRegistry;
 class Backend;
+class PluginUIRegistry;
 
 // ─── Stable C ABI for plugins ────────────────────────────────────────────────
 //
@@ -41,7 +42,7 @@ extern "C"
 {
 // Plugin API version — bump major on breaking changes.
 #define SPECTRA_PLUGIN_API_VERSION_MAJOR 2
-#define SPECTRA_PLUGIN_API_VERSION_MINOR 0
+#define SPECTRA_PLUGIN_API_VERSION_MINOR 1
 
     // Opaque handles (pointers cast to void* for C ABI stability)
     typedef void* SpectraCommandRegistry;
@@ -52,6 +53,9 @@ extern "C"
     typedef void* SpectraExportFormatRegistry;
     typedef void* SpectraDataSourceRegistry;
     typedef void* SpectraSeriesTypeRegistry;
+
+    // Forward-declared for use in SpectraPluginContext (full API in v2.1 section below)
+    typedef void* SpectraPluginUIRegistry;
 
     // Plugin context passed to plugin_init.
     struct SpectraPluginContext
@@ -75,6 +79,9 @@ extern "C"
         // Added in API v2.0
         SpectraSeriesTypeRegistry series_type_registry;   // nullptr for v1.x plugins
         void*                     backend_handle;         // opaque Backend* for C ABI wrappers
+
+        // Added in API v2.1
+        SpectraPluginUIRegistry   plugin_ui_registry;     // nullptr for v2.0 plugins
     };
 
     // Plugin info returned by plugin_init.
@@ -501,6 +508,98 @@ extern "C"
                                       uint32_t             first_index,
                                       int32_t              vertex_offset);
 
+    // ─── Portable plugin UI schema (added in API v2.1) ──────────────────────
+    //
+    // Plugins can register a versioned UI schema that both the Qt and ImGui
+    // frontends can render without the plugin linking to either framework.
+    //
+    // The schema is a flat array of elements (properties, actions, labels,
+    // separators, groups).  See plugin_ui_schema.hpp for the C++ types.
+
+    // Property type values (match PluginUIPropertyType).
+    typedef enum SpectraPluginUIPropertyType
+    {
+        SPECTRA_UI_PROP_BOOLEAN = 0,
+        SPECTRA_UI_PROP_INTEGER = 1,
+        SPECTRA_UI_PROP_FLOAT   = 2,
+        SPECTRA_UI_PROP_STRING  = 3,
+        SPECTRA_UI_PROP_ENUM    = 4,
+        SPECTRA_UI_PROP_COLOR   = 5,
+    } SpectraPluginUIPropertyType;
+
+    // Element type values (match PluginUIElementType).
+    typedef enum SpectraPluginUIElementType
+    {
+        SPECTRA_UI_ELEM_PROPERTY  = 0,
+        SPECTRA_UI_ELEM_ACTION    = 1,
+        SPECTRA_UI_ELEM_LABEL     = 2,
+        SPECTRA_UI_ELEM_SEPARATOR = 3,
+        SPECTRA_UI_ELEM_GROUP     = 4,
+    } SpectraPluginUIElementType;
+
+    // A single UI element descriptor (C ABI mirror of PluginUIElement).
+    typedef struct SpectraPluginUIElementDesc
+    {
+        SpectraPluginUIElementType type;
+
+        // Property fields (used when type == SPECTRA_UI_ELEM_PROPERTY)
+        const char* prop_id;            // unique within schema
+        const char* prop_label;
+        SpectraPluginUIPropertyType prop_type;
+        const char* prop_value;         // current value as string
+        const char* prop_min;           // optional, may be NULL
+        const char* prop_max;           // optional, may be NULL
+        const char* prop_default;       // optional, may be NULL
+        const char* const* enum_options; // array of strings, NULL-terminated if enum
+        uint32_t    enum_count;
+        int         prop_read_only;     // bool as int
+        const char* prop_tooltip;       // optional, may be NULL
+
+        // Action fields (used when type == SPECTRA_UI_ELEM_ACTION)
+        const char* action_id;
+        const char* action_label;
+        const char* action_tooltip;     // optional, may be NULL
+        int         action_enabled;     // bool as int
+
+        // Label fields (used when type == SPECTRA_UI_ELEM_LABEL)
+        const char* label_text;
+        const char* label_style;        // optional, may be NULL
+
+        // Group fields (used when type == SPECTRA_UI_ELEM_GROUP)
+        const char* group_title;
+        int         group_collapsed;    // bool as int
+    } SpectraPluginUIElementDesc;
+
+    // Schema descriptor passed to spectra_register_plugin_ui.
+    typedef struct SpectraPluginUISchemaDesc
+    {
+        const char*                       plugin_name;
+        const char*                       panel_title;
+        const SpectraPluginUIElementDesc* elements;
+        uint32_t                          element_count;
+    } SpectraPluginUISchemaDesc;
+
+    // Callback signatures for plugin UI interaction.
+    typedef const char* (*SpectraPluginUIPropertyChangedFn)(
+        const char* schema_id, const char* property_id,
+        const char* new_value, void* user_data);
+    typedef void (*SpectraPluginUIActionTriggeredFn)(
+        const char* schema_id, const char* action_id, void* user_data);
+
+    // Register a plugin UI schema.  Returns a schema ID string (owned by the
+    // registry, valid until the schema is unregistered or the registry is
+    // destroyed).  Returns NULL on failure.
+    const char* spectra_register_plugin_ui(
+        SpectraPluginUIRegistry              registry,
+        const SpectraPluginUISchemaDesc*     schema,
+        SpectraPluginUIPropertyChangedFn     on_changed,
+        SpectraPluginUIActionTriggeredFn     on_action,
+        void*                                user_data);
+
+    // Unregister a plugin UI schema by plugin name.
+    void spectra_unregister_plugin_ui(
+        SpectraPluginUIRegistry registry, const char* plugin_name);
+
 }   // extern "C"
 
 // ─── C++ Plugin Manager ──────────────────────────────────────────────────────
@@ -544,6 +643,7 @@ class PluginManager
     void set_data_source_registry(DataSourceRegistry* reg) { data_source_reg_ = reg; }
     void set_series_type_registry(SeriesTypeRegistry* reg) { series_type_reg_ = reg; }
     void set_backend(Backend* backend) { backend_ = backend; }
+    void set_plugin_ui_registry(PluginUIRegistry* reg) { plugin_ui_reg_ = reg; }
 
     // Load a plugin from a shared library path.
     // Returns true on success.
@@ -591,6 +691,7 @@ class PluginManager
     ExportFormatRegistry*    export_format_reg_ = nullptr;
     DataSourceRegistry*      data_source_reg_   = nullptr;
     SeriesTypeRegistry*      series_type_reg_   = nullptr;
+    PluginUIRegistry*        plugin_ui_reg_     = nullptr;
     Backend*                 backend_           = nullptr;
     mutable std::mutex       mutex_;
     std::vector<PluginEntry> plugins_;

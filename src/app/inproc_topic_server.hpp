@@ -59,6 +59,9 @@ class InprocTopicServer
 
     bool is_running() const { return running_.load(std::memory_order_relaxed); }
 
+    // Returns the socket path the server is listening on (empty if not running).
+    const std::string& socket_path() const { return socket_path_; }
+
     // Set callback fired on topic list changes (declare / disconnect).
     void set_topic_changed_fn(TopicChangedFn fn) { topic_changed_fn_ = std::move(fn); }
 

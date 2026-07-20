@@ -86,6 +86,8 @@ option(SPECTRA_USE_PX4     "Enable PX4 ULog adapter (ULog visualizer + MAVLink)"
 option(SPECTRA_USE_WEBGPU  "Enable WebGPU/wasm rendering backend (requires Dawn or wgpu-native)" OFF)
 option(SPECTRA_BUILD_EXAMPLES "Build example programs"            ON)
 option(SPECTRA_BUILD_QT_EXAMPLE "Build the Qt6 embed example"     OFF)
+option(SPECTRA_BUILD_QT_APP     "Build the production Qt6 desktop app" OFF)
+option(SPECTRA_BUILD_QT_TESTS   "Build Qt6 integration tests"        OFF)
 option(SPECTRA_BUILD_TESTS    "Build unit tests and benchmarks"   ON)
 option(SPECTRA_PYTHON_WHEEL  "Install backend into Python package _bin/" OFF)
 
@@ -247,6 +249,7 @@ foreach(_ui_src
     src/ui/workspace/workspace.cpp
     src/ui/workspace/workspace_autosave.cpp
     src/ui/workspace/plugin_api.cpp
+    src/ui/workspace/plugin_ui_schema.cpp
     src/ui/workspace/plugin_guard.cpp
     src/ui/workspace/plugin_manifest.cpp
     src/ui/app/register_commands.cpp
@@ -482,6 +485,29 @@ if(SPECTRA_USE_QT)
         src/adapters/qt/qt_surface_host.cpp
         src/adapters/qt/spectra_vulkan_window.cpp
         src/adapters/qt/figure_canvas_widget.cpp
+        src/adapters/qt/qt_frontend_services.cpp
+        src/adapters/qt/qt_action_bridge.cpp
+        src/adapters/qt/qt_main_window.cpp
+        src/adapters/qt/qt_application.cpp
+        src/adapters/qt/qt_workspace_bridge.cpp
+        src/adapters/qt/qt_automation_adapter.cpp
+        src/adapters/qt/qt_ipc_client.cpp
+        src/adapters/qt/docking/native_qt_docking_host.cpp
+        src/adapters/qt/docking/main_window_registry.cpp
+        src/adapters/qt/panels/command_palette_dialog.cpp
+        src/adapters/qt/panels/inspector_widget.cpp
+        src/adapters/qt/panels/settings_widget.cpp
+        src/adapters/qt/panels/topics_widget.cpp
+        src/adapters/qt/panels/timeline_widget.cpp
+        src/adapters/qt/panels/export_widget.cpp
+        src/adapters/qt/panels/shortcut_widget.cpp
+        src/adapters/qt/panels/transform_widget.cpp
+        src/adapters/qt/panels/data_editor_widget.cpp
+        src/adapters/qt/panels/accessibility_widget.cpp
+        src/adapters/qt/panels/plugin_panel_widget.cpp
+        src/adapters/qt/panels/plugins_widget.cpp
+        src/adapters/qt/split_view_container.cpp
+        src/adapters/qt/qt_overlay_draw_list.cpp
     )
     target_link_libraries(spectra_qt_adapter PUBLIC spectra Qt6::Gui Qt6::Widgets)
     target_compile_features(spectra_qt_adapter PRIVATE cxx_std_20)
@@ -490,6 +516,29 @@ if(SPECTRA_USE_QT)
         ${CMAKE_CURRENT_BINARY_DIR}/generated
     )
     target_compile_definitions(spectra_qt_adapter PUBLIC SPECTRA_USE_QT SPECTRA_HAS_QT6)
+    set_target_properties(spectra_qt_adapter PROPERTIES
+        AUTOMOC ON
+        AUTOUIC ON
+        AUTORCC ON
+    )
+
+    # Production Qt desktop application (Phase 3+)
+    # Supports both in-process and multiprocess (--socket) modes.
+    if(SPECTRA_BUILD_QT_APP)
+        add_executable(spectra-qt-app examples/qt_app.cpp)
+        target_link_libraries(spectra-qt-app PRIVATE spectra_qt_adapter spectra Qt6::Widgets)
+        target_compile_features(spectra-qt-app PRIVATE cxx_std_20)
+        target_include_directories(spectra-qt-app PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_BINARY_DIR}/generated
+        )
+        target_compile_definitions(spectra-qt-app PRIVATE SPECTRA_HAS_QT6)
+        set_target_properties(spectra-qt-app PROPERTIES
+            AUTOMOC ON
+            AUTOUIC ON
+            AUTORCC ON
+        )
+    endif()
 endif()
 
 # Dear ImGui (optional — requires GLFW or SDL3)
@@ -546,6 +595,7 @@ if(SPECTRA_USE_IMGUI AND (SPECTRA_USE_GLFW OR SPECTRA_USE_SDL3))
         src/ui/overlay/data_marker.cpp
         src/ui/overlay/annotation.cpp
         src/ui/overlay/data_interaction.cpp
+        src/ui/overlay/imgui_overlay_draw_list.cpp
         src/ui/input/region_select.cpp
         src/ui/overlay/legend_interaction.cpp
         src/ui/input/box_zoom_overlay.cpp
