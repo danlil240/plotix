@@ -34,8 +34,15 @@ jobs:
       - name: Install dependencies
         run: |
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.list
+          # Spectra uses C++20 <format>, which requires GCC 13+. Ubuntu 22.04
+          # ships GCC 11 by default, so pull GCC 13 from the toolchain PPA there.
+          if [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
+            sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          fi
           sudo apt-get update
           sudo apt-get install -y \
+            gcc-13 \
+            g++-13 \
             libvulkan-dev \
             vulkan-validationlayers \
             libwayland-dev \
@@ -52,8 +59,16 @@ jobs:
 
       - name: Configure + Build
         run: |
+          # Statically link libstdc++/libgcc so the newer GCC 13 C++ runtime
+          # (needed by <format>) is embedded in the binaries. This keeps the
+          # resulting .deb installable on stock distros without a newer
+          # libstdc++6 dependency.
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_C_COMPILER=gcc-13 \
+            -DCMAKE_CXX_COMPILER=g++-13 \
+            -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -static-libgcc" \
             -DSPECTRA_BUILD_TESTS=OFF \
             -DSPECTRA_BUILD_EXAMPLES=OFF \
             -DSPECTRA_PKG_DISTRO_CODENAME=${{ matrix.codename }}
@@ -288,12 +303,17 @@ jobs:
           # manylinux_2_34 is currently emitting x86_64_v2 ISA notes for our wheel.
           # Use manylinux_2_28 for a stable x86_64 baseline auditwheel target.
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
+          # manylinux_2_28's default gcc-toolset-12 lacks C++20 <format>; use
+          # gcc-toolset-13 (installed in CIBW_BEFORE_ALL_LINUX) instead.
           CIBW_ENVIRONMENT_LINUX: >
+            CC=/opt/rh/gcc-toolset-13/root/usr/bin/gcc
+            CXX=/opt/rh/gcc-toolset-13/root/usr/bin/g++
+            PATH=/opt/rh/gcc-toolset-13/root/usr/bin:$PATH
             CFLAGS="-march=x86-64 -mtune=generic"
             CXXFLAGS="-march=x86-64 -mtune=generic"
             CMAKE_ARGS="-DCMAKE_C_FLAGS=-march=x86-64 -DCMAKE_CXX_FLAGS=-march=x86-64"
           CIBW_BEFORE_ALL_LINUX: >
-            dnf -y install git cmake ninja-build &&
+            dnf -y install git cmake ninja-build gcc-toolset-13 &&
             git clone https://github.com/KhronosGroup/glslang.git --depth 1 --branch 14.2.0 &&
             cd glslang && 
             mkdir build && cd build && 
@@ -380,8 +400,15 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.list
+          # Spectra uses C++20 <format>, which requires GCC 13+. Ubuntu 22.04
+          # ships GCC 11 by default, so pull GCC 13 from the toolchain PPA there.
+          if [ "${{ matrix.os }}" = "ubuntu-22.04" ]; then
+            sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          fi
           sudo apt-get update
           sudo apt-get install -y \
+            gcc-13 \
+            g++-13 \
             libvulkan-dev \
             vulkan-validationlayers \
             libwayland-dev \
@@ -434,9 +461,21 @@ jobs:
           if [ -n "${PYTHON_VENV:-}" ]; then
             python_args=(-DPython3_EXECUTABLE:FILEPATH="$PYTHON_VENV")
           fi
+          # On Linux, build with GCC 13 (for C++20 <format>) and statically link
+          # the C++ runtime so the backend binaries stay portable.
+          toolchain_args=()
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            toolchain_args=(
+              -DCMAKE_C_COMPILER=gcc-13
+              -DCMAKE_CXX_COMPILER=g++-13
+              -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+              -DCMAKE_SHARED_LINKER_FLAGS="-static-libstdc++ -static-libgcc"
+            )
+          fi
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             "${python_args[@]}" \
+            "${toolchain_args[@]}" \
             -DSPECTRA_BUILD_TESTS=OFF \
             -DSPECTRA_BUILD_EXAMPLES=OFF \
             -DSPECTRA_RUNTIME_MODE=multiproc
