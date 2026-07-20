@@ -38,12 +38,12 @@ WindowUIContextBuildMode resolve_build_mode(const WindowUIContextBuildOptions& o
 
 }   // namespace
 
+#ifdef SPECTRA_USE_IMGUI
 bool init_window_imgui_integration(VulkanBackend&    backend,
                                    WindowContext&    wctx,
                                    ImGuiIntegration& imgui,
                                    bool              install_callbacks)
 {
-#ifdef SPECTRA_USE_IMGUI
     if (!wctx.glfw_window)
         return false;
 
@@ -70,14 +70,8 @@ bool init_window_imgui_integration(VulkanBackend&    backend,
     backend.set_active_window(prev_active);
     ImGui::SetCurrentContext(prev_imgui_ctx);
     return true;
-#else
-    (void)backend;
-    (void)wctx;
-    (void)imgui;
-    (void)install_callbacks;
-    return false;
-#endif
 }
+#endif
 
 std::unique_ptr<WindowUIContext> build_window_ui_context(const WindowUIContextBuildOptions& options)
 {
@@ -104,10 +98,8 @@ std::unique_ptr<WindowUIContext> build_window_ui_context(const WindowUIContextBu
     // Headless path: minimal FigureManager-only context.
     if (mode == WindowUIContextBuildMode::Headless)
     {
-#ifdef SPECTRA_USE_IMGUI
         ui->fig_mgr_owned = std::make_unique<FigureManager>(*options.registry);
         ui->fig_mgr       = ui->fig_mgr_owned.get();
-#endif
         return ui;
     }
 

@@ -3,7 +3,9 @@
 #include <cmath>
 #include <spectra/logger.hpp>
 
-#include "ui/overlay/data_interaction.hpp"
+#ifdef SPECTRA_USE_IMGUI
+    #include "ui/overlay/data_interaction.hpp"
+#endif
 
 namespace spectra
 {
@@ -20,6 +22,7 @@ constexpr int ACTION_RELEASE     = 0;
 
 void InputHandler::handle_mouse_button_annotate(int button, int action, double x, double y)
 {
+#ifdef SPECTRA_USE_IMGUI
     if (!data_interaction_)
         return;
 
@@ -75,16 +78,23 @@ void InputHandler::handle_mouse_button_annotate(int button, int action, double x
             }
         }
     }
+#else
+    (void)button; (void)action; (void)x; (void)y;
+#endif
 }
 
 // ─── Annotate drag on mouse move ────────────────────────────────────────────
 
 void InputHandler::handle_mouse_move_annotate(double x, double y)
 {
+#ifdef SPECTRA_USE_IMGUI
     if (data_interaction_)
     {
         data_interaction_->update_annotation_drag(x, y);
     }
+#else
+    (void)x; (void)y;
+#endif
 }
 
 }   // namespace spectra

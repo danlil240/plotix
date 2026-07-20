@@ -6,32 +6,33 @@
 #include <spectra/fwd.hpp>
 #include <unordered_map>
 
-#ifdef SPECTRA_USE_IMGUI
-    #include <spectra/camera.hpp>
+// Framework-neutral includes (always available, no ImGui dependency)
+#include <spectra/camera.hpp>
+#include "ui/animation/animation_curve_editor.hpp"
+#include "ui/data/axis_link.hpp"
+#include "ui/commands/command_registry.hpp"
+#include "ui/docking/dock_system.hpp"
+#include "ui/figures/figure_manager.hpp"
+#include "ui/animation/keyframe_interpolator.hpp"
+#include "ui/overlay/knob_manager.hpp"
+#include "ui/animation/mode_transition.hpp"
+#include "ui/overlay/overlay_registry.hpp"
+#include "ui/commands/shortcut_config.hpp"
+#include "ui/commands/shortcut_manager.hpp"
+#include "ui/figures/tab_bar.hpp"
+#include "ui/animation/timeline_editor.hpp"
+#include "ui/commands/undo_manager.hpp"
+#include "ui/settings/settings_store.hpp"
 
-    #include "ui/animation/animation_curve_editor.hpp"
-    #include "ui/data/axis_link.hpp"
+#ifdef SPECTRA_USE_IMGUI
     #include "ui/input/box_zoom_overlay.hpp"
     #include "ui/commands/command_palette.hpp"
-    #include "ui/commands/command_registry.hpp"
     #include "ui/overlay/data_interaction.hpp"
-    #include "ui/docking/dock_system.hpp"
-    #include "ui/figures/figure_manager.hpp"
     #include "ui/imgui/imgui_integration.hpp"
-    #include "ui/animation/keyframe_interpolator.hpp"
-    #include "ui/overlay/knob_manager.hpp"
-    #include "ui/animation/mode_transition.hpp"
-    #include "ui/overlay/overlay_registry.hpp"
-    #include "ui/commands/shortcut_config.hpp"
-    #include "ui/commands/shortcut_manager.hpp"
-    #include "ui/figures/tab_bar.hpp"
     #include "ui/figures/tab_drag_controller.hpp"
-    #include "ui/animation/timeline_editor.hpp"
-    #include "ui/commands/undo_manager.hpp"
     #include "ui/topics/topics_panel.hpp"
     #include "ui/settings/settings_panel.hpp"
     #include "ui/shell/spectra_app_shell.hpp"
-    #include "ui/settings/settings_store.hpp"
 #endif
 
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
@@ -57,13 +58,8 @@ struct WindowUIContext
     // from the App-owned instance.  All commands and UI code that previously
     // called ThemeManager::instance() should use this pointer instead.
     ui::ThemeManager* theme_mgr = nullptr;
-#ifdef SPECTRA_USE_IMGUI
-    std::unique_ptr<ImGuiIntegration> imgui_ui;
-    std::unique_ptr<DataInteraction>  data_interaction;
-    std::unique_ptr<TabBar>           figure_tabs;
 
-    BoxZoomOverlay box_zoom_overlay;
-
+    // Framework-neutral members (always present)
     FigureManager*                 fig_mgr = nullptr;   // Owned below via unique_ptr
     std::unique_ptr<FigureManager> fig_mgr_owned;
 
@@ -77,31 +73,15 @@ struct WindowUIContext
     AnimationCurveEditor curve_editor;
 
     ModeTransition mode_transition;
-    // NOTE: per-figure home_limits live on FigureViewModel
-    // to FigureViewModel (per-figure state).  Access via fig_mgr->state(id)
-    // or fig_mgr->active_state().  See LT-1 in ARCHITECTURE_REVIEW.md.
 
     CommandRegistry cmd_registry;
     ShortcutManager shortcut_mgr;
     UndoManager     undo_mgr;
-    CommandPalette  cmd_palette;
-
-    TabDragController tab_drag_controller;
 
     KnobManager knob_manager;
 
-    // Topics panel (Phase 2 of plans/SPECTRA_TOPICS_PLAN.md).
-    // Owned by the per-window UI bundle.  Wiring of IPC callbacks is done
-    // externally (by the agent or app shell).
-    ui::topics::TopicsPanel topics_panel;
-
-    // Settings panel — owned by this context, wired to the process-scoped
-    // SettingsStore during window_ui_context_builder.
     ShortcutConfig               settings_cfg;
-    ui::settings::SettingsPanel  settings_panel;
     ui::settings::SettingsStore* settings_store = nullptr;
-
-    std::unique_ptr<ui::shell::SpectraAppShell> app_shell;
 
     // Plugin overlay registry (shared across windows, not owned — owned by PluginManager)
     OverlayRegistry* overlay_registry = nullptr;
@@ -110,13 +90,28 @@ struct WindowUIContext
     PluginManager* plugin_manager = nullptr;
 
     // Per-window active figure pointer, updated each frame by the render loop.
-    // Used by command lambdas (register_standard_commands) so clipboard/view
-    // commands always reference the correct figure in secondary windows.
     Figure*  per_window_active_figure    = nullptr;
     FigureId per_window_active_figure_id = INVALID_FIGURE_ID;
 
-    // NOTE: cached_data_min/max, cached_zoom_series_count, zoom_cache_valid
-    // have been migrated to FigureViewModel (per-figure state).
+#ifdef SPECTRA_USE_IMGUI
+    std::unique_ptr<ImGuiIntegration> imgui_ui;
+    std::unique_ptr<DataInteraction>  data_interaction;
+    std::unique_ptr<TabBar>           figure_tabs;
+
+    BoxZoomOverlay box_zoom_overlay;
+
+    CommandPalette  cmd_palette;
+
+    TabDragController tab_drag_controller;
+
+    // Topics panel (Phase 2 of plans/SPECTRA_TOPICS_PLAN.md).
+    ui::topics::TopicsPanel topics_panel;
+
+    // Settings panel — owned by this context, wired to the process-scoped
+    // SettingsStore during window_ui_context_builder.
+    ui::settings::SettingsPanel  settings_panel;
+
+    std::unique_ptr<ui::shell::SpectraAppShell> app_shell;
 #endif
 
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)

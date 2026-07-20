@@ -13,3 +13,7 @@ leak:libfontconfig.so.1
 
 # Wayland client protocol proxy objects leaked by GLFW's Wayland backend.
 leak:libwayland-client.so.0
+
+# Qt6 Wayland client platform plugin leaks proxy objects at process exit.
+# Same root cause as GLFW's Wayland backend — protocol objects not freed by Qt.
+leak:libQt6WaylandClient.so

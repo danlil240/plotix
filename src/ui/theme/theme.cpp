@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <format>
 #include <cassert>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <spectra/event_bus.hpp>
@@ -15,7 +16,9 @@
 #include <sstream>
 #include <vector>
 
-#include "imgui.h"
+#ifdef SPECTRA_USE_IMGUI
+    #include "imgui.h"
+#endif
 
 namespace spectra::ui
 {
@@ -131,7 +134,9 @@ void ThemeManager::set_theme(const std::string& name)
         if (current_theme_)
             current_theme_->use_blur = glass_settings_.blur_enabled;
         ++theme_version_;
+#ifdef SPECTRA_USE_IMGUI
         apply_to_imgui();
+#endif
         if (event_system_)
             event_system_->theme_changed().emit(spectra::ThemeChangedEvent{name});
     }
@@ -154,7 +159,9 @@ void ThemeManager::set_glass_settings(const ThemeGlassSettings& settings, bool a
     if (apply)
     {
         ++theme_version_;
+#ifdef SPECTRA_USE_IMGUI
         apply_to_imgui();
+#endif
         if (event_system_)
             event_system_->theme_changed().emit(spectra::ThemeChangedEvent{current_theme_name_});
     }
@@ -298,6 +305,7 @@ bool ThemeManager::is_palette_transitioning() const
 
 void ThemeManager::apply_to_imgui()
 {
+#ifdef SPECTRA_USE_IMGUI
     if (!current_theme_ || ImGui::GetCurrentContext() == nullptr)
         return;
 
@@ -483,6 +491,7 @@ void ThemeManager::apply_to_imgui()
 
     // Modal
     imgui_colors[ImGuiCol_ModalWindowDimBg] = lin(colors.bg_overlay, 0.5f);
+#endif // SPECTRA_USE_IMGUI
 }
 
 void ThemeManager::apply_to_renderer(Renderer& renderer)
@@ -536,7 +545,9 @@ void ThemeManager::update(float dt)
             interpolate_colors(transition_start_colors_, transition_target_colors_, t);
         display_colors_valid_ = true;
         ++theme_version_;
+#ifdef SPECTRA_USE_IMGUI
         apply_to_imgui();
+#endif
 
         if (transition_time_ >= transition_duration_)
         {

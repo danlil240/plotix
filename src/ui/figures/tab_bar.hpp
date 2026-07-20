@@ -181,9 +181,11 @@ class TabBar
     };
 
     std::vector<TabLayout> compute_tab_layouts(const Rect& bounds) const;
+#ifdef SPECTRA_USE_IMGUI
     size_t get_tab_at_position(const ImVec2& pos, const std::vector<TabLayout>& layouts) const;
     size_t get_close_button_at_position(const ImVec2&                 pos,
                                         const std::vector<TabLayout>& layouts) const;
+#endif
 
     void start_drag(size_t tab_index, float mouse_x);
     void update_drag(float mouse_x);

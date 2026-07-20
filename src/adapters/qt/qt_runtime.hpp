@@ -100,6 +100,18 @@ class QtRuntime
     void set_input_handler(QWindow* window, InputHandler* input);
     void set_input_handler(InputHandler* input);
 
+    // ── Surface generation API ─────────────────────────────────────────────
+    // Returns the current surface generation for a window, or 0 if invalid.
+    uint32_t surface_generation(QWindow* window) const;
+    bool     surface_valid(QWindow* window) const;
+
+    // ── Explicit render-target API ─────────────────────────────────────────
+    // Begin a frame targeting a specific WindowContext (not global active window).
+    // This is the first step toward phasing out global mutable active-window state.
+    bool begin_frame(WindowContext* wctx);
+    void render_figure(WindowContext* wctx, Figure& figure);
+    void end_frame(WindowContext* wctx);
+
     // Accessors
     QVulkanInstance* vulkan_instance() const;
     VulkanBackend*   backend() const { return backend_.get(); }
@@ -112,10 +124,14 @@ class QtRuntime
     {
         std::unique_ptr<WindowContext>        window_ctx;
         InputHandler*                         input_handler = nullptr;
-        std::chrono::steady_clock::time_point last_resize_request{};
+        std::chrono::steady_clock::time_point last_resize_request;
         bool                                  resize_pending           = false;
         uint32_t                              swapchain_recreate_count = 0;
         uint32_t                              frame_skip_count         = 0;
+
+        // Surface generation: 0 = invalid, >0 = valid surface.
+        // Incremented on attach, invalidated on detach.
+        uint32_t                              surface_generation       = 0;
     };
 
     WindowState*       find_window_state(QWindow* window);

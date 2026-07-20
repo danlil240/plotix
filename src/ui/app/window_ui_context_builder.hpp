@@ -74,11 +74,13 @@ struct WindowUIContextBuildOptions
 std::unique_ptr<WindowUIContext> build_window_ui_context(
     const WindowUIContextBuildOptions& options);
 
+#ifdef SPECTRA_USE_IMGUI
 // Bind ImGuiIntegration to a native window, saving/restoring the backend's
 // active window and the thread-local ImGui context.
 bool init_window_imgui_integration(VulkanBackend&    backend,
                                    WindowContext&    wctx,
                                    ImGuiIntegration& imgui,
                                    bool              install_callbacks = false);
+#endif
 
 }   // namespace spectra

@@ -212,10 +212,12 @@ void WindowRuntime::update(WindowUIContext& ui_ctx,
                     [this, &ui_ctx](const Series* s)
                     {
                         renderer_.notify_series_removed(s);
+#ifdef SPECTRA_USE_IMGUI
                         if (ui_ctx.data_interaction)
                             ui_ctx.data_interaction->notify_series_removed(s);
                         if (ui_ctx.imgui_ui)
                             ui_ctx.imgui_ui->notify_series_removed(s);
+#endif
                     });
         }
         for (auto& axes_ptr : fig->all_axes())
@@ -225,10 +227,12 @@ void WindowRuntime::update(WindowUIContext& ui_ctx,
                     [this, &ui_ctx](const Series* s)
                     {
                         renderer_.notify_series_removed(s);
+#ifdef SPECTRA_USE_IMGUI
                         if (ui_ctx.data_interaction)
                             ui_ctx.data_interaction->notify_series_removed(s);
                         if (ui_ctx.imgui_ui)
                             ui_ctx.imgui_ui->notify_series_removed(s);
+#endif
                     });
         }
     };
@@ -972,7 +976,9 @@ bool WindowRuntime::render(WindowUIContext& ui_ctx, FrameState& fs, FrameProfile
                 active_figure->config_.width  = backend_.swapchain_width();
                 active_figure->config_.height = backend_.swapchain_height();
             }
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
             ui_ctx.needs_resize = false;
+#endif
 #ifdef SPECTRA_USE_IMGUI
             if (ui_ctx.imgui_ui)
             {
@@ -1153,7 +1159,9 @@ bool WindowRuntime::render(WindowUIContext& ui_ctx, FrameState& fs, FrameProfile
                     active_figure->config_.width  = backend_.swapchain_width();
                     active_figure->config_.height = backend_.swapchain_height();
                 }
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
                 ui_ctx.needs_resize = false;
+#endif
 #ifdef SPECTRA_USE_IMGUI
                 if (ui_ctx.imgui_ui)
                 {

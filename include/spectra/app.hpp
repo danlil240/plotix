@@ -29,6 +29,7 @@ struct AppConfig
 
 class SessionRuntime;
 class WindowRuntime;
+class ApplicationServices;
 
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
 class WindowManager;
@@ -81,6 +82,9 @@ class App
     // Access internals (for renderer integration)
     Backend*  backend() { return backend_.get(); }
     Renderer* renderer() { return renderer_.get(); }
+
+    // Access framework-neutral application services (available after init_runtime()).
+    ApplicationServices* app_services();
 
     // Knob manager (set by easy API before run(), or by user directly)
     void         set_knob_manager(KnobManager* km) { knob_manager_ = km; }

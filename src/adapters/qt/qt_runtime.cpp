@@ -255,6 +255,7 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
     if (!imgui_ui_)
     {
         imgui_ui_ = make_imgui_integration();
+        imgui_ui_->set_theme_manager(&theme_mgr_);
         if (!imgui_ui_->init_headless(*backend_, width, height))
         {
             SPECTRA_LOG_WARN(
@@ -265,6 +266,7 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
         else
         {
             data_interaction_ = std::make_unique<DataInteraction>();
+            data_interaction_->set_theme_manager(&theme_mgr_);
             imgui_ui_->set_data_interaction(data_interaction_.get());
             if (state->input_handler)
             {
@@ -279,6 +281,13 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
     if (!primary_window_)
     {
         primary_window_ = window;
+    }
+
+    // Set surface generation — surface is now valid
+    auto* new_state = find_window_state(window);
+    if (new_state)
+    {
+        ++new_state->surface_generation;
     }
 
     SPECTRA_LOG_INFO("qt_runtime",
@@ -305,6 +314,9 @@ void QtRuntime::detach_window(QWindow* window)
         backend_->set_active_window(state->window_ctx.get());
         backend_->destroy_window_context(*state->window_ctx);
     }
+
+    // Invalidate surface generation
+    state->surface_generation = 0;
 
     if (current_frame_window_ == window)
     {
@@ -754,6 +766,91 @@ WindowContext* QtRuntime::window_context(QWindow* window) const
 WindowContext* QtRuntime::window_context() const
 {
     return window_context(primary_window_);
+}
+
+// ── Surface generation API ───────────────────────────────────────────────────
+
+uint32_t QtRuntime::surface_generation(QWindow* window) const
+{
+    const auto* state = find_window_state(window);
+    return state ? state->surface_generation : 0;
+}
+
+bool QtRuntime::surface_valid(QWindow* window) const
+{
+    return surface_generation(window) != 0;
+}
+
+// ── Explicit render-target API ───────────────────────────────────────────────
+// These methods target a specific WindowContext, reducing reliance on the
+// global mutable active-window state.  Currently they delegate to the
+// QWindow-based overloads, but they establish the API surface for future
+// refactoring to eliminate set_active_window() entirely.
+
+bool QtRuntime::begin_frame(WindowContext* wctx)
+{
+    if (!initialized_ || !wctx || !backend_ || !renderer_)
+        return false;
+
+    // Find the QWindow for this WindowContext
+    QWindow* target = nullptr;
+    for (const auto& [win, state] : window_states_)
+    {
+        if (state && state->window_ctx.get() == wctx)
+        {
+            target = win;
+            break;
+        }
+    }
+
+    if (target)
+        return begin_frame(target);
+
+    // Fallback: set active window directly
+    backend_->set_active_window(wctx);
+    return backend_->begin_frame();
+}
+
+void QtRuntime::render_figure(WindowContext* wctx, Figure& figure)
+{
+    if (!initialized_ || !wctx || !backend_ || !renderer_)
+        return;
+
+    backend_->set_active_window(wctx);
+
+    auto sw_u = backend_->swapchain_width();
+    auto sh_u = backend_->swapchain_height();
+
+    if (figure.width() != sw_u || figure.height() != sh_u)
+        figure.set_size(sw_u, sh_u);
+
+    if (figure.width() != sw_u || figure.height() != sh_u)
+        figure.compute_layout();
+
+    for (auto& ax : figure.all_axes_mut())
+    {
+        if (!ax)
+            continue;
+        for (auto& s : ax->series_mut())
+        {
+            if (s)
+                renderer_->upload_series_data(*s);
+        }
+    }
+
+    renderer_->begin_render_pass();
+    renderer_->render_figure_content(figure);
+    renderer_->render_text(static_cast<float>(sw_u), static_cast<float>(sh_u));
+    renderer_->end_render_pass();
+}
+
+void QtRuntime::end_frame(WindowContext* wctx)
+{
+    if (!initialized_ || !wctx || !backend_)
+        return;
+
+    backend_->set_active_window(wctx);
+    backend_->end_frame();
 }
 
 }   // namespace spectra::adapters::qt

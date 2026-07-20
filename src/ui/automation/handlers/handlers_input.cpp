@@ -58,7 +58,9 @@ std::vector<AutomationHandlerEntry> make_input_handlers()
                     ImGui::SetCurrentContext(prev_ctx);
             }
 #endif
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
             ui_ctx->input_handler.on_mouse_move(x, y);
+#endif
             req.response_json = json_ok(req.id);
         }));
 
@@ -84,8 +86,11 @@ std::vector<AutomationHandlerEntry> make_input_handlers()
 #ifdef SPECTRA_USE_IMGUI
             automation::inject_mouse_click(ui_ctx, x, y, btn);
 #endif
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
             ui_ctx->input_handler.on_mouse_button(btn, 1, mod, x, y);
             ui_ctx->input_handler.on_mouse_button(btn, 0, mod, x, y);
+#endif
+#ifdef SPECTRA_USE_IMGUI
             ui::log_ui_action("mcp_click",
                               std::to_string(btn),
                               "ok",
@@ -94,6 +99,7 @@ std::vector<AutomationHandlerEntry> make_input_handlers()
                 sess->redraw_tracker().mark_dirty("mouse_click");
             if (automation::tab_drag_active(ui_ctx))
                 automation::cancel_tab_drag_capture(ui_ctx);
+#endif
             req.response_json = json_ok(req.id);
         }));
 
@@ -117,6 +123,7 @@ std::vector<AutomationHandlerEntry> make_input_handlers()
                                if (steps < 2)
                                    steps = 2;
 
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
                                ui_ctx->input_handler.on_mouse_move(x1, y1);
                                ui_ctx->input_handler.on_mouse_button(btn, 1, mod, x1, y1);
                                for (int i = 1; i <= steps; ++i)
@@ -127,8 +134,11 @@ std::vector<AutomationHandlerEntry> make_input_handlers()
                                    ui_ctx->input_handler.on_mouse_move(mx, my);
                                }
                                ui_ctx->input_handler.on_mouse_button(btn, 0, mod, x2, y2);
+#endif
+#ifdef SPECTRA_USE_IMGUI
                                if (automation::tab_drag_active(ui_ctx))
                                    automation::cancel_tab_drag_capture(ui_ctx);
+#endif
                                req.response_json = json_ok(req.id);
                            }));
 
@@ -147,7 +157,9 @@ std::vector<AutomationHandlerEntry> make_input_handlers()
 #ifdef SPECTRA_USE_IMGUI
                                automation::inject_scroll(ui_ctx, x, y, dx, dy);
 #endif
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
                                ui_ctx->input_handler.on_scroll(x, y, dx, dy);
+#endif
                                req.response_json = json_ok(req.id);
                            }));
 
@@ -163,8 +175,10 @@ std::vector<AutomationHandlerEntry> make_input_handlers()
 #ifdef SPECTRA_USE_IMGUI
                                automation::inject_key(ui_ctx, key, mod);
 #endif
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
                                ui_ctx->input_handler.on_key(key, 1, mod);
                                ui_ctx->input_handler.on_key(key, 0, mod);
+#endif
                                req.response_json = json_ok(req.id);
                            }));
 
@@ -198,10 +212,12 @@ std::vector<AutomationHandlerEntry> make_input_handlers()
                                double y   = json_get_number(req.params_json, "y");
                                int    btn = json_get_int(req.params_json, "button", 0);
                                int    mod = json_get_int(req.params_json, "modifiers", 0);
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
                                ui_ctx->input_handler.on_mouse_button(btn, 1, mod, x, y);
                                ui_ctx->input_handler.on_mouse_button(btn, 0, mod, x, y);
                                ui_ctx->input_handler.on_mouse_button(btn, 1, mod, x, y);
                                ui_ctx->input_handler.on_mouse_button(btn, 0, mod, x, y);
+#endif
                                req.response_json = json_ok(req.id);
                            }));
 

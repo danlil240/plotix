@@ -165,7 +165,7 @@ file(GLOB SPECTRA_DAEMON_SOURCES
 
 # UI sources (non-ImGui) — guarded so parallel agents don't break each other's builds.
 # app.cpp is always present; others are included only if they exist on disk.
-file(GLOB SPECTRA_UI_SOURCES src/ui/app/app.cpp src/ui/app/app_inproc.cpp src/ui/app/app_multiproc.cpp src/ui/app/app_step.cpp)
+file(GLOB SPECTRA_UI_SOURCES src/ui/app/app.cpp src/ui/app/app_inproc.cpp src/ui/app/app_multiproc.cpp src/ui/app/app_step.cpp src/app/application_services.cpp src/app/imgui_frontend_services.cpp)
 foreach(_ui_src
     src/app/inproc_topic_server.cpp
     src/ui/app/window_ui_context_builder.cpp
@@ -239,6 +239,32 @@ foreach(_ui_src
     src/ui/automation/handlers/handlers_window.cpp
     src/ui/automation/handlers/handlers_utility.cpp
     src/ui/automation/handlers/handlers_fuzz.cpp
+    src/ui/commands/command_registry.cpp
+    src/ui/commands/shortcut_manager.cpp
+    src/ui/commands/undo_manager.cpp
+    src/ui/commands/shortcut_config.cpp
+    src/ui/settings/settings_store.cpp
+    src/ui/workspace/workspace.cpp
+    src/ui/workspace/workspace_autosave.cpp
+    src/ui/workspace/plugin_api.cpp
+    src/ui/workspace/plugin_guard.cpp
+    src/ui/workspace/plugin_manifest.cpp
+    src/ui/app/register_commands.cpp
+    src/ui/app/commands/command_descriptor.cpp
+    src/ui/app/commands/commands_view.cpp
+    src/ui/app/commands/commands_edit.cpp
+    src/ui/app/commands/commands_file.cpp
+    src/ui/app/commands/commands_figure.cpp
+    src/ui/app/commands/commands_series.cpp
+    src/ui/app/commands/commands_animation.cpp
+    src/ui/app/commands/commands_panel.cpp
+    src/ui/app/commands/commands_theme.cpp
+    src/ui/app/commands/commands_tools.cpp
+    src/ui/app/commands/commands_plot.cpp
+    src/ui/app/commands/commands_data.cpp
+    src/ui/app/commands/commands_app.cpp
+    src/ui/theme/theme_api.cpp
+    src/ui/theme/theme.cpp
 )
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${_ui_src})
         list(APPEND SPECTRA_UI_SOURCES ${_ui_src})
@@ -449,19 +475,21 @@ endif()
 
 # Qt adapter (optional)
 if(SPECTRA_USE_QT)
-    find_package(Qt6 COMPONENTS Gui REQUIRED)
+    find_package(Qt6 COMPONENTS Gui Widgets REQUIRED)
 
     add_library(spectra_qt_adapter
         src/adapters/qt/qt_runtime.cpp
         src/adapters/qt/qt_surface_host.cpp
+        src/adapters/qt/spectra_vulkan_window.cpp
+        src/adapters/qt/figure_canvas_widget.cpp
     )
-    target_link_libraries(spectra_qt_adapter PUBLIC spectra Qt6::Gui)
+    target_link_libraries(spectra_qt_adapter PUBLIC spectra Qt6::Gui Qt6::Widgets)
     target_compile_features(spectra_qt_adapter PRIVATE cxx_std_20)
     target_include_directories(spectra_qt_adapter PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_BINARY_DIR}/generated
     )
-    target_compile_definitions(spectra_qt_adapter PUBLIC SPECTRA_USE_QT)
+    target_compile_definitions(spectra_qt_adapter PUBLIC SPECTRA_USE_QT SPECTRA_HAS_QT6)
 endif()
 
 # Dear ImGui (optional — requires GLFW or SDL3)
@@ -510,8 +538,6 @@ if(SPECTRA_USE_IMGUI AND (SPECTRA_USE_GLFW OR SPECTRA_USE_SDL3))
     # ImGui-dependent UI sources — guarded so parallel agents don't break the build.
     # When adding a new .cpp that depends on ImGui, add an if(EXISTS) block here.
     foreach(_imgui_src
-        src/ui/theme/theme.cpp
-        src/ui/theme/theme_api.cpp
         src/ui/theme/icons.cpp
         src/ui/imgui/widgets.cpp
         src/ui/overlay/inspector.cpp
@@ -524,32 +550,8 @@ if(SPECTRA_USE_IMGUI AND (SPECTRA_USE_GLFW OR SPECTRA_USE_SDL3))
         src/ui/overlay/legend_interaction.cpp
         src/ui/input/box_zoom_overlay.cpp
         src/ui/commands/command_palette.cpp
-        src/ui/commands/command_registry.cpp
-        src/ui/commands/shortcut_manager.cpp
-        src/ui/commands/undo_manager.cpp
-        src/ui/workspace/workspace.cpp
-        src/ui/workspace/workspace_autosave.cpp
-        src/ui/commands/shortcut_config.cpp
-        src/ui/workspace/plugin_api.cpp
-        src/ui/workspace/plugin_guard.cpp
-        src/ui/workspace/plugin_manifest.cpp
         src/ui/figures/tab_drag_controller.cpp
-        src/ui/app/register_commands.cpp
-        src/ui/app/commands/command_descriptor.cpp
-        src/ui/app/commands/commands_view.cpp
-        src/ui/app/commands/commands_edit.cpp
-        src/ui/app/commands/commands_file.cpp
-        src/ui/app/commands/commands_figure.cpp
-        src/ui/app/commands/commands_series.cpp
-        src/ui/app/commands/commands_animation.cpp
-        src/ui/app/commands/commands_panel.cpp
-        src/ui/app/commands/commands_theme.cpp
-        src/ui/app/commands/commands_tools.cpp
-        src/ui/app/commands/commands_plot.cpp
-        src/ui/app/commands/commands_data.cpp
-        src/ui/app/commands/commands_app.cpp
         src/ui/topics/topics_panel.cpp
-        src/ui/settings/settings_store.cpp
         src/ui/settings/settings_panel.cpp
     )
         if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${_imgui_src})

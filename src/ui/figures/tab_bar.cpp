@@ -253,11 +253,13 @@ void TabBar::handle_input(const Rect& bounds)
 #endif
 }
 
+#ifdef SPECTRA_USE_IMGUI
 static ImU32 to_imcol(const ui::Color& c, float alpha_override = -1.0f)
 {
     float a = alpha_override >= 0.0f ? alpha_override : c.a;
     return IM_COL32(uint8_t(c.r * 255), uint8_t(c.g * 255), uint8_t(c.b * 255), uint8_t(a * 255));
 }
+#endif
 
 void TabBar::draw_tabs(const Rect& bounds, bool menus_open)
 {
@@ -480,8 +482,14 @@ std::vector<TabBar::TabLayout> TabBar::compute_tab_layouts(const Rect& bounds) c
         TabLayout layout;
 
         // Calculate tab width based on title
+#ifdef SPECTRA_USE_IMGUI
         ImVec2 text_size = ImGui::CalcTextSize(tab.title.c_str());
-        float  tab_width = std::clamp(text_size.x + TAB_PADDING * 2
+        float  text_w    = text_size.x;
+#else
+        // Fallback: estimate text width without ImGui
+        float  text_w    = static_cast<float>(tab.title.size()) * 8.0f;
+#endif
+        float  tab_width = std::clamp(text_w + TAB_PADDING * 2
                                           + (tab.can_close ? CLOSE_BUTTON_SIZE + CLOSE_PAD_RIGHT : 0),
                                       TAB_MIN_WIDTH,
                                       TAB_MAX_WIDTH);
@@ -515,6 +523,7 @@ std::vector<TabBar::TabLayout> TabBar::compute_tab_layouts(const Rect& bounds) c
     return layouts;
 }
 
+#ifdef SPECTRA_USE_IMGUI
 size_t TabBar::get_tab_at_position(const ImVec2& pos, const std::vector<TabLayout>& layouts) const
 {
     for (size_t i = 0; i < layouts.size(); ++i)
@@ -554,6 +563,7 @@ size_t TabBar::get_close_button_at_position(const ImVec2&                 pos,
     }
     return SIZE_MAX;
 }
+#endif // SPECTRA_USE_IMGUI
 
 void TabBar::start_drag(size_t tab_index, float mouse_x)
 {
@@ -682,8 +692,13 @@ bool TabBar::needs_scroll_buttons(const Rect& bounds) const
     float total_width = 0.0f;
     for (const auto& tab : tabs_)
     {
+#ifdef SPECTRA_USE_IMGUI
         ImVec2 text_size = ImGui::CalcTextSize(tab.title.c_str());
-        float  tab_width = std::clamp(text_size.x + TAB_PADDING * 2
+        float  text_w    = text_size.x;
+#else
+        float  text_w    = static_cast<float>(tab.title.size()) * 8.0f;
+#endif
+        float  tab_width = std::clamp(text_w + TAB_PADDING * 2
                                           + (tab.can_close ? CLOSE_BUTTON_SIZE + CLOSE_PAD_RIGHT : 0),
                                       TAB_MIN_WIDTH,
                                       TAB_MAX_WIDTH);

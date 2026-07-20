@@ -12,7 +12,9 @@
 #include "ui/commands/undo_manager.hpp"
 #include "ui/data/axis_link.hpp"
 #include "ui/overlay/axes3d_axis_pick.hpp"
-#include "ui/overlay/data_interaction.hpp"
+#ifdef SPECTRA_USE_IMGUI
+    #include "ui/overlay/data_interaction.hpp"
+#endif
 
 namespace spectra
 {
@@ -150,7 +152,11 @@ void InputHandler::handle_mouse_button_3d(Axes3D* axes3d,
         is_3d_orbit_drag_ = false;
         mode_             = InteractionMode::Idle;
 
-        if (was_click && data_interaction_)
+        if (was_click
+#ifdef SPECTRA_USE_IMGUI
+            && data_interaction_
+#endif
+        )
         {
             // Short click: undo only micro-orbit jitter, not an intentional nudge away
             // from an axis-aligned snap (drag3d_start may be the snapped pose).
@@ -164,7 +170,9 @@ void InputHandler::handle_mouse_button_3d(Axes3D* axes3d,
                 cam = drag3d_start_camera_;
                 cam.update_position_from_orbit();
             }
+#ifdef SPECTRA_USE_IMGUI
             data_interaction_->on_mouse_click_datatip_only(0, x, y);
+#endif
             drag3d_axes_ = nullptr;
             return;
         }
@@ -589,10 +597,12 @@ void InputHandler::handle_mouse_button_pan(int action, int mods, double x, doubl
                 }
 
                 // Pan-mode click behavior: select/highlight nearest point (data tip).
+#ifdef SPECTRA_USE_IMGUI
                 if (data_interaction_)
                 {
                     data_interaction_->on_mouse_click_datatip_only(0, x, y);
                 }
+#endif
                 return;
             }
         }

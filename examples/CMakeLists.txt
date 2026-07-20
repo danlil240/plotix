@@ -133,6 +133,15 @@ if(SPECTRA_BUILD_QT_EXAMPLE)
         SPECTRA_HAS_QT6
         SPECTRA_QT_FORCE_MULTI_CANVAS
     )
+
+    # Minimal smoke test for Phase 2 validation.
+    add_spectra_example(qt_smoke)
+    target_link_libraries(qt_smoke PRIVATE spectra_qt_adapter Qt6::Widgets)
+    target_include_directories(qt_smoke PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_BINARY_DIR}/generated
+    )
+    target_compile_definitions(qt_smoke PRIVATE SPECTRA_HAS_QT6)
 endif()
 
 # WebGPU demo — works with both Dawn (native) and Emscripten (wasm) targets.

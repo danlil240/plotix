@@ -299,12 +299,16 @@ std::string run_fuzz_action(FuzzAction action,
 #ifdef SPECTRA_USE_IMGUI
             automation::inject_mouse_click(ui_ctx, mx, my, b);
 #endif
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
             ui_ctx->input_handler.on_mouse_button(b, 1, 0, mx, my);
             ui_ctx->input_handler.on_mouse_button(b, 0, 0, mx, my);
+#endif
+#ifdef SPECTRA_USE_IMGUI
             ui::log_ui_action("fuzz_click",
                               std::to_string(b),
                               "ok",
                               std::format("x={:.0f} y={:.0f}", mx, my));
+#endif
             mark_dirty(app, "fuzz_mouse_click");
             details << "\"x\":" << mx << ",\"y\":" << my << ",\"button\":" << b;
             break;
@@ -323,6 +327,7 @@ std::string run_fuzz_action(FuzzAction action,
             const double                             y1 = py(rng);
             const double                             x2 = px(rng);
             const double                             y2 = py(rng);
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
             ui_ctx->input_handler.on_mouse_button(0, 1, 0, x1, y1);
             for (int s = 1; s <= 5; ++s)
             {
@@ -332,6 +337,7 @@ std::string run_fuzz_action(FuzzAction action,
                 ui_ctx->input_handler.on_mouse_move(cx, cy);
             }
             ui_ctx->input_handler.on_mouse_button(0, 0, 0, x2, y2);
+#endif
             mark_dirty(app, "fuzz_mouse_drag");
             details << "\"x1\":" << x1 << ",\"y1\":" << y1 << ",\"x2\":" << x2 << ",\"y2\":" << y2;
             break;
@@ -353,11 +359,15 @@ std::string run_fuzz_action(FuzzAction action,
 #ifdef SPECTRA_USE_IMGUI
             automation::inject_scroll(ui_ctx, x, y, 0.0, dy);
 #endif
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
             ui_ctx->input_handler.on_scroll(x, y, 0.0, dy);
+#endif
+#ifdef SPECTRA_USE_IMGUI
             ui::log_ui_action("fuzz_scroll",
                               std::to_string(static_cast<int>(dy)),
                               "ok",
                               std::format("x={:.0f} y={:.0f}", x, y));
+#endif
             mark_dirty(app, "fuzz_mouse_scroll");
             details << "\"x\":" << x << ",\"y\":" << y << ",\"dy\":" << dy;
             break;
@@ -372,9 +382,13 @@ std::string run_fuzz_action(FuzzAction action,
 #ifdef SPECTRA_USE_IMGUI
             automation::inject_key(ui_ctx, k, 0);
 #endif
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
             ui_ctx->input_handler.on_key(k, 1, 0);
             ui_ctx->input_handler.on_key(k, 0, 0);
+#endif
+#ifdef SPECTRA_USE_IMGUI
             ui::log_ui_action("fuzz_key", std::to_string(k), "ok");
+#endif
             mark_dirty(app, "fuzz_key_press");
             details << "\"key\":" << k;
             break;
@@ -631,8 +645,8 @@ std::string run_fuzz_action(FuzzAction action,
     }
 
     details << "}";
-    ui::log_ui_action("fuzz", fuzz_action_name(action), "ok");
 #ifdef SPECTRA_USE_IMGUI
+    ui::log_ui_action("fuzz", fuzz_action_name(action), "ok");
     automation::dismiss_ui_capture(ui_ctx);
 #endif
     return details.str();

@@ -15,7 +15,9 @@
 #include "ui/commands/shortcut_manager.hpp"
 #include "ui/commands/undo_manager.hpp"
 #include "ui/data/axis_link.hpp"
-#include "ui/overlay/data_interaction.hpp"
+#ifdef SPECTRA_USE_IMGUI
+    #include "ui/overlay/data_interaction.hpp"
+#endif
 #include "ui/viewmodel/axes_view_model.hpp"
 #include "ui/viewmodel/figure_view_model.hpp"
 
@@ -47,16 +49,20 @@ void InputHandler::set_tool_mode(ToolMode new_tool)
     // Leaving ROI mode: dismiss region selection
     if (tool_mode_ == ToolMode::ROI)
     {
+#ifdef SPECTRA_USE_IMGUI
         if (data_interaction_)
             data_interaction_->dismiss_region_select();
+#endif
         region_dragging_ = false;
     }
 
     // Leaving Measure mode: restore previous crosshair state, reset measure
     if (tool_mode_ == ToolMode::Measure)
     {
+#ifdef SPECTRA_USE_IMGUI
         if (data_interaction_)
             data_interaction_->set_crosshair(crosshair_was_active_);
+#endif
         measure_dragging_    = false;
         measure_click_state_ = 0;
         measure_axes_        = nullptr;
@@ -65,8 +71,10 @@ void InputHandler::set_tool_mode(ToolMode new_tool)
     // Leaving Annotate mode: cancel any active editing, reset state
     if (tool_mode_ == ToolMode::Annotate)
     {
+#ifdef SPECTRA_USE_IMGUI
         if (data_interaction_)
             data_interaction_->annotations().cancel_editing();
+#endif
         annotate_dragging_     = false;
         annotate_press_active_ = false;
     }
@@ -74,11 +82,13 @@ void InputHandler::set_tool_mode(ToolMode new_tool)
     // Entering Measure mode: auto-enable crosshair
     if (new_tool == ToolMode::Measure)
     {
+#ifdef SPECTRA_USE_IMGUI
         if (data_interaction_)
         {
             crosshair_was_active_ = data_interaction_->crosshair_active();
             data_interaction_->set_crosshair(true);
         }
+#endif
     }
 
     tool_mode_ = new_tool;
@@ -353,6 +363,7 @@ void InputHandler::on_mouse_button(int button, int action, int mods, double x, d
         if (action == ACTION_PRESS && !rclick_zoom_dragging_ && active_axes_)
         {
             // Annotate mode: right-click removes annotation
+#ifdef SPECTRA_USE_IMGUI
             if (tool_mode_ == ToolMode::Annotate && data_interaction_
                 && data_interaction_->on_mouse_click_annotate(1, x, y))
             {
@@ -366,6 +377,7 @@ void InputHandler::on_mouse_button(int button, int action, int mods, double x, d
                 // Marker was removed — don't start zoom drag
                 return;
             }
+#endif
 
             handle_mouse_button_rclick_zoom(action, x, y);
             return;
@@ -693,10 +705,12 @@ void InputHandler::on_key(int key, int action, int mods)
         // Cancel box zoom if active
         cancel_box_zoom();
         // Dismiss region selection if active
+#ifdef SPECTRA_USE_IMGUI
         if (data_interaction_ && data_interaction_->has_region_selection())
         {
             data_interaction_->dismiss_region_select();
         }
+#endif
         return;
     }
 
@@ -817,6 +831,7 @@ void InputHandler::on_key(int key, int action, int mods)
     if (key == KEY_C && !(mods & MOD_CONTROL))
     {
         // Toggle crosshair overlay
+#ifdef SPECTRA_USE_IMGUI
         if (data_interaction_)
         {
             data_interaction_->toggle_crosshair();
@@ -825,6 +840,7 @@ void InputHandler::on_key(int key, int action, int mods)
                 "Crosshair toggled: "
                     + std::string(data_interaction_->crosshair_active() ? "ON" : "OFF"));
         }
+#endif
         return;
     }
 

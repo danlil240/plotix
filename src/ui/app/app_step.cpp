@@ -12,17 +12,13 @@
 #include <algorithm>
 
 #include "anim/frame_scheduler.hpp"
-#include "adapters/data_source_registry.hpp"
-#include "io/export_registry.hpp"
 #include "math/data_transform.hpp"
 #include "render/renderer.hpp"
-#include "render/series_type_registry.hpp"
 #include "render/vulkan/vk_backend.hpp"
 #include "render/vulkan/window_context.hpp"
 #ifdef SPECTRA_USE_WEBGPU
     #include "render/webgpu/wgpu_backend.hpp"
 #endif
-#include "ui/commands/command_queue.hpp"
 #include "session_runtime.hpp"
 #include "window_runtime.hpp"
 #include "window_ui_context_runtime.hpp"
@@ -30,7 +26,6 @@
 #include "window_ui_context_builder.hpp"
 #include "window_ui_context.hpp"
 #include "ui/workspace/plugin_api.hpp"
-#include "ui/settings/settings_store.hpp"
 
 #ifdef SPECTRA_USE_GLFW
     #define GLFW_INCLUDE_NONE
@@ -51,14 +46,20 @@
 
 #ifdef SPECTRA_USE_IMGUI
     #include <imgui.h>
+#endif
 
-    #include "register_commands.hpp"
-    #include "ui/theme/theme.hpp"
+#include "register_commands.hpp"
+#include "ui/theme/theme.hpp"
+
+#ifdef SPECTRA_USE_IMGUI
     #include "ui/workspace/workspace.hpp"
 #endif
 
 #include "ui/automation/automation_server.hpp"
 #include "ui/automation/mcp_server.hpp"
+
+#include "app/application_services.hpp"
+#include "app/imgui_frontend_services.hpp"
 
 #ifndef _WIN32
     #include "../../app/inproc_topic_server.hpp"
@@ -207,17 +208,10 @@ struct App::AppRuntime
     AppRuntime(const AppRuntime&)            = delete;
     AppRuntime& operator=(const AppRuntime&) = delete;
 
-    CommandQueue   cmd_queue;
-    FrameScheduler scheduler;
-    Animator       animator;
-    SessionRuntime session;
-
-    PluginManager        plugin_manager;
-    ExportFormatRegistry export_format_registry;
-    DataSourceRegistry   data_source_registry;
-    SeriesTypeRegistry   series_type_registry;
-
-    std::unique_ptr<ui::settings::SettingsStore> settings_store;
+    // Framework-neutral service owner — single source of truth for all
+    // process-scoped services (commands, shortcuts, undo, plugins, settings,
+    // session, scheduler, animator, automation, topic server, etc.)
+    std::unique_ptr<ApplicationServices> app_services;
 
     FrameState frame_state;
     uint64_t   frame_number = 0;
@@ -247,11 +241,15 @@ struct App::AppRuntime
     // Wall-clock for frame timing
     std::chrono::steady_clock::time_point last_step_time;
 
-    std::unique_ptr<AutomationServer> auto_server;
-    std::unique_ptr<McpServer>        mcp_server;
-
-#ifndef _WIN32
-    std::unique_ptr<InprocTopicServer> topic_server;
+    // Frontend service implementations (injected into ApplicationServices).
+    // These bridge the framework-neutral service interfaces to the
+    // ImGui/GLFW/SDL3 frontend so commands and automation can interact
+    // with the frontend without knowing which UI framework is active.
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
+    std::unique_ptr<ImGuiDialogService>    dialog_service_impl;
+    std::unique_ptr<ImGuiClipboardService> clipboard_service_impl;
+    std::unique_ptr<ImGuiRedrawRequest>    redraw_request_impl;
+    std::unique_ptr<ImGuiWindowService>    window_service_impl;
 #endif
 
     // Pending PNG capture (pre-present path to avoid reading presented images)
@@ -266,10 +264,7 @@ struct App::AppRuntime
         bool                 awaiting_gpu_capture = false;
     } pending_png_capture;
 
-    AppRuntime(float fps, Backend& backend, Renderer& renderer, FigureRegistry& registry)
-        : scheduler(fps), session(backend, renderer, registry)
-    {
-    }
+    AppRuntime() = default;
 
     // Explicit noexcept(false) destructor: the implicit default destructor
     // is noexcept, which means any exception thrown during member destruction
@@ -310,13 +305,12 @@ void App::init_runtime()
     uint32_t init_w = init_active ? init_active->width() : 1280;
     uint32_t init_h = init_active ? init_active->height() : 720;
 
-    runtime_ = std::make_unique<AppRuntime>(init_fps, *backend_, *renderer_, registry_);
+    runtime_ = std::make_unique<AppRuntime>();
     auto& rt = *runtime_;
 
-    rt.settings_store = std::make_unique<ui::settings::SettingsStore>();
-    rt.settings_store->load();
-    rt.settings_store->apply_to(*theme_mgr_);
-    rt.settings_store->set_on_change([&store = *rt.settings_store]() { store.save(); });
+    // ApplicationServices is the single owner of all process-scoped services.
+    rt.app_services = std::make_unique<ApplicationServices>();
+    rt.app_services->init(registry_, *backend_, *renderer_, *theme_mgr_, init_fps);
 
     rt.frame_state.active_figure_id = init_active_id;
     rt.frame_state.active_figure    = init_active;
@@ -327,7 +321,7 @@ void App::init_runtime()
 
     if (!config_.headless)
     {
-        rt.scheduler.set_mode(FrameScheduler::Mode::VSync);
+        rt.app_services->scheduler().set_mode(FrameScheduler::Mode::VSync);
     }
 
 #ifdef SPECTRA_USE_FFMPEG
@@ -367,6 +361,80 @@ void App::init_runtime()
     }
 #endif
 
+    // ── Platform window bootstrap (shared by GLFW and SDL3) ────────────────
+    // Extracted from duplicated per-adapter blocks to eliminate the
+    // near-identical GLFW/SDL3 startup code.  Each adapter creates its
+    // native window, then calls this lambda for the common window-manager
+    // and multi-window creation logic.
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
+    auto bootstrap_platform_windows = [&](void* native_window, bool warmup_preview)
+    {
+        backend_->create_surface(native_window);
+        backend_->create_swapchain(init_w, init_h);
+
+        // WindowManager requires VulkanBackend — skip for other backends.
+        if (config_.backend != RenderBackend::Vulkan)
+            return;
+
+        WindowManagerBootstrapOptions wm_opts;
+        wm_opts.backend                = static_cast<VulkanBackend*>(backend_.get());
+        wm_opts.registry               = &registry_;
+        wm_opts.renderer               = renderer_.get();
+        wm_opts.theme_mgr              = theme_mgr_.get();
+        wm_opts.session                = &rt.app_services->session();
+        wm_opts.settings_store         = &rt.app_services->settings();
+        wm_opts.plugin_manager         = &rt.app_services->plugins();
+        wm_opts.export_format_registry = &rt.app_services->export_formats();
+        rt.window_mgr                  = create_configured_window_manager(wm_opts);
+        rt.window_mgr->set_interactive_frame_handler(
+            [&rt]()
+            {
+                rt.app_services->session().pump_interactive_frame(
+                    rt.app_services->scheduler(),
+                    rt.app_services->animator(),
+                    rt.window_mgr.get(),
+                    rt.frame_state);
+            });
+
+        std::vector<FigureId> first_group =
+            window_groups.empty() ? std::vector<FigureId>{} : window_groups[0];
+        auto* initial_wctx =
+            rt.window_mgr->create_first_window_with_ui(native_window, first_group);
+
+        if (initial_wctx && initial_wctx->ui_ctx)
+        {
+            rt.ui_ctx_ptr              = initial_wctx->ui_ctx.get();
+            rt.ui_ctx_ptr->glfw_window = initial_wctx->glfw_window;
+        }
+
+        if (warmup_preview)
+            rt.window_mgr->warmup_preview_window();
+
+        for (size_t gi = 1; gi < window_groups.size(); ++gi)
+        {
+            auto& group = window_groups[gi];
+            if (group.empty())
+                continue;
+
+            auto*    fig0 = registry_.get(group[0]);
+            uint32_t w    = fig0 ? fig0->width() : 800;
+            uint32_t h    = fig0 ? fig0->height() : 600;
+
+            auto* new_wctx =
+                rt.window_mgr->create_window_with_ui(w, h, "Spectra", group[0]);
+
+            if (new_wctx && new_wctx->ui_ctx && new_wctx->ui_ctx->fig_mgr)
+            {
+                for (size_t fi = 1; fi < group.size(); ++fi)
+                {
+                    new_wctx->ui_ctx->fig_mgr->add_figure(group[fi], FigureState{});
+                    new_wctx->assigned_figures.push_back(group[fi]);
+                }
+            }
+        }
+    };
+#endif
+
 #ifdef SPECTRA_USE_GLFW
     if (!config_.headless)
     {
@@ -378,69 +446,7 @@ void App::init_runtime()
         }
         else
         {
-            backend_->create_surface(rt.glfw->native_window());
-            backend_->create_swapchain(init_w, init_h);
-
-            // WindowManager requires VulkanBackend — skip for other backends.
-            if (config_.backend == RenderBackend::Vulkan)
-            {
-                WindowManagerBootstrapOptions wm_opts;
-                wm_opts.backend                = static_cast<VulkanBackend*>(backend_.get());
-                wm_opts.registry               = &registry_;
-                wm_opts.renderer               = renderer_.get();
-                wm_opts.theme_mgr              = theme_mgr_.get();
-                wm_opts.session                = &rt.session;
-                wm_opts.settings_store         = rt.settings_store.get();
-                wm_opts.plugin_manager         = &rt.plugin_manager;
-                wm_opts.export_format_registry = &rt.export_format_registry;
-                rt.window_mgr                  = create_configured_window_manager(wm_opts);
-                rt.window_mgr->set_interactive_frame_handler(
-                    [&rt]()
-                    {
-                        rt.session.pump_interactive_frame(rt.scheduler,
-                                                          rt.animator,
-                                                          rt.window_mgr.get(),
-                                                          rt.frame_state);
-                    });
-
-                std::vector<FigureId> first_group =
-                    window_groups.empty() ? std::vector<FigureId>{} : window_groups[0];
-                auto* initial_wctx =
-                    rt.window_mgr->create_first_window_with_ui(rt.glfw->native_window(),
-                                                               first_group);
-
-                if (initial_wctx && initial_wctx->ui_ctx)
-                {
-                    rt.ui_ctx_ptr              = initial_wctx->ui_ctx.get();
-                    rt.ui_ctx_ptr->glfw_window = initial_wctx->glfw_window;
-                }
-
-                // Pre-create a hidden preview window so tab tearoff is instant.
-                rt.window_mgr->warmup_preview_window();
-
-                for (size_t gi = 1; gi < window_groups.size(); ++gi)
-                {
-                    auto& group = window_groups[gi];
-                    if (group.empty())
-                        continue;
-
-                    auto*    fig0 = registry_.get(group[0]);
-                    uint32_t w    = fig0 ? fig0->width() : 800;
-                    uint32_t h    = fig0 ? fig0->height() : 600;
-
-                    auto* new_wctx =
-                        rt.window_mgr->create_window_with_ui(w, h, "Spectra", group[0]);
-
-                    if (new_wctx && new_wctx->ui_ctx && new_wctx->ui_ctx->fig_mgr)
-                    {
-                        for (size_t fi = 1; fi < group.size(); ++fi)
-                        {
-                            new_wctx->ui_ctx->fig_mgr->add_figure(group[fi], FigureState{});
-                            new_wctx->assigned_figures.push_back(group[fi]);
-                        }
-                    }
-                }
-            }   // if (config_.backend == RenderBackend::Vulkan)
+            bootstrap_platform_windows(rt.glfw->native_window(), true);
         }
     }
 #endif
@@ -456,62 +462,7 @@ void App::init_runtime()
         }
         else
         {
-            backend_->create_surface(rt.sdl3->native_window());
-            backend_->create_swapchain(init_w, init_h);
-
-            if (config_.backend == RenderBackend::Vulkan)
-            {
-                WindowManagerBootstrapOptions wm_opts;
-                wm_opts.backend                = static_cast<VulkanBackend*>(backend_.get());
-                wm_opts.registry               = &registry_;
-                wm_opts.renderer               = renderer_.get();
-                wm_opts.theme_mgr              = theme_mgr_.get();
-                wm_opts.session                = &rt.session;
-                wm_opts.settings_store         = rt.settings_store.get();
-                wm_opts.plugin_manager         = &rt.plugin_manager;
-                wm_opts.export_format_registry = &rt.export_format_registry;
-                rt.window_mgr                  = create_configured_window_manager(wm_opts);
-                rt.window_mgr->set_interactive_frame_handler(
-                    [&rt]()
-                    {
-                        rt.session.pump_interactive_frame(rt.scheduler,
-                                                          rt.animator,
-                                                          rt.window_mgr.get(),
-                                                          rt.frame_state);
-                    });
-
-                std::vector<FigureId> first_group =
-                    window_groups.empty() ? std::vector<FigureId>{} : window_groups[0];
-                auto* initial_wctx =
-                    rt.window_mgr->create_first_window_with_ui(rt.sdl3->native_window(),
-                                                               first_group);
-
-                if (initial_wctx && initial_wctx->ui_ctx)
-                {
-                    rt.ui_ctx_ptr              = initial_wctx->ui_ctx.get();
-                    rt.ui_ctx_ptr->glfw_window = initial_wctx->glfw_window;
-                }
-
-                for (size_t gi = 1; gi < window_groups.size(); ++gi)
-                {
-                    auto& group = window_groups[gi];
-                    if (group.empty())
-                        continue;
-                    auto*    fig0 = registry_.get(group[0]);
-                    uint32_t w    = fig0 ? fig0->width() : 800;
-                    uint32_t h    = fig0 ? fig0->height() : 600;
-                    auto*    new_wctx =
-                        rt.window_mgr->create_window_with_ui(w, h, "Spectra", group[0]);
-                    if (new_wctx && new_wctx->ui_ctx && new_wctx->ui_ctx->fig_mgr)
-                    {
-                        for (size_t fi = 1; fi < group.size(); ++fi)
-                        {
-                            new_wctx->ui_ctx->fig_mgr->add_figure(group[fi], FigureState{});
-                            new_wctx->assigned_figures.push_back(group[fi]);
-                        }
-                    }
-                }
-            }   // if (config_.backend == RenderBackend::Vulkan)
+            bootstrap_platform_windows(rt.sdl3->native_window(), false);
         }
     }
 #endif
@@ -525,32 +476,62 @@ void App::init_runtime()
         headless_opts.registry       = &registry_;
         headless_opts.theme_mgr      = theme_mgr_.get();
         headless_opts.mode           = WindowUIContextBuildMode::Headless;
-        headless_opts.settings_store = rt.settings_store.get();
+        headless_opts.settings_store = &rt.app_services->settings();
         rt.headless_ui_ctx           = build_window_ui_context(headless_opts);
         rt.ui_ctx_ptr                = rt.headless_ui_ctx.get();
     }
 
-    // Wire plugin host services after UI context creation.
-    rt.plugin_manager.set_command_registry(&rt.ui_ctx_ptr->cmd_registry);
-    rt.plugin_manager.set_shortcut_manager(&rt.ui_ctx_ptr->shortcut_mgr);
-    rt.plugin_manager.set_undo_manager(&rt.ui_ctx_ptr->undo_mgr);
-    rt.plugin_manager.set_transform_registry(&TransformRegistry::instance());
-    rt.plugin_manager.set_export_format_registry(&rt.export_format_registry);
-    rt.plugin_manager.set_data_source_registry(&rt.data_source_registry);
-    rt.plugin_manager.set_series_type_registry(&rt.series_type_registry);
-    rt.plugin_manager.set_backend(backend_.get());
-    renderer_->set_series_type_registry(&rt.series_type_registry);
+    // ── Inject frontend services into ApplicationServices ──────────────────
+    // Create concrete ImGui/GLFW/SDL3 implementations of the framework-neutral
+    // service interfaces and inject them so commands and automation can
+    // interact with the frontend without knowing which UI framework is active.
+    // In headless mode, the null implementations from frontend_services.hpp
+    // are used (no injection needed since ApplicationServices defaults to null).
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
-    if (rt.window_mgr)
-        rt.plugin_manager.set_overlay_registry(&rt.window_mgr->overlay_registry());
+    if (!config_.headless && rt.window_mgr)
+    {
+        rt.dialog_service_impl    = std::make_unique<ImGuiDialogService>();
+        rt.clipboard_service_impl = std::make_unique<ImGuiClipboardService>();
+        rt.redraw_request_impl    =
+            std::make_unique<ImGuiRedrawRequest>(rt.app_services->session());
+        rt.window_service_impl    =
+            std::make_unique<ImGuiWindowService>(*rt.window_mgr);
+
+        rt.app_services->set_dialog_service(rt.dialog_service_impl.get());
+        rt.app_services->set_clipboard_service(rt.clipboard_service_impl.get());
+        rt.app_services->set_redraw_request(rt.redraw_request_impl.get());
+        rt.app_services->set_window_service(rt.window_service_impl.get());
+    }
 #endif
 
-    rt.ui_ctx_ptr->plugin_manager = &rt.plugin_manager;
+    // Wire plugin host services to ApplicationServices process-scoped registries.
+    // Plugins use the framework-neutral ApplicationServices registries (which
+    // will survive the Qt migration) rather than the per-window UI context's
+    // ImGui-specific registries.  The per-window UI context's registries remain
+    // for the ImGui UI's own command/shortcut/undo handling.
+    auto& plugins = rt.app_services->plugins();
+    plugins.set_command_registry(&rt.app_services->commands());
+    plugins.set_shortcut_manager(&rt.app_services->shortcuts());
+    plugins.set_undo_manager(&rt.app_services->undo());
+    plugins.set_transform_registry(&TransformRegistry::instance());
+    plugins.set_export_format_registry(&rt.app_services->export_formats());
+    plugins.set_data_source_registry(&rt.app_services->data_sources());
+    plugins.set_series_type_registry(&rt.app_services->series_types());
+    plugins.set_backend(backend_.get());
+    renderer_->set_series_type_registry(&rt.app_services->series_types());
+#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
+    if (rt.window_mgr)
+        plugins.set_overlay_registry(&rt.window_mgr->overlay_registry());
+#endif
+
+    rt.ui_ctx_ptr->plugin_manager = &plugins;
+#ifdef SPECTRA_USE_IMGUI
     if (rt.ui_ctx_ptr->imgui_ui)
     {
-        rt.ui_ctx_ptr->imgui_ui->set_plugin_manager(&rt.plugin_manager);
-        rt.ui_ctx_ptr->imgui_ui->set_export_format_registry(&rt.export_format_registry);
+        rt.ui_ctx_ptr->imgui_ui->set_plugin_manager(&plugins);
+        rt.ui_ctx_ptr->imgui_ui->set_export_format_registry(&rt.app_services->export_formats());
     }
+#endif
 
 #ifdef SPECTRA_USE_IMGUI
     if (knob_manager_ && !knob_manager_->empty() && rt.ui_ctx_ptr->imgui_ui)
@@ -563,7 +544,7 @@ void App::init_runtime()
         WindowUIContextRuntimeWireOptions wire_opts;
         wire_opts.ui_ctx                       = rt.ui_ctx_ptr;
         wire_opts.registry                     = &registry_;
-        wire_opts.session                      = &rt.session;
+        wire_opts.session                      = &rt.app_services->session();
         wire_opts.active_figure                = init_active;
         wire_opts.has_animation                = rt.frame_state.has_animation;
         wire_opts.tab_split_mode               = TabSplitMode::SplitPane;
@@ -636,7 +617,7 @@ void App::init_runtime()
             static_cast<VulkanBackend*>(backend_.get())->ensure_pipelines();
     }
 
-    rt.scheduler.reset();
+    rt.app_services->scheduler().reset();
 
     rt.last_step_time = std::chrono::steady_clock::now();
 
@@ -655,56 +636,41 @@ void App::init_runtime()
             else
                 auto_sock = AutomationServer::default_socket_path();
 
-            rt.auto_server = std::make_unique<AutomationServer>();
-            if (rt.auto_server->start(auto_sock))
+            std::string mcp_bind = "127.0.0.1";
+            if (const char* mcp_bind_env = std::getenv("SPECTRA_MCP_BIND"))
+            {
+                if (mcp_bind_env[0] != '\0')
+                    mcp_bind = mcp_bind_env;
+            }
+
+            uint16_t mcp_port        = 8765;
+            bool     mcp_port_pinned = false;
+            if (const char* mcp_port_env = std::getenv("SPECTRA_MCP_PORT"))
+            {
+                if (mcp_port_env[0] != '\0')
+                {
+                    const long parsed_port = std::strtol(mcp_port_env, nullptr, 10);
+                    if (parsed_port > 0 && parsed_port <= 65535)
+                    {
+                        mcp_port        = static_cast<uint16_t>(parsed_port);
+                        mcp_port_pinned = true;
+                    }
+                }
+            }
+
+            // Use ApplicationServices::start_automation which handles port probing.
+            // We need to pass the pinned port or 0 for auto-probe.
+            if (rt.app_services->start_automation(
+                    auto_sock, mcp_bind,
+                    mcp_port_pinned ? mcp_port : 0))
             {
                 SPECTRA_LOG_INFO("app", "Automation server started: " + auto_sock);
-
-                std::string mcp_bind = "127.0.0.1";
-                if (const char* mcp_bind_env = std::getenv("SPECTRA_MCP_BIND"))
-                {
-                    if (mcp_bind_env[0] != '\0')
-                        mcp_bind = mcp_bind_env;
-                }
-
-                uint16_t mcp_port        = 8765;
-                bool     mcp_port_pinned = false;
-                if (const char* mcp_port_env = std::getenv("SPECTRA_MCP_PORT"))
-                {
-                    if (mcp_port_env[0] != '\0')
-                    {
-                        const long parsed_port = std::strtol(mcp_port_env, nullptr, 10);
-                        if (parsed_port > 0 && parsed_port <= 65535)
-                        {
-                            mcp_port        = static_cast<uint16_t>(parsed_port);
-                            mcp_port_pinned = true;
-                        }
-                    }
-                }
-
-                rt.mcp_server = std::make_unique<McpServer>();
-                // If the user didn't pin a port, probe a small range so multiple
-                // Spectra instances on the same machine don't collide on 8765.
-                bool           started   = false;
-                const uint16_t max_tries = mcp_port_pinned ? 1 : 16;
-                for (uint16_t i = 0; i < max_tries; ++i)
-                {
-                    const auto try_port = static_cast<uint16_t>(mcp_port + i);
-                    if (rt.mcp_server->start(*rt.auto_server, mcp_bind, try_port))
-                    {
-                        started = true;
-                        break;
-                    }
-                }
-                if (started)
-                    SPECTRA_LOG_INFO("app", "MCP server started: " + rt.mcp_server->endpoint());
-                else
-                    rt.mcp_server.reset();
+                if (rt.app_services->mcp())
+                    SPECTRA_LOG_INFO("app", "MCP server started: " + rt.app_services->mcp()->endpoint());
             }
             else
             {
                 SPECTRA_LOG_WARN("app", "Automation server failed to start");
-                rt.auto_server.reset();
             }
         }
     }
@@ -716,10 +682,11 @@ void App::init_runtime()
 #ifndef _WIN32
     if (!config_.headless)
     {
-        rt.topic_server = std::make_unique<InprocTopicServer>();
-        rt.topic_server->start(&registry_);
-        if (rt.ui_ctx_ptr)
-            rt.topic_server->wire_topics_panel(rt.ui_ctx_ptr->topics_panel, &registry_);
+        rt.app_services->start_topic_server(registry_);
+#ifdef SPECTRA_USE_IMGUI
+        if (rt.ui_ctx_ptr && rt.app_services->topic_server())
+            rt.app_services->topic_server()->wire_topics_panel(rt.ui_ctx_ptr->topics_panel, &registry_);
+#endif
     }
 #endif
 
@@ -745,16 +712,16 @@ App::StepResult App::step()
     auto step_start = std::chrono::steady_clock::now();
 
     // Poll automation server for pending remote commands
-    if (rt.auto_server)
+    if (rt.app_services->automation())
     {
-        rt.auto_server->poll(*this, rt.ui_ctx_ptr);
+        rt.app_services->automation()->poll(*this, rt.ui_ctx_ptr);
         // Automation commands will have been drained into cmd_queue;
         // the tick() will mark dirty when it processes them.
     }
 
-    rt.session.tick(rt.scheduler,
-                    rt.animator,
-                    rt.cmd_queue,
+    rt.app_services->session().tick(rt.app_services->scheduler(),
+                    rt.app_services->animator(),
+                    rt.app_services->command_queue(),
                     config_.headless,
                     rt.ui_ctx_ptr,
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
@@ -893,10 +860,10 @@ App::StepResult App::step()
 
     // Check animation duration termination
     if (rt.active_figure && rt.active_figure->anim_.duration > 0.0f
-        && rt.scheduler.elapsed_seconds() >= rt.active_figure->anim_.duration
+        && rt.app_services->scheduler().elapsed_seconds() >= rt.active_figure->anim_.duration
         && !rt.active_figure->anim_.loop)
     {
-        rt.session.request_exit();
+        rt.app_services->session().request_exit();
     }
 
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
@@ -909,7 +876,7 @@ App::StepResult App::step()
             if (rt.glfw->should_close())
             {
                 SPECTRA_LOG_INFO("main_loop", "Window closed, exiting loop");
-                rt.session.request_exit();
+                rt.app_services->session().request_exit();
             }
         }
     #elif defined(SPECTRA_USE_SDL3)
@@ -922,7 +889,7 @@ App::StepResult App::step()
                 if (ev.type == SDL_EVENT_QUIT)
                 {
                     SPECTRA_LOG_INFO("main_loop", "Window closed, exiting loop");
-                    rt.session.request_exit();
+                    rt.app_services->session().request_exit();
                 }
             }
         }
@@ -936,7 +903,7 @@ App::StepResult App::step()
     auto  step_end = std::chrono::steady_clock::now();
     float ms       = std::chrono::duration<float, std::milli>(step_end - step_start).count();
 
-    result.should_exit   = rt.session.should_exit();
+    result.should_exit   = rt.app_services->session().should_exit();
     result.frame_time_ms = ms;
     result.frame_number  = rt.frame_number;
 
@@ -953,27 +920,7 @@ void App::shutdown_runtime()
 
     SPECTRA_LOG_INFO("main_loop", "Exited main render loop");
 
-#ifndef _WIN32
-    // Stop before MCP/automation: the topic worker may call UI callbacks that
-    // reference TopicsPanel, which is destroyed when the user closes the window.
-    if (rt.topic_server)
-    {
-        rt.topic_server->stop();
-        rt.topic_server.reset();
-    }
-#endif
-
-    if (rt.mcp_server)
-    {
-        rt.mcp_server->stop();
-        rt.mcp_server.reset();
-    }
-
-    if (rt.auto_server)
-    {
-        rt.auto_server->stop();
-        rt.auto_server.reset();
-    }
+    // ApplicationServices::shutdown() stops automation, MCP, and topic server.
 
 #ifdef SPECTRA_USE_FFMPEG
     if (rt.video_exporter)
@@ -1051,6 +998,16 @@ void App::shutdown_runtime()
     }
 
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
+    // Clear frontend service pointers before destroying the window manager,
+    // since the service implementations reference the window manager and session.
+    if (rt.app_services)
+    {
+        rt.app_services->set_dialog_service(nullptr);
+        rt.app_services->set_clipboard_service(nullptr);
+        rt.app_services->set_redraw_request(nullptr);
+        rt.app_services->set_window_service(nullptr);
+    }
+
     if (rt.window_mgr)
     {
     #ifdef SPECTRA_USE_GLFW
@@ -1070,15 +1027,22 @@ void App::shutdown_runtime()
         backend_->wait_idle();
     }
 
-    // Renderer holds a non-owning pointer into AppRuntime::series_type_registry.
+    // Renderer holds a non-owning pointer into ApplicationServices::series_types().
     // Destroy custom pipelines while both are still alive, then detach so
     // ~Renderer (in ~App) does not touch freed registry memory.
     if (renderer_ && backend_)
     {
-        rt.series_type_registry.destroy_pipelines(*backend_);
+        rt.app_services->series_types().destroy_pipelines(*backend_);
         renderer_->set_series_type_registry(nullptr);
     }
-    rt.plugin_manager.set_series_type_registry(nullptr);
+    rt.app_services->plugins().set_series_type_registry(nullptr);
+
+    // Shutdown ApplicationServices (stops automation, topic server, etc.)
+    if (rt.app_services)
+    {
+        rt.app_services->shutdown();
+        rt.app_services.reset();
+    }
 
     try
     {
@@ -1131,7 +1095,7 @@ WindowUIContext* App::ui_context()
 
 SessionRuntime* App::session()
 {
-    return runtime_ ? &runtime_->session : nullptr;
+    return runtime_ && runtime_->app_services ? &runtime_->app_services->session() : nullptr;
 }
 
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
@@ -1140,5 +1104,10 @@ WindowManager* App::window_manager()
     return runtime_ ? runtime_->window_mgr.get() : nullptr;
 }
 #endif
+
+ApplicationServices* App::app_services()
+{
+    return runtime_ ? runtime_->app_services.get() : nullptr;
+}
 
 }   // namespace spectra
