@@ -5,7 +5,13 @@ include(CMakeFindDependencyMacro)
 # Spectra requires Vulkan
 find_dependency(Vulkan)
 
-# Import targets
+# Spectra requires Eigen3 (PUBLIC dependency for vector adapters)
+find_dependency(Eigen3)
+
+# Threads is needed by the bundled GLFW static library
+find_dependency(Threads)
+
+# Import targets (includes spectra::glfw when GLFW was bundled via FetchContent)
 include("${CMAKE_CURRENT_LIST_DIR}/spectraTargets.cmake")
 
 check_required_components(spectra)
