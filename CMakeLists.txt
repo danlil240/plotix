@@ -355,41 +355,35 @@ add_dependencies(spectra spectra_flatbuffers_gen)
 
 # GLFW adapter (optional)
 if(SPECTRA_USE_GLFW)
-    # For Python wheels, prefer building GLFW from source to avoid inheriting
-    # ISA requirements from distro-provided binaries in manylinux images.
-    if(NOT SPECTRA_PYTHON_WHEEL)
-        find_package(glfw3 3.4 QUIET)
-    endif()
-    if(NOT glfw3_FOUND)
-        include(FetchContent)
-        FetchContent_Declare(
-            glfw
-            GIT_REPOSITORY https://github.com/glfw/glfw.git
-            GIT_TAG        3.4
-            GIT_SHALLOW    TRUE
-        )
-        set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        # Don't install GLFW's own headers/libs into the system prefix when
-        # building from source — they conflict with libglfw3-dev on the user's
-        # machine when the spectra .deb is installed.
-        set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable(glfw)
-        # FetchContent produces a build-tree target (not IMPORTED), so CMake's
-        # install(EXPORT) would demand it be in an export set even when linked
-        # PRIVATE.  $<BUILD_INTERFACE:> scopes the dependency to the build tree
-        # so it is never evaluated for the installed package export — no export
-        # set membership required, no glfw files installed to the system.
-        set(_spectra_glfw_link "$<BUILD_INTERFACE:glfw>")
-    else()
-        # find_package produced an IMPORTED target — PRIVATE linking is fine
-        # with install(EXPORT) as-is.
-        set(_spectra_glfw_link "glfw")
-    endif()
+    # Always build GLFW from source to guarantee the latest Wayland support
+    # and a consistent API version across all platforms.
+    include(FetchContent)
+    FetchContent_Declare(
+        glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG        master
+        GIT_SHALLOW    TRUE
+    )
+    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    # Don't install GLFW's own headers/libs into the system prefix — they
+    # conflict with libglfw3-dev on the user's machine when the spectra .deb
+    # is installed.  The install and export of the glfw target is handled in
+    # the Install targets section.
+    set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(glfw)
+    # Bundle the GLFW static library in the spectra install so consumers
+    # don't need system GLFW.  $<BUILD_INTERFACE:> scopes the build-tree
+    # target; $<INSTALL_INTERFACE:> provides the exported name (spectra::glfw)
+    # for the installed package.
+    set(_spectra_glfw_link "$<BUILD_INTERFACE:glfw>;$<INSTALL_INTERFACE:spectra::glfw>")
 
     target_sources(spectra PRIVATE src/ui/window/glfw_adapter.cpp)
-    # GLFW is an implementation detail: no public header includes glfw3.h.
+    # GLFW is linked PRIVATE (no public header includes glfw3.h), but the
+    # static library has unresolved GLFW symbols.  $<INSTALL_INTERFACE:spectra::glfw>
+    # in the PRIVATE interface ensures the exported target carries the GLFW
+    # dependency for consumers.
     target_link_libraries(spectra PRIVATE ${_spectra_glfw_link})
     target_compile_definitions(spectra PUBLIC SPECTRA_USE_GLFW)
     if(WIN32)
@@ -846,6 +840,14 @@ install(TARGETS spectra-core spectra EXPORT spectraTargets
     RUNTIME  DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
+# When GLFW was built from FetchContent, add it to the export set so
+# spectra::glfw is available to consumers via find_package(spectra).
+if(SPECTRA_USE_GLFW AND TARGET glfw)
+    install(TARGETS glfw EXPORT spectraTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/spectra
+    )
+endif()
+
 # Public headers
 install(DIRECTORY include/spectra/
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/spectra
@@ -987,6 +989,11 @@ set(CPACK_RESOURCE_FILE_README  ${CMAKE_CURRENT_SOURCE_DIR}/README.md)
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_SECTION "science")
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+# SHLIBDEPS only scans executables, not static libraries. libspectra.a has
+# unresolved GLFW symbols, but GLFW 3.4 is bundled as spectra::glfw in the
+# install. Eigen3 is a PUBLIC dependency (find_dependency in spectraConfig).
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libvulkan1 (>= 1.3.204.0)")
+set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libvulkan-dev, libeigen3-dev, pkg-config, cmake")
 if(SPECTRA_PKG_DISTRO_CODENAME)
     set(CPACK_DEBIAN_PACKAGE_RELEASE "1~${SPECTRA_PKG_DISTRO_CODENAME}")
 endif()
