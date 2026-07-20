@@ -81,7 +81,12 @@ No compiler or Vulkan SDK needed — just a working Vulkan runtime/driver.
 > [`BUILD_ENVIRONMENT.md`](BUILD_ENVIRONMENT.md) before configuring CMake.
 
 ```bash
-sudo apt install build-essential cmake libvulkan-dev libglfw3-dev glslang-tools
+sudo apt install build-essential cmake ninja-build git pkg-config \
+    libvulkan-dev vulkan-validationlayers mesa-vulkan-drivers \
+    glslang-tools libglfw3-dev \
+    libwayland-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+    libxi-dev libxkbcommon-dev libgl1-mesa-dev \
+    python3 python3-pillow libeigen3-dev
 ```
 
 ```bash
