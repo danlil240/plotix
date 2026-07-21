@@ -27,6 +27,7 @@ inline void fd_close(int fd)
 }
 }   // namespace
 #else
+    #include <cerrno>
     #include <fcntl.h>
     #include <sys/socket.h>
     #include <sys/stat.h>
@@ -168,8 +169,18 @@ Server::~Server()
 bool Server::listen(const std::string& path)
 {
 #ifndef _WIN32
-    // Remove stale socket file
-    ::unlink(path.c_str());
+    // Remove only a stale socket.  Refuse to overwrite regular files, directories,
+    // symlinks, or other filesystem objects that happen to use the requested path.
+    struct stat existing = {};
+    if (::lstat(path.c_str(), &existing) == 0)
+    {
+        if (!S_ISSOCK(existing.st_mode) || ::unlink(path.c_str()) != 0)
+            return false;
+    }
+    else if (errno != ENOENT)
+    {
+        return false;
+    }
 
     int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0)
