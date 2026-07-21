@@ -361,6 +361,28 @@ TEST(HistogramSeries, GeometryIsStepFunction)
     EXPECT_FLOAT_EQ(hist.y_data()[hist.point_count() - 1], 0.0f);
 }
 
+TEST(HistogramSeries, IgnoresNonFiniteSamples)
+{
+    const float        inf  = std::numeric_limits<float>::infinity();
+    const float        nan  = std::numeric_limits<float>::quiet_NaN();
+    std::vector<float> data = {1.0f, inf, -inf, nan, 3.0f};
+    HistogramSeries    hist(data, 2);
+
+    ASSERT_EQ(hist.raw_values().size(), 2u);
+    EXPECT_FLOAT_EQ(hist.raw_values()[0], 1.0f);
+    EXPECT_FLOAT_EQ(hist.raw_values()[1], 3.0f);
+    for (float edge : hist.bin_edges())
+        EXPECT_TRUE(std::isfinite(edge));
+
+    float total = 0.0f;
+    for (float count : hist.bin_counts())
+    {
+        EXPECT_TRUE(std::isfinite(count));
+        total += count;
+    }
+    EXPECT_FLOAT_EQ(total, 2.0f);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // BarSeries
 // ═══════════════════════════════════════════════════════════════════════════
