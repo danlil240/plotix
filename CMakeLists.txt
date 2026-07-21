@@ -88,6 +88,15 @@ option(SPECTRA_BUILD_EXAMPLES "Build example programs"            ON)
 option(SPECTRA_BUILD_QT_EXAMPLE "Build the Qt6 embed example"     OFF)
 option(SPECTRA_BUILD_QT_APP     "Build the production Qt6 desktop app" OFF)
 option(SPECTRA_BUILD_QT_TESTS   "Build Qt6 integration tests"        OFF)
+option(SPECTRA_PACKAGE_PRIVATE_QT "Package the controlled private Qt runtime" OFF)
+set(SPECTRA_DEFAULT_FRONTEND "legacy"
+    CACHE STRING "Default frontend binary: legacy (GLFW/ImGui) or qt (Qt6 desktop app)")
+set_property(CACHE SPECTRA_DEFAULT_FRONTEND
+             PROPERTY STRINGS legacy qt)
+set(SPECTRA_QT_DOCKING_PROVIDER "native"
+    CACHE STRING "Qt docking provider: native | kddockwidgets | qtads")
+set_property(CACHE SPECTRA_QT_DOCKING_PROVIDER
+             PROPERTY STRINGS native kddockwidgets qtads)
 option(SPECTRA_BUILD_TESTS    "Build unit tests and benchmarks"   ON)
 option(SPECTRA_PYTHON_WHEEL  "Install backend into Python package _bin/" OFF)
 
@@ -509,6 +518,13 @@ if(SPECTRA_USE_QT)
         src/adapters/qt/split_view_container.cpp
         src/adapters/qt/qt_overlay_draw_list.cpp
     )
+    # ROS2 panel composition (requires both Qt and ROS2)
+    if(SPECTRA_USE_ROS2)
+        target_sources(spectra_qt_adapter PRIVATE
+            src/adapters/qt/ros2/ros_panel_manager.cpp
+        )
+        target_link_libraries(spectra_qt_adapter PUBLIC spectra_ros2_adapter)
+    endif()
     target_link_libraries(spectra_qt_adapter PUBLIC spectra Qt6::Gui Qt6::Widgets)
     target_compile_features(spectra_qt_adapter PRIVATE cxx_std_20)
     target_include_directories(spectra_qt_adapter PRIVATE
@@ -538,6 +554,65 @@ if(SPECTRA_USE_QT)
             AUTOUIC ON
             AUTORCC ON
         )
+        if(SPECTRA_DEFAULT_FRONTEND STREQUAL "qt")
+            set_target_properties(spectra-qt-app PROPERTIES OUTPUT_NAME spectra)
+            message(STATUS "SPECTRA_DEFAULT_FRONTEND=qt: Qt app is the default 'spectra' binary")
+        endif()
+
+        # ── RPATH for private Qt runtime ───────────────────────────────────
+        # When SPECTRA_PACKAGE_PRIVATE_QT is ON, the Qt app must find its
+        # bundled Qt libraries at $ORIGIN/../lib/spectra/qt/lib instead of
+        # the system Qt.
+        if(SPECTRA_PACKAGE_PRIVATE_QT)
+            if(APPLE)
+                set_target_properties(spectra-qt-app PROPERTIES
+                    INSTALL_RPATH "@executable_path/../lib/spectra/qt/lib"
+                    BUILD_WITH_INSTALL_RPATH FALSE
+                )
+            else()
+                set_target_properties(spectra-qt-app PROPERTIES
+                    INSTALL_RPATH "$ORIGIN/../lib/spectra/qt/lib"
+                    BUILD_WITH_INSTALL_RPATH FALSE
+                )
+            endif()
+            message(STATUS "SPECTRA_PACKAGE_PRIVATE_QT: RPATH configured for private Qt runtime")
+        endif()
+    endif()
+
+    # ── Private Qt runtime deployment ─────────────────────────────────────
+    if(SPECTRA_PACKAGE_PRIVATE_QT)
+        include(cmake/deployment/QtRuntimeManifest.cmake)
+        spectra_qt_runtime_manifest(
+            MANIFEST_OUT  ${CMAKE_BINARY_DIR}/qt-runtime-manifest.json
+            LIBRARIES_OUT _qt_runtime_libs
+            PLUGINS_OUT   _qt_runtime_plugins
+            COMPONENTS    Core Gui Widgets
+        )
+
+        if(WIN32)
+            include(cmake/deployment/DeployQtWindows.cmake)
+            spectra_deploy_qt_windows(
+                TARGET       spectra-qt-app
+                DESTINATION  ${CMAKE_INSTALL_BINDIR}
+            )
+        elseif(APPLE)
+            include(cmake/deployment/DeployQtMacOS.cmake)
+            # MoltenVK path can be overridden via -DMOLTENVK_LIB=/path
+            spectra_deploy_qt_macos(
+                APP_BUNDLE   Spectra.app
+                DESTINATION  .
+                MOLTENVK_LIB "${MOLTENVK_LIB}"
+            )
+        else()
+            include(cmake/deployment/DeployQtLinux.cmake)
+            spectra_deploy_qt_linux(
+                LIBRARIES   ${_qt_runtime_libs}
+                PLUGINS     ${_qt_runtime_plugins}
+                DESTINATION ${CMAKE_INSTALL_LIBDIR}/spectra/qt
+            )
+        endif()
+
+        include(cmake/deployment/ValidateRuntimeClosure.cmake)
     endif()
 endif()
 
@@ -824,6 +899,10 @@ if((SPECTRA_USE_GLFW OR SPECTRA_USE_SDL3) AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_BINARY_DIR}/generated
     )
     set_target_properties(spectra-app PROPERTIES OUTPUT_NAME spectra)
+    if(SPECTRA_DEFAULT_FRONTEND STREQUAL "qt")
+        set_target_properties(spectra-app PROPERTIES OUTPUT_NAME spectra-legacy)
+        message(STATUS "SPECTRA_DEFAULT_FRONTEND=qt: legacy app renamed to 'spectra-legacy'")
+    endif()
 endif()
 
 # Multi-process daemon + agent binaries (Phase 4 & 5)
@@ -916,6 +995,14 @@ if(TARGET spectra-app)
     install(TARGETS spectra-app RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+# Qt desktop application binary
+if(TARGET spectra-qt-app)
+    install(TARGETS spectra-qt-app
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT spectra
+    )
+endif()
+
 # Multiproc binaries
 if(SPECTRA_RUNTIME_MODE STREQUAL "multiproc" AND NOT SPECTRA_PYTHON_WHEEL)
     if(TARGET spectra-backend)
@@ -989,6 +1076,11 @@ install(FILES docs/man/spectra-backend.1
     DESTINATION ${CMAKE_INSTALL_MANDIR}/man1
 )
 
+# Third-party license manifest
+install(FILES packaging/LICENSES/THIRD_PARTY_LICENSES.md
+    DESTINATION ${CMAKE_INSTALL_DOCDIR}
+)
+
 # Shell completions
 install(FILES packaging/completions/spectra-backend.bash
     DESTINATION ${CMAKE_INSTALL_DATADIR}/bash-completion/completions
@@ -1037,6 +1129,14 @@ set(CPACK_PACKAGE_CONTACT "danlil240")
 set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_CURRENT_SOURCE_DIR}/LICENSE)
 set(CPACK_RESOURCE_FILE_README  ${CMAKE_CURRENT_SOURCE_DIR}/README.md)
 
+# Component-based packaging
+set(CPACK_COMPONENTS_ALL spectra spectra_qt_runtime)
+set(CPACK_COMPONENT_SPECTRA_DISPLAY_NAME "Spectra Desktop Application")
+set(CPACK_COMPONENT_SPECTRA_DESCRIPTION "Qt 6 desktop frontend with Vulkan rendering")
+set(CPACK_COMPONENT_SPECTRA_QT_RUNTIME_DISPLAY_NAME "Spectra Private Qt Runtime")
+set(CPACK_COMPONENT_SPECTRA_QT_RUNTIME_DESCRIPTION "Bundled Qt 6.8.x libraries and QPA plugins")
+set(CPACK_COMPONENT_SPECTRA_QT_RUNTIME_DEPENDS spectra)
+
 # Debian
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_SECTION "science")
@@ -1049,6 +1149,16 @@ set(CPACK_DEBIAN_PACKAGE_SUGGESTS "libvulkan-dev, libeigen3-dev, pkg-config, cma
 if(SPECTRA_PKG_DISTRO_CODENAME)
     set(CPACK_DEBIAN_PACKAGE_RELEASE "1~${SPECTRA_PKG_DISTRO_CODENAME}")
 endif()
+
+# Debian component-specific settings
+set(CPACK_DEBIAN_SPECTRA_PACKAGE_NAME "spectra")
+set(CPACK_DEBIAN_SPECTRA_PACKAGE_DEPENDS "libvulkan1 (>= 1.3.204.0), spectra-qt-runtime (>= ${PROJECT_VERSION})")
+set(CPACK_DEBIAN_SPECTRA_PACKAGE_SHLIBDEPS ON)
+
+set(CPACK_DEBIAN_SPECTRA_QT_RUNTIME_PACKAGE_NAME "spectra-qt-runtime")
+set(CPACK_DEBIAN_SPECTRA_QT_RUNTIME_PACKAGE_DEPENDS "libvulkan1 (>= 1.3.204.0)")
+set(CPACK_DEBIAN_SPECTRA_QT_RUNTIME_PACKAGE_SHLIBDEPS ON)
+set(CPACK_DEBIAN_SPECTRA_QT_RUNTIME_PACKAGE_CONFLICTS "libqt6-core (<< 6.8)")
 
 # RPM
 set(CPACK_RPM_PACKAGE_REQUIRES "vulkan-loader >= 1.2")

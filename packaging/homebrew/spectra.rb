@@ -16,6 +16,7 @@ class Spectra < Formula
   depends_on "glfw"
   depends_on "molten-vk"
   depends_on "vulkan-loader"
+  depends_on "qt@6"
 
   def install
     args = %W[
@@ -23,6 +24,8 @@ class Spectra < Formula
       -DSPECTRA_BUILD_EXAMPLES=OFF
       -DSPECTRA_BUILD_TESTS=OFF
       -DSPECTRA_BUILD_GOLDEN_TESTS=OFF
+      -DSPECTRA_USE_QT=ON
+      -DSPECTRA_BUILD_QT_APP=ON
     ]
 
     system "cmake", "-B", "build", *std_cmake_args, *args

@@ -9,7 +9,11 @@
             "hash": "PLACEHOLDER_SHA256"
         }
     },
+    "suggest": {
+        "vulkan": "vulkan-loader"
+    },
     "bin": [
+        "bin\\spectra-qt-app.exe",
         "bin\\spectra-backend.exe",
         "bin\\spectra-window.exe"
     ],

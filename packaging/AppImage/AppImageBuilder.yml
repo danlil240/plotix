@@ -3,7 +3,8 @@
 #
 # Prerequisites:
 #   - linuxdeploy (https://github.com/linuxdeploy/linuxdeploy)
-#   - linuxdeploy-plugin-gtk (optional, for GTK theme integration)
+#   - linuxdeploy-plugin-qt (optional, for Qt runtime bundling)
+#   - Build with -DSPECTRA_USE_QT=ON -DSPECTRA_BUILD_QT_APP=ON -DSPECTRA_PACKAGE_PRIVATE_QT=ON
 
 version: 1
 
@@ -15,13 +16,17 @@ AppDir:
     name: Spectra
     icon: spectra
     version: !ENV ${SPECTRA_VERSION}
-    exec: usr/bin/spectra-backend
+    exec: usr/bin/spectra-qt-app
     exec_args: $@
 
   files:
     include:
+      - usr/bin/spectra-qt-app
       - usr/bin/spectra-backend
       - usr/bin/spectra-window
+      - usr/lib/spectra/qt/lib/*
+      - usr/lib/spectra/qt/plugins/platforms/*
+      - usr/lib/spectra/qt/plugins/imageformats/*
       - usr/share/spectra/fonts/*
       - usr/share/icons/hicolor/256x256/apps/spectra.png
       - usr/share/applications/spectra.desktop
@@ -29,6 +34,8 @@ AppDir:
   runtime:
     env:
       SPECTRA_DATA_DIR: "${APPDIR}/usr/share/spectra"
+      QT_PLUGIN_PATH: "${APPDIR}/usr/lib/spectra/qt/plugins"
+      QT_QPA_PLATFORM_PLUGIN_PATH: "${APPDIR}/usr/lib/spectra/qt/plugins/platforms"
 
 AppImage:
   arch: x86_64

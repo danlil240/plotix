@@ -26,6 +26,18 @@ echo "=== Building Spectra AppImage v${VERSION} ==="
 rm -rf "$APPDIR"
 cmake --install "$BUILD_DIR" --prefix "$APPDIR/usr"
 
+# 1b. Create qt.conf so Qt finds the bundled private runtime
+if [ -d "$APPDIR/usr/lib/spectra/qt" ]; then
+    mkdir -p "$APPDIR/usr/bin"
+    cat > "$APPDIR/usr/bin/qt.conf" <<QTCOF
+[Paths]
+Prefix = ../lib/spectra/qt
+Libraries = lib
+Plugins = plugins
+QTCOF
+    echo "  Created qt.conf for private Qt runtime"
+fi
+
 # 2. Copy desktop file and icon to expected locations
 mkdir -p "$APPDIR/usr/share/applications"
 mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"

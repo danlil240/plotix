@@ -190,6 +190,7 @@ set(SPECTRA_UNIT_TESTS
     test_accessible_summary
     test_webgpu_backend
     test_expression_eval
+    test_moltenvk_portability
 )
 
 # Mock transform plugin — shared library loaded by test_plugin_transforms
@@ -268,6 +269,7 @@ set(SPECTRA_GPU_TESTS
     test_text_renderer
     test_embed_surface
     test_easy_embed
+    test_moltenvk_portability
 )
 
 foreach(_test ${SPECTRA_UNIT_TESTS})
@@ -477,6 +479,18 @@ if(SPECTRA_BUILD_BENCHMARKS)
 
     add_spectra_bench(bench_startup)
     add_spectra_bench(bench_ipc_codec)
+
+    # Qt vs legacy performance regression benchmark.
+    # When SPECTRA_USE_QT is ON, links Qt6 and enables Qt-specific benchmarks.
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_qt_frontend.cpp)
+        add_spectra_bench(bench_qt_frontend)
+        if(SPECTRA_USE_QT)
+            find_package(Qt6 REQUIRED COMPONENTS Gui Widgets)
+            target_link_libraries(bench_qt_frontend PRIVATE Qt6::Gui Qt6::Widgets spectra_qt_adapter)
+            target_compile_definitions(bench_qt_frontend PRIVATE SPECTRA_USE_QT)
+            set_target_properties(bench_qt_frontend PROPERTIES AUTOMOC ON)
+        endif()
+    endif()
 
     if(SPECTRA_USE_ROS2 AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/bench/bench_ros3d.cpp)
         add_executable(bench_ros3d bench/bench_ros3d.cpp)
@@ -1712,6 +1726,31 @@ if(SPECTRA_BUILD_QT_TESTS AND SPECTRA_USE_QT)
 
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_plugin_ui.cpp)
         add_qt_test(test_qt_plugin_ui)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_panels.cpp)
+        add_qt_test(test_qt_panels)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_dialogs.cpp)
+        add_qt_test(test_qt_dialogs)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_workspace.cpp)
+        add_qt_test(test_qt_workspace)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_window_ops.cpp)
+        add_qt_test(test_qt_window_ops)
+    endif()
+
+    # ROS2 panel composition test (requires both Qt and ROS2)
+    if(SPECTRA_USE_ROS2 AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_ros_panel.cpp)
+        add_qt_test(test_qt_ros_panel)
+        target_link_libraries(qt_test_qt_ros_panel PRIVATE spectra_ros2_adapter)
+        target_include_directories(qt_test_qt_ros_panel PRIVATE
+            ${CMAKE_SOURCE_DIR}/src/adapters/ros2
+        )
     endif()
 endif()
 

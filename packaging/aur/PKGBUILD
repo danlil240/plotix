@@ -9,8 +9,8 @@ pkgdesc="GPU-accelerated scientific plotting library"
 arch=('x86_64')
 url="https://github.com/danlil240/Spectra"
 license=('MIT')
-depends=('vulkan-icd-loader' 'glfw' 'vulkan-driver')
-makedepends=('cmake' 'glslang' 'vulkan-headers')
+depends=('vulkan-icd-loader' 'glfw' 'vulkan-driver' 'qt6-base')
+makedepends=('cmake' 'glslang' 'vulkan-headers' 'qt6-base')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/danlil240/Spectra/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('SKIP')
 
@@ -21,7 +21,9 @@ build() {
         -DCMAKE_INSTALL_PREFIX=/usr \
         -DSPECTRA_BUILD_EXAMPLES=OFF \
         -DSPECTRA_BUILD_TESTS=OFF \
-        -DSPECTRA_BUILD_GOLDEN_TESTS=OFF
+        -DSPECTRA_BUILD_GOLDEN_TESTS=OFF \
+        -DSPECTRA_USE_QT=ON \
+        -DSPECTRA_BUILD_QT_APP=ON
     cmake --build build -j"$(nproc)"
 }
 

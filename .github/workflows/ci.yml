@@ -472,3 +472,247 @@ jobs:
       # GUI spectra_ros_qa_agent scenarios (nav_spatiotemporal, design_review) are
       # validated locally with Xvfb — lavapipe CI runners cannot complete them in
       # reasonable time.  See tests/qa/ros_qa_agent.cpp and AGENTS.md.
+
+  # ─── Qt Build + Integration Tests ───────────────────────────────────────
+  qt-build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.list
+          sudo apt-get update
+          sudo apt-get install -y \
+            vulkan-tools \
+            libvulkan-dev \
+            vulkan-validationlayers \
+            mesa-vulkan-drivers \
+            libglfw3-dev \
+            libwayland-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxkbcommon-dev \
+            libgl1-mesa-dev \
+            qt6-base-dev \
+            libgl1-mesa-dri \
+            xvfb \
+            glslang-tools
+
+      - name: Configure CMake with Qt
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DSPECTRA_BUILD_TESTS=ON \
+            -DSPECTRA_BUILD_EXAMPLES=OFF \
+            -DSPECTRA_BUILD_GOLDEN_TESTS=OFF \
+            -DSPECTRA_USE_QT=ON \
+            -DSPECTRA_BUILD_QT_APP=ON \
+            -DSPECTRA_BUILD_QT_TESTS=ON \
+            -DSPECTRA_DEFAULT_FRONTEND=qt \
+            -DSPECTRA_USE_ROS2=OFF \
+            -DSPECTRA_USE_PX4=OFF
+
+      - name: Build
+        run: cmake --build build --config ${{ env.BUILD_TYPE }} -j$(nproc)
+
+      - name: Run Qt integration tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          cd build
+          ctest -L qt --output-on-failure -j$(nproc)
+
+  # ─── Qt Packaging — Linux .deb (Ubuntu 22.04) ───────────────────────────
+  qt-package-jammy:
+    runs-on: ubuntu-22.04
+    needs: qt-build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build git pkg-config \
+            libvulkan-dev vulkan-tools \
+            libwayland-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+            libxi-dev libxkbcommon-dev libgl1-mesa-dev libglfw3-dev \
+            qt6-base-dev glslang-tools \
+            python3 python3-pip python3-pillow \
+            dpkg-dev fakeroot
+
+      - name: Configure + Build + Package
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSPECTRA_USE_QT=ON \
+            -DSPECTRA_BUILD_QT_APP=ON \
+            -DSPECTRA_BUILD_QT_TESTS=OFF \
+            -DSPECTRA_BUILD_EXAMPLES=OFF \
+            -DSPECTRA_BUILD_TESTS=OFF \
+            -DSPECTRA_BUILD_GOLDEN_TESTS=OFF \
+            -DSPECTRA_PACKAGE_PRIVATE_QT=ON \
+            -DSPECTRA_DEFAULT_FRONTEND=qt \
+            -DSPECTRA_USE_ROS2=OFF \
+            -DSPECTRA_USE_PX4=OFF \
+            -DSPECTRA_PKG_DISTRO_CODENAME=jammy
+          cmake --build build -j$(nproc)
+          cd build && cpack -G DEB
+
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: spectra-deb-jammy
+          path: build/*.deb
+          retention-days: 30
+
+  # ─── Qt Packaging — Linux .deb (Ubuntu 24.04) ───────────────────────────
+  qt-package-noble:
+    runs-on: ubuntu-24.04
+    needs: qt-build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.list
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build git pkg-config \
+            libvulkan-dev vulkan-tools \
+            libwayland-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+            libxi-dev libxkbcommon-dev libgl1-mesa-dev libglfw3-dev \
+            qt6-base-dev glslang-tools \
+            python3 python3-pip python3-pillow \
+            dpkg-dev fakeroot
+
+      - name: Configure + Build + Package
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSPECTRA_USE_QT=ON \
+            -DSPECTRA_BUILD_QT_APP=ON \
+            -DSPECTRA_BUILD_QT_TESTS=OFF \
+            -DSPECTRA_BUILD_EXAMPLES=OFF \
+            -DSPECTRA_BUILD_TESTS=OFF \
+            -DSPECTRA_BUILD_GOLDEN_TESTS=OFF \
+            -DSPECTRA_PACKAGE_PRIVATE_QT=ON \
+            -DSPECTRA_DEFAULT_FRONTEND=qt \
+            -DSPECTRA_USE_ROS2=OFF \
+            -DSPECTRA_USE_PX4=OFF \
+            -DSPECTRA_PKG_DISTRO_CODENAME=noble
+          cmake --build build -j$(nproc)
+          cd build && cpack -G DEB
+
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: spectra-deb-noble
+          path: build/*.deb
+          retention-days: 30
+
+  # ─── Qt Packaging — Windows ─────────────────────────────────────────────
+  qt-package-windows:
+    runs-on: windows-2022
+    needs: qt-build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $ver = "1.4.304.1"
+          $url = "https://sdk.lunarg.com/sdk/download/$ver/windows/VulkanSDK-$ver-Installer.exe"
+          Invoke-WebRequest -Uri $url -OutFile VulkanSDK.exe
+          Start-Process -FilePath .\VulkanSDK.exe -Args "--accept-licenses --default-answer --confirm-command install" -Wait
+          $sdkPath = "C:\VulkanSDK\$ver"
+          echo "VULKAN_SDK=$sdkPath" >> $env:GITHUB_ENV
+          echo "$sdkPath\Bin" >> $env:GITHUB_PATH
+
+      - name: Install Qt
+        shell: pwsh
+        run: |
+          pip install aqtinstall
+          aqt install-qt windows desktop 6.8.x win64_msvc2022_64 -m qtwidgets qtgui qtcore
+          echo "C:\Qt\6.8.x\msvc2022_64\bin" >> $env:GITHUB_PATH
+          echo "CMAKE_PREFIX_PATH=C:\Qt\6.8.x\msvc2022_64" >> $env:GITHUB_ENV
+
+      - name: Configure + Build
+        shell: pwsh
+        run: |
+          cmake -B build `
+            "-DCMAKE_BUILD_TYPE=Release" `
+            "-DCMAKE_PREFIX_PATH=C:\Qt\6.8.x\msvc2022_64" `
+            "-DSPECTRA_USE_QT=ON" `
+            "-DSPECTRA_BUILD_QT_APP=ON" `
+            "-DSPECTRA_BUILD_QT_TESTS=OFF" `
+            "-DSPECTRA_BUILD_EXAMPLES=OFF" `
+            "-DSPECTRA_BUILD_TESTS=OFF" `
+            "-DSPECTRA_BUILD_GOLDEN_TESTS=OFF" `
+            "-DSPECTRA_PACKAGE_PRIVATE_QT=ON" `
+            "-DSPECTRA_DEFAULT_FRONTEND=qt" `
+            "-DSPECTRA_USE_ROS2=OFF" `
+            "-DSPECTRA_USE_PX4=OFF"
+          cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS
+
+      - name: Package ZIP
+        shell: pwsh
+        run: |
+          cmake --install build --prefix build/install
+          Compress-Archive -Path build\install\* -DestinationPath spectra-${{ github.ref_name }}-win64.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spectra-win64
+          path: spectra-*.zip
+          retention-days: 30
+
+  # ─── Qt Packaging — macOS ───────────────────────────────────────────────
+  qt-package-macos:
+    runs-on: macos-15
+    needs: qt-build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install vulkan-headers vulkan-loader glslang molten-vk glfw qt@6
+
+      - name: Configure + Build
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)" \
+            -DSPECTRA_USE_QT=ON \
+            -DSPECTRA_BUILD_QT_APP=ON \
+            -DSPECTRA_BUILD_QT_TESTS=OFF \
+            -DSPECTRA_BUILD_EXAMPLES=OFF \
+            -DSPECTRA_BUILD_TESTS=OFF \
+            -DSPECTRA_BUILD_GOLDEN_TESTS=OFF \
+            -DSPECTRA_PACKAGE_PRIVATE_QT=ON \
+            -DSPECTRA_DEFAULT_FRONTEND=qt \
+            -DSPECTRA_USE_ROS2=OFF \
+            -DSPECTRA_USE_PX4=OFF \
+            -DMOLTENVK_LIB="$(brew --prefix molten-vk)/lib/libMoltenVK.dylib"
+          cmake --build build --config Release -j$(sysctl -n hw.ncpu)
+
+      - name: Package DMG
+        run: |
+          cmake --install build --prefix build/install
+          hdiutil create -volname Spectra -srcfolder build/install -fs APFS -format UDZO spectra-${{ github.ref_name }}-macos.dmg
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spectra-macos
+          path: spectra-*.dmg
+          retention-days: 30

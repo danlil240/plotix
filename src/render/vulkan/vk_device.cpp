@@ -9,6 +9,17 @@
 #include <stdexcept>
 #include <vector>
 
+// Fallback defines for Vulkan headers < 1.3.216 (portability extension macros).
+#ifndef VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME
+    #define VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME "VK_KHR_portability_enumeration"
+#endif
+#ifndef VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR
+    #define VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR 0x00000001
+#endif
+#ifndef VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME
+    #define VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME "VK_KHR_portability_subset"
+#endif
+
 namespace spectra::vk
 {
 
@@ -115,11 +126,26 @@ VkInstance create_instance(bool                         enable_validation,
         }
     }
 
+    // macOS/MoltenVK portability: conditionally enable VK_KHR_portability_enumeration
+    // so that devices exposing VK_KHR_portability_subset are discoverable.
+    // Per the Vulkan portability extension spec, we must set the enumerate
+    // portability bit in VkInstanceCreateInfo when the extension is enabled.
+    bool has_portability = has_ext(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    if (has_portability)
+    {
+        append_unique(extensions, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    }
+
     VkInstanceCreateInfo create_info{};
     create_info.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     create_info.pApplicationInfo        = &app_info;
     create_info.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
     create_info.ppEnabledExtensionNames = extensions.data();
+
+    if (has_portability)
+    {
+        create_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    }
 
     if (enable_validation && check_validation_layer_support())
     {
@@ -332,6 +358,14 @@ std::vector<const char*> get_required_device_extensions(VkPhysicalDevice physica
     {
         exts.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
     }
+
+    // macOS/MoltenVK: VK_KHR_portability_subset is mandatory when present.
+    // Per the portability subset spec, it must be enabled if available.
+    if (has_device_extension(physical_device, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME))
+    {
+        exts.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+    }
+
     return exts;
 }
 

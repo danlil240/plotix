@@ -5,6 +5,12 @@
 // spawned one), re-exec spectra-window so the user attaches to that daemon
 // and immediately sees the published topics in the Topics panel.  Opt-out
 // with SPECTRA_NO_DAEMON_DISCOVERY=1.
+//
+// DEPRECATED: This is the legacy GLFW/ImGui frontend. It will be removed
+// after one release cycle once the Qt6 frontend (spectra-qt-app) is the
+// default. Build with -DSPECTRA_DEFAULT_FRONTEND=qt to make the Qt app the
+// default 'spectra' binary. This legacy binary is installed as
+// 'spectra-legacy' in that configuration.
 
 #include <spectra/app.hpp>
 #include <spectra/logger.hpp>
