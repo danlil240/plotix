@@ -557,6 +557,21 @@ TEST(AxesStats, AutoFitIgnoresNonFiniteCoordinates)
     EXPECT_GE(xlim.max, 2.0);
 }
 
+TEST(AxesStats, AutoFitIncludesStemSeries)
+{
+    Axes               ax;
+    std::vector<float> x = {10.0f, 20.0f};
+    std::vector<float> y = {100.0f, 200.0f};
+    ax.stem(x, y).baseline(300.0f);
+
+    const auto xlim = ax.x_limits();
+    const auto ylim = ax.y_limits();
+    EXPECT_LE(xlim.min, 10.0);
+    EXPECT_GE(xlim.max, 20.0);
+    EXPECT_LE(ylim.min, 100.0);
+    EXPECT_GE(ylim.max, 300.0);
+}
+
 TEST(AxesStats, MixedSeriesTypes)
 {
     Axes               ax;
