@@ -30,6 +30,7 @@ namespace spectra
 {
 class SplitViewManager;
 class FigureRegistry;
+enum class ToolMode;
 }
 
 namespace spectra::adapters::qt
@@ -70,6 +71,13 @@ class QtSplitViewContainer : public QWidget
 
     // Get all FigureIds currently open as tabs across all panes.
     std::vector<FigureId> open_figure_ids() const;
+
+    // Activate an already-open figure and focus its pane.
+    bool activate_figure(FigureId id);
+
+    // Select the interaction tool for the active document.
+    void set_active_tool(ToolMode tool);
+    ToolMode active_tool() const;
 
     // ── Welcome page ───────────────────────────────────────────────────────
 

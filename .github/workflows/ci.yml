@@ -512,7 +512,7 @@ jobs:
             -DSPECTRA_USE_QT=ON \
             -DSPECTRA_BUILD_QT_APP=ON \
             -DSPECTRA_BUILD_QT_TESTS=ON \
-            -DSPECTRA_DEFAULT_FRONTEND=qt \
+            -DSPECTRA_DEFAULT_FRONTEND=legacy \
             -DSPECTRA_USE_ROS2=OFF \
             -DSPECTRA_USE_PX4=OFF
 
@@ -557,7 +557,7 @@ jobs:
             -DSPECTRA_BUILD_TESTS=OFF \
             -DSPECTRA_BUILD_GOLDEN_TESTS=OFF \
             -DSPECTRA_PACKAGE_PRIVATE_QT=ON \
-            -DSPECTRA_DEFAULT_FRONTEND=qt \
+            -DSPECTRA_DEFAULT_FRONTEND=legacy \
             -DSPECTRA_USE_ROS2=OFF \
             -DSPECTRA_USE_PX4=OFF \
             -DSPECTRA_PKG_DISTRO_CODENAME=jammy
@@ -603,7 +603,7 @@ jobs:
             -DSPECTRA_BUILD_TESTS=OFF \
             -DSPECTRA_BUILD_GOLDEN_TESTS=OFF \
             -DSPECTRA_PACKAGE_PRIVATE_QT=ON \
-            -DSPECTRA_DEFAULT_FRONTEND=qt \
+            -DSPECTRA_DEFAULT_FRONTEND=legacy \
             -DSPECTRA_USE_ROS2=OFF \
             -DSPECTRA_USE_PX4=OFF \
             -DSPECTRA_PKG_DISTRO_CODENAME=noble
@@ -657,7 +657,7 @@ jobs:
             "-DSPECTRA_BUILD_TESTS=OFF" `
             "-DSPECTRA_BUILD_GOLDEN_TESTS=OFF" `
             "-DSPECTRA_PACKAGE_PRIVATE_QT=ON" `
-            "-DSPECTRA_DEFAULT_FRONTEND=qt" `
+            "-DSPECTRA_DEFAULT_FRONTEND=legacy" `
             "-DSPECTRA_USE_ROS2=OFF" `
             "-DSPECTRA_USE_PX4=OFF"
           cmake --build build --config Release -j $env:NUMBER_OF_PROCESSORS
@@ -699,7 +699,7 @@ jobs:
             -DSPECTRA_BUILD_TESTS=OFF \
             -DSPECTRA_BUILD_GOLDEN_TESTS=OFF \
             -DSPECTRA_PACKAGE_PRIVATE_QT=ON \
-            -DSPECTRA_DEFAULT_FRONTEND=qt \
+            -DSPECTRA_DEFAULT_FRONTEND=legacy \
             -DSPECTRA_USE_ROS2=OFF \
             -DSPECTRA_USE_PX4=OFF \
             -DMOLTENVK_LIB="$(brew --prefix molten-vk)/lib/libMoltenVK.dylib"

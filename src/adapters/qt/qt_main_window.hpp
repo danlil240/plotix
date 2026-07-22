@@ -55,6 +55,15 @@ class QtPluginPanelWidget;
 class QtPluginsWidget;
 class QtSplitViewContainer;
 
+// New Spectra custom components (forward declarations)
+class SpectraTitleBar;
+class SpectraAppHeader;
+class SpectraNavRail;
+class SpectraDocumentTabBar;
+class SpectraStatusBar;
+class SpectraInspectorDrawer;
+class SpectraCanvasFrame;
+
 class SpectraMainWindow : public QMainWindow
 {
     Q_OBJECT
@@ -130,6 +139,11 @@ class SpectraMainWindow : public QMainWindow
 
     void open_command_palette();
 
+    // ── Layout reset ───────────────────────────────────────────────────────
+
+    // Reset dock state, panel visibility, and window layout to defaults.
+    void reset_layout();
+
    signals:
     void figure_closed(FigureId id);
     void figure_activated(FigureId id);
@@ -153,6 +167,7 @@ class SpectraMainWindow : public QMainWindow
     void on_split_down();
     void on_close_split();
     void on_reset_splits();
+    void on_reset_layout();
     void on_tab_context_menu(const QPoint& pos);
     void on_detach_tab();
 
@@ -162,6 +177,13 @@ class SpectraMainWindow : public QMainWindow
     void build_status_bar();
     void build_panels();
     void build_command_palette();
+    void apply_spectra_style();
+    void load_fonts();
+    void build_spectra_ui();
+    void update_compact_mode();
+
+   protected:
+    void resizeEvent(QResizeEvent* event) override;
 
     // Helper: create or get a menu by title path (e.g. "File", "View/Zoom")
     QMenu* get_or_create_menu(const std::string& path);
@@ -174,11 +196,25 @@ class SpectraMainWindow : public QMainWindow
     QtSplitViewContainer* central_view_ = nullptr;
     QLabel*               status_label_ = nullptr;
 
+    // New Spectra custom UI components
+    SpectraTitleBar*          title_bar_       = nullptr;
+    SpectraAppHeader*         app_header_      = nullptr;
+    SpectraNavRail*           nav_rail_        = nullptr;
+    SpectraDocumentTabBar*    doc_tab_bar_     = nullptr;
+    SpectraStatusBar*         spectra_status_  = nullptr;
+    SpectraInspectorDrawer*   spectra_inspector_ = nullptr;
+    SpectraCanvasFrame*       canvas_frame_    = nullptr;
+    QWidget*                  central_container_ = nullptr;
+
     // Menu bar
     QMenu*   menu_file_   = nullptr;
     QMenu*   menu_edit_   = nullptr;
     QMenu*   menu_view_   = nullptr;
     QMenu*   menu_figure_ = nullptr;
+    QMenu*   menu_tools_  = nullptr;
+    QMenu*   menu_data_   = nullptr;
+    QMenu*   menu_axes_   = nullptr;
+    QMenu*   menu_transforms_ = nullptr;
     QMenu*   menu_help_   = nullptr;
     QToolBar* toolbar_    = nullptr;
 

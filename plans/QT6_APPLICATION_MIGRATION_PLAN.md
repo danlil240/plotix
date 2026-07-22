@@ -1,9 +1,98 @@
 # Spectra Qt 6 Application Migration Plan
 
-**Status:** In Progress (Phase 1-4 implemented, Phase 5 feature parity in progress — split view container wired into SpectraMainWindow as central widget, OverlayDrawList framework-neutral interface created with ImGui and Qt QPainter adapters for annotations/measurement/selection/tooltips/crosshair porting, Phase 6 workspace/automation/crash-recovery/plugin UI schema completed — v4/v5 fixture tests and multi-window round-trip tests now passing, Phase 7 runtime variants implemented — in-process topic server, Qt IPC client for multiprocess window agent, daemon discovery, unified `spectra-qt-app` with `--socket` flag, Phase 8 cross-platform packaging implemented — CMake deployment helpers for Qt runtime manifest/deploy/validate on Linux/Windows/macOS, private Qt runtime packaging with RPATH and qt.conf, CPack component-based .deb packaging with spectra + spectra-qt-runtime split, AppImage updated for Qt app + bundled Qt runtime, Docker build environments for Ubuntu 22.04/24.04, CI jobs for Qt build/tests and .deb/ZIP/DMG packaging, third-party license manifest, Phase 9 default switch implemented — SPECTRA_DEFAULT_FRONTEND=qt option, Qt app ships as `spectra` binary, legacy app renamed to `spectra-legacy`, deprecation notice added, migration notes published, CI and Docker updated to use Qt as default frontend)  
+**Status:** Re-baselined after parity audit — Qt infrastructure exists, but the Qt desktop frontend is **not visually or functionally equivalent** to the legacy Spectra frontend and is not eligible to become the default. Phase 2 provides useful canvas infrastructure; Phases 1 and 3-7 are partial implementations, Phase 5 is reopened, and Phase 9 is blocked. `SPECTRA_DEFAULT_FRONTEND` must remain `legacy` in source builds and release jobs until every parity gate in this document passes.
 **Scope:** Production desktop frontend migration and cross-platform release architecture  
 **Repository baseline:** `main` at `d6fd85633a941440938cff3e44f5c32dc2fed8cc`  
 **Primary goal:** Make Qt 6 the production cross-platform desktop platform for Spectra, including multiple native OS windows, detachable/dockable panels, native Wayland operation, menus, shortcuts, dialogs, accessibility, and high-DPI behavior, while retaining Spectra's Vulkan renderer and framework-neutral core.
+
+## 0. Parity audit correction (2026-07-21)
+
+The earlier phase checkmarks measured code presence, widget construction, serialization helpers, and
+smoke-test success. They did not demonstrate that the Qt application looks or behaves like Spectra.
+That distinction is now a blocking release requirement.
+
+The legacy GLFW/ImGui frontend is the behavioral and visual reference until the migration is signed
+off. The migration is a platform-shell replacement, not a redesign. A Qt workflow is incomplete when
+it merely exposes a similarly named widget or placeholder; it is complete only when the same user
+action produces the same model mutation, rendering result, persistence result, and undo/redo behavior.
+
+### 0.1 Confirmed blockers
+
+| Area | Audit result | Required correction |
+|---|---|---|
+| Shell composition | Live Qt capture does not reproduce the legacy shell; native docks can force an invalid minimum height, default-white panel content is visible, and custom/Qt tab and inspector surfaces are duplicated. | Use one authoritative shell hierarchy, one document-tab surface, one inspector surface, and prove layout at every reference size/DPR. |
+| Plot viewport | The Qt canvas is already inside Qt chrome, while the retained ImGui layout can subtract legacy command/status regions again. | Give the renderer the exact physical canvas rectangle and compare the renderer-owned plot region pixel-for-pixel. |
+| Commands and menus | `QtApplicationController` initializes `ApplicationServices`, but the standard command set is not registered before `QtActionBridge::rebuild()`; a live launch reports zero actions. | Make command descriptors frontend-neutral and bind the same command IDs, enable predicates, shortcuts, undo transactions, and handlers in both frontends. |
+| Tool rail and input | The custom Qt navigation rail changes its selected paint state and status text but does not select the active canvas `InputHandler::ToolMode`. | Route every tool through one active-document controller and test pan, zoom, select, measure, annotate, and ROI end to end. |
+| Overlays | `OverlayDrawList` and adapters exist, but the production overlays still call ImGui/`ImDrawList` directly and the Qt painter adapter is not in the canvas frame path. | Port and exercise crosshair, tooltip, legend, markers, selection, measurement, annotation, and ROI; remove the false completion claim. |
+| Split panes | `rebuild_splitter()` destroys pane widgets/canvases and `sync_from_split_view()` is intentionally empty. | Preserve/reparent documents and per-pane state across split, unsplit, move, detach, and restore operations. |
+| Multi-canvas state | One runtime-level ImGui integration and `DataInteraction` instance is rebound between canvases. | Make overlay/input/view state document- or canvas-scoped; no active window may mutate another window's interaction state. |
+| Renderer/services ownership | The controller and `QtRuntime` construct separate Vulkan backend/renderer/theme stacks. | Use one process-scoped backend, renderer, theme, registries, and deferred-cleanup path. |
+| Export/shortcuts/workspace | Qt export readback, shortcut rebinding, and full autosave population contain explicit TODO/placeholder paths. | Complete the workflows and verify their artifacts, not just widget creation. |
+| ROS2/PX4 UI | Qt display and inspector areas contain placeholder content while the phase is marked implemented. | Port the supported adapter workflows or keep the phase incomplete and the legacy frontend available. |
+| Visual tests | The test named `QtVisualRegression` checks dimensions/widget existence and only verifies that a screenshot is non-null. It has no approved image baseline or pixel comparison. | Add deterministic legacy and Qt captures, image-diff thresholds, failure artifacts, and reference-resolution/DPR coverage. |
+
+### 0.2 Initial remediation in this branch (not parity sign-off)
+
+The audit also produced an initial correction pass. These changes remove obvious invalid states, but
+they do not close Phase 5 or authorize a default switch:
+
+- the Qt client geometry and shell regions now follow the current 1280x720 legacy reference instead
+  of the unrelated 1604x980 redesign mockup; the duplicate in-client title bar, blank icon glyphs,
+  fake performance values, injected demo plots, and timed detach/split demo behavior are removed;
+- Qt and `ApplicationServices` now share one Vulkan backend, renderer, and theme stack, and the
+  renderer receives the Qt-owned canvas extent without subtracting legacy chrome a second time;
+- 35 usable Qt actions are registered before `QtActionBridge::rebuild()` (up from zero), including
+  figure lifecycle, tab navigation, view reset/fit, tools, panel access, split commands, and quit;
+- visible shell controls use those same commands; in particular, the document-tab `+` control now
+  executes `figure.new` instead of emitting an unhandled sentinel activation;
+- navigation tool selection reaches the active canvas `InputHandler`;
+- split, close-split, and reset-split preserve live canvas objects, documents, the active document,
+  and per-document tool state rather than recreating or silently dropping them;
+- the Qt test runner now owns `QApplication` with a valid lifetime, all nine Qt integration binaries
+  exit cleanly, and the shell test rejects large unthemed light surfaces.
+
+Still blocking: approved legacy-vs-Qt image baselines and pixel diffs, the full command descriptor
+set, overlays, export/readback, shortcut rebinding, workspace population, complete panels/adapters,
+multi-window interaction isolation, and the complete workflow matrix below.
+
+### 0.3 Non-negotiable acceptance gates
+
+1. **No default switch before parity.** Qt may be opt-in, but official launchers and packages remain
+   legacy-first until the complete matrix below is green.
+2. **Renderer-region equivalence.** At the same physical canvas extent, theme, figure, and font atlas,
+   the renderer-owned plot region must have at most 0.1% pixels differing by more than two 8-bit
+   channel values. Any larger intentional change requires explicit approval and a baseline review.
+3. **Shell fidelity.** Geometry must match the approved Spectra reference within one logical pixel;
+   colors and tokens must come from a shared source; no native-white fallback surfaces, duplicate
+   chrome, overlap, clipping, or unexpected scroll/minimum-size expansion are allowed.
+4. **Reference matrix.** Capture welcome, 2D line/scatter, multi-subplot, 3D, inspector open, every
+   overlay tool, split view, detached window, dialogs, and adapter panels at 1280x720, 1600x900, and
+   200% DPR on X11 and Wayland. Windows and macOS captures are required before their release gate.
+5. **Workflow equivalence.** Every row in the functional matrix must run against both frontends with
+   the same fixture and compare figure state, active tool/document, undo stack, saved workspace, and
+   exported artifact.
+6. **No placeholders count as delivery.** A TODO, disabled action, label-only panel, adapter object, or
+   construction test cannot close a migration item.
+7. **Legacy stays buildable and tested.** Removal is a separate post-parity decision after at least one
+   release cycle with Qt as an opt-in frontend.
+
+### 0.4 Required functional parity matrix
+
+| Workflow | State/output that must match |
+|---|---|
+| Figure lifecycle | create, rename, activate, close, reopen, multiple tabs, empty/welcome state |
+| Data and series | CSV open, live topics, add/remove/reorder/copy/cut/paste series, style edits |
+| 2D interaction | pan, wheel zoom, box zoom, reset, fit, axis links, multi-axes hit testing |
+| Plot tools | select, ROI, measure, annotate/edit, markers, tooltip, crosshair, legend interaction |
+| 3D interaction | orbit, pan, zoom, axis selection, camera reset, scene/display interaction |
+| Documents/windows | split/unsplit, tab reorder, detach/redock, cross-window move, focus and close |
+| Commands | menus, palette, shortcuts, enabled state, conflicts, rebinding, undo/redo |
+| Panels | inspector, topics, transforms, data editor, timeline/curves, settings, plugins, accessibility |
+| Export | PNG/SVG/video, clipboard image/text, preview, cancellation, error reporting |
+| Persistence | workspace save/load, autosave/crash recovery, multi-window topology, old-version migration |
+| Runtime variants | in-process, daemon/window-agent, Python publisher-first, reconnect/restart |
+| Adapters | all supported ROS2 and PX4 discovery, plotting, display, inspector, bag/ULog workflows |
 
 ---
 
@@ -1209,7 +1298,7 @@ Acceptance:
 - ✅ legacy and Qt demo builds pass;
 - ✅ packaging and docking licensing have owners and deadlines.
 
-### Phase 1 — Extract application services ✅
+### Phase 1 — Extract application services (partial)
 
 Work:
 
@@ -1248,7 +1337,7 @@ Acceptance:
 - no permanent idle timer;
 - no GLFW/SDL symbols in Qt targets.
 
-### Phase 3 — Native Qt shell and commands ✅
+### Phase 3 — Native Qt shell and commands (partial)
 
 Work:
 
@@ -1274,7 +1363,7 @@ Acceptance:
 - no-figure state works;
 - keyboard navigation smoke test passes.
 
-### Phase 4 — Multi-window and docking ✅
+### Phase 4 — Multi-window and docking (partial)
 
 Work:
 
@@ -1298,31 +1387,39 @@ Acceptance:
 - topology save/restore via `save_layout()`/`restore_layout()` (implemented, needs integration testing);
 - repeated detach/redock without lifetime or Vulkan errors (needs validation-layer testing).
 
-### Phase 5 — Feature parity ✅ (complete)
+### Phase 5 — Visual and functional parity (reopened; blocking)
 
-Migrate:
+The classes below are prototypes and migration scaffolding. Code presence or widget construction does
+not constitute parity. Each item remains open until its legacy-vs-Qt workflow test and visual artifact
+pass the gates in Section 0.
 
-- ~~inspector and series controls~~ ✅ (QtInspectorWidget with per-series color, line width, opacity, line/marker style, visibility, label editing);
-- ~~timeline and animation curves~~ ✅ (QtTimelineWidget with play/pause/stop, scrubber, duration/fps, loop mode, track listing);
-- ~~shortcut editor~~ ✅ (QtShortcutWidget with binding table, reset-to-defaults, rebind placeholder);
-- ~~export preview, image copy, recording~~ ✅ (QtExportWidget with format selection, resolution, path, PNG + plugin format export);
-- ~~plugins/data sources~~ ✅ (QtTopicsWidget already implemented in Phase 3);
-- ~~split panes/subplots~~ ✅ (QtSplitViewContainer with QSplitter-based layout, split right/down, close split, reset, wraps framework-neutral SplitViewManager; **integrated into SpectraMainWindow as central widget** replacing plain QTabWidget, split actions in View menu with Ctrl+\\ / Ctrl+Shift+\\ shortcuts, signals forwarded through main window);
-- ~~editor/transforms~~ ✅ (QtTransformWidget with transform selection, parameter editing, pipeline builder, preset save/load; QtDataEditorWidget with axes/series selector, editable data table);
-- ~~accessibility/sonification controls~~ ✅ (QtAccessibilityWidget with sonification WAV export, HTML data-table export, axes selector, frequency/duration/amplitude controls);
-- ~~annotations/measurement/selection/tooltips/crosshair~~ ✅ (framework-neutral `OverlayDrawList` interface created at `include/spectra/overlay_draw_list.hpp`; ImGui adapter at `src/ui/overlay/imgui_overlay_draw_list.{hpp,cpp}`; Qt QPainter adapter at `src/adapters/qt/qt_overlay_draw_list.{hpp,cpp}`; overlay code can now be gradually refactored to use the abstract interface instead of direct ImDrawList calls);
-- ROS2/PX4 panels (ImGui-based ROS2 panels in src/adapters/ros2/ui/ — port deferred to Phase 7 runtime variants).
+Migrate and prove:
+
+- [ ] inspector and complete figure/axes/series controls, including selection, reorder, clipboard, and undo;
+- [ ] timeline, animation curves, playback/recording, and animation-state synchronization;
+- [ ] shortcut editor with real key capture, conflict handling, persistence, and command execution;
+- [ ] export preview, framebuffer readback, PNG/SVG/video, image copy, progress, cancel, and errors;
+- [ ] plugins and data sources with equivalent lifecycle, diagnostics, and live-update behavior;
+- [ ] split panes/subplots with state-preserving rebuild, nested topology, drag, detach, and restore;
+- [ ] data editor and transform pipelines with equivalent validation, presets, and undo behavior;
+- [ ] accessibility, table export, focus order, names/roles, and sonification controls;
+- [ ] annotations, measurement, selection, ROI, tooltips, legends, markers, and crosshair through a renderer-neutral overlay path used by both frontends;
+- [ ] ROS2/PX4 panels and display/inspector surfaces without placeholders.
 
 Acceptance:
 
-- parity checklist signed off;
-- no critical workflow requires legacy UI;
-- renderer golden output remains equivalent;
-- ✅ Qt frontend visual tests exist (`qt_test_qt_panels`, `qt_test_qt_dialogs`, `qt_test_qt_workspace`, `qt_test_qt_window_ops` — 71 tests total, 2 skipped requiring display/Vulkan, 0 failures).
+- [ ] the Section 0 functional matrix is implemented and signed off;
+- [ ] no supported workflow requires the legacy UI;
+- [ ] renderer-region golden comparisons satisfy the pixel threshold;
+- [ ] shell screenshot comparisons pass the full size/DPR/platform matrix;
+- [ ] interaction replay produces the same model, undo, persistence, and export results;
+- [ ] Qt tests contain approved image baselines and image diffs, not only widget-existence checks;
+- [ ] validation-layer multi-window and repeated detach/redock tests pass;
+- [ ] all TODO/placeholder paths in supported Qt workflows are removed or explicitly declared out of scope.
 
 ### Phase 6 — Workspace, plugins, and automation
 
-**Status: complete**
+**Status: partial — schema/helper coverage exists; full live-state save/restore and workflow parity do not**
 
 Work:
 
@@ -1340,7 +1437,7 @@ Acceptance:
 - [x] automation passes (`qt_test_qt_automation` — start/stop, callback wiring, command execution);
 - [x] ABI-compatible plugins load (`qt_test_qt_plugin_ui` — schema register/unregister, property/action callbacks, all element types, enum/color properties).
 
-### Phase 7 — Runtime variants and adapters ✅ (implemented)
+### Phase 7 — Runtime variants and adapters (partial)
 
 Work:
 
@@ -1360,7 +1457,7 @@ Acceptance:
 
 ### Phase 8 — Cross-platform packaging and release hardening
 
-**Status: implemented (CI pipeline + packaging infrastructure)**
+**Status: packaging infrastructure implemented; release qualification blocked by Phase 5**
 
 Work:
 
@@ -1393,7 +1490,7 @@ Acceptance:
 
 ### Phase 9 — Default switch and legacy retirement
 
-**Status: implemented (default switch + deprecation path)**
+**Status: blocked — switch mechanics exist, but the cutover is reverted pending parity**
 
 Work:
 
@@ -1401,18 +1498,19 @@ Work:
 - ✅ Output name switching — when `SPECTRA_DEFAULT_FRONTEND=qt`, Qt app becomes `spectra`, legacy app becomes `spectra-legacy`;
 - ✅ Legacy app `src/app/main.cpp` marked DEPRECATED with migration instructions;
 - ✅ Migration and deployment notes published — `docs/MIGRATION_NOTES.md` covering build options, packaging, user migration path, rollback procedure, private Qt runtime, third-party licenses, CI pipeline;
-- ✅ CI `qt-build` job uses `SPECTRA_DEFAULT_FRONTEND=qt` — Qt app is the default `spectra` binary in CI;
-- ✅ CI packaging jobs (jammy, noble, windows, macos) all use `SPECTRA_DEFAULT_FRONTEND=qt`;
-- ✅ Docker build environments (jammy, noble) use `SPECTRA_DEFAULT_FRONTEND=qt`;
+- [ ] Keep Qt build/test jobs, but package and launch it under an explicit preview name until parity;
+- [ ] Ensure release packaging jobs (jammy, noble, Windows, macOS) keep the legacy frontend as `spectra`;
+- [ ] Ensure Docker/release environments do not silently select the Qt frontend before cutover approval;
 - [ ] Collect issue telemetry from Qt frontend usage (requires release cycle);
 - [ ] Remove custom WindowManager/ImGui shell after deprecation cycle;
 - [ ] Retain ImGui only for intentional internal/debug uses.
 
 Acceptance:
 
-- Qt is release default on all supported platforms;
-- legacy has no unique supported workflow;
-- all removal gates are met.
+- [ ] every Section 0 parity gate passes on all supported platforms;
+- [ ] Qt is approved as the release default on all supported platforms;
+- [ ] legacy has no unique supported workflow;
+- [ ] all removal gates are met after the required opt-in release cycle.
 
 ---
 
@@ -1420,18 +1518,18 @@ Acceptance:
 
 1. **Build graph and application-services extraction** — no visible UI change. ✅
 2. **Production Qt canvas library** — surface lifecycle, scheduler, input, tests. ✅
-3. **Minimal Qt application shell** — main window, tabs, actions, dialogs. ✅
-4. **Native docking and multiple main windows** — layout persistence. ✅
+3. **Minimal Qt application shell** — main window, tabs, actions, dialogs. (partial; parity work remains)
+4. **Native docking and multiple main windows** — layout persistence. (partial; state-preserving split/detach remains)
 5. **Controlled Qt runtime packaging prototype** — Ubuntu 22.04 and 24.04 package skeletons. ✅ (CMake deployment helpers, Docker builders, CI jobs, license manifest implemented; pinned Qt 6.8.x from source pending)
 6. **Conditional KDDockWidgets provider** — only after licensing ADR. (deferred)
-7. **Panel migrations** — one coherent panel/workflow per PR. ✅
-8. **Workspace v5 and automation**. ✅
+7. **Panel migrations** — one complete, parity-tested workflow per PR. (in progress)
+8. **Workspace v5 and automation**. (schema/helpers implemented; live-state parity pending)
 9. **Windows deployment pipeline**. ✅ (CI job implemented; signing pending)
 10. **macOS MoltenVK deployment pipeline**. ✅ (CI job implemented; notarization pending; MoltenVK portability support implemented in `vk_device.cpp` with smoke test)
-11. **Release cutover and legacy deprecation**. ✅ (SPECTRA_DEFAULT_FRONTEND=qt implemented, legacy app renamed to spectra-legacy, migration notes published; legacy removal pending one release cycle)
+11. **Release cutover and legacy deprecation**. (blocked until Section 0 passes; switch mechanics alone do not count)
 12. **ADRs and architecture decisions**. ✅ (ADR-001 Qt Widgets + Vulkan, ADR-002 docking provider/licensing, ADR-003 Qt 6.8 pinning/private runtime)
 13. **Performance regression benchmarks**. ✅ (`bench_qt_frontend.cpp` — CommandRegistry, UndoManager, headless render, figure creation, QtActionBridge overhead)
-14. **ROS2/PX4 Qt panel composition**. ✅ (`RosPanelManager` — displays list, inspector, per-display docks, layout serialization, integration tests)
+14. **ROS2/PX4 Qt workflows**. (composition scaffolding exists; display and inspector parity pending)
 
 Every PR must include a rollback path and preserve the legacy build until Phase 9.
 
@@ -1483,7 +1581,26 @@ Use Qt Test for:
 **CI:** `qt-build` job in `.github/workflows/ci.yml` runs Qt integration tests on every push/PR.  
 **Packaging CI:** `qt-package-jammy`, `qt-package-noble`, `qt-package-windows`, `qt-package-macos` jobs produce .deb/ZIP/DMG artifacts.
 
-### 21.3 Vulkan GUI stress tests
+These tests validate scaffolding and remain useful, but their existing checkmarks do not imply visual
+or workflow parity.
+
+### 21.3 Legacy-vs-Qt parity harness
+
+Build one frontend-neutral scenario driver that applies identical fixtures and semantic actions to the
+legacy and Qt applications. Each scenario must emit:
+
+- a full-window screenshot and a cropped renderer-region screenshot;
+- serialized figure/axes/series and overlay state;
+- active window, document, pane, panel, and tool state;
+- command enabled/check state, shortcut bindings, and undo/redo stack position;
+- workspace/export artifacts and structured errors;
+- Vulkan validation messages and frame timing.
+
+The test runner compares these artifacts using the Section 0 thresholds, writes baseline/current/diff
+images on failure, and never updates approved baselines implicitly. Baseline updates require an explicit
+review that includes both the legacy reference and Qt candidate.
+
+### 21.4 Vulkan GUI stress tests
 
 - two to eight canvases;
 - continuous resize for five minutes;
@@ -1497,7 +1614,7 @@ Use Qt Test for:
 - application exit with floating windows;
 - daemon disconnect/reconnect.
 
-### 21.4 Platform and artifact matrix
+### 21.5 Platform and artifact matrix
 
 | Artifact | Build environment | Required runtime tests |
 |---|---|---|
@@ -1521,7 +1638,7 @@ For every packaged artifact:
 - export an image;
 - close cleanly.
 
-### 21.5 Performance budgets
+### 21.6 Performance budgets
 
 Measure against legacy frontend:
 

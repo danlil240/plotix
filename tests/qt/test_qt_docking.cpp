@@ -25,22 +25,18 @@ namespace {
 
 struct QtDockingEnv
 {
-    std::unique_ptr<QApplication> app;
     std::unique_ptr<spectra::FigureRegistry> registry;
     std::unique_ptr<spectra::CommandRegistry> cmd_registry;
     std::unique_ptr<spectra::adapters::qt::QtActionBridge> action_bridge;
 
     QtDockingEnv()
     {
-        static int argc = 0;
-        static char* argv[] = {nullptr};
-        qputenv("QT_QPA_PLATFORM", "offscreen");
-        app = std::make_unique<QApplication>(argc, argv);
         registry = std::make_unique<spectra::FigureRegistry>();
         cmd_registry = std::make_unique<spectra::CommandRegistry>();
         action_bridge = std::make_unique<spectra::adapters::qt::QtActionBridge>(*cmd_registry);
         action_bridge->rebuild();
     }
+
 };
 
 QtDockingEnv& env()

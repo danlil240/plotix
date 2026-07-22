@@ -25,15 +25,7 @@ namespace {
 
 struct QtDialogEnv
 {
-    std::unique_ptr<QApplication> app;
-
-    QtDialogEnv()
-    {
-        static int argc = 0;
-        static char* argv[] = {nullptr};
-        qputenv("QT_QPA_PLATFORM", "offscreen");
-        app = std::make_unique<QApplication>(argc, argv);
-    }
+    QtDialogEnv() = default;
 };
 
 QtDialogEnv& env()

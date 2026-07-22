@@ -28,6 +28,10 @@ std::string test_autosave_path(const std::string& suffix = "")
 TEST(WorkspaceAutosave, DefaultState)
 {
     WorkspaceAutosave a;
+    const std::string path = test_autosave_path("_default_state");
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    a.set_autosave_path(path);
     EXPECT_FALSE(a.has_unsaved_changes());
     EXPECT_FALSE(a.has_autosave());
     EXPECT_EQ(a.last_saved_path(), "");

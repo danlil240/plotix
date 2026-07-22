@@ -1687,13 +1687,13 @@ if(SPECTRA_BUILD_QT_TESTS AND SPECTRA_USE_QT)
     find_package(Qt6 REQUIRED COMPONENTS Gui Widgets)
 
     function(add_qt_test name)
-        add_executable(qt_${name} qt/${name}.cpp)
+        add_executable(qt_${name} qt/${name}.cpp qt/qt_test_main.cpp)
         target_link_libraries(qt_${name} PRIVATE
             spectra_qt_adapter
             spectra
             Qt6::Gui
             Qt6::Widgets
-            GTest::gtest_main
+            GTest::gtest
         )
         target_compile_features(qt_${name} PRIVATE cxx_std_20)
         target_include_directories(qt_${name} PRIVATE
@@ -1742,6 +1742,10 @@ if(SPECTRA_BUILD_QT_TESTS AND SPECTRA_USE_QT)
 
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_window_ops.cpp)
         add_qt_test(test_qt_window_ops)
+    endif()
+
+    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_visual_regression.cpp)
+        add_qt_test(test_qt_visual_regression)
     endif()
 
     # ROS2 panel composition test (requires both Qt and ROS2)

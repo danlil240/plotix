@@ -19,15 +19,10 @@ namespace {
 
 struct QtPluginUIEnv
 {
-    std::unique_ptr<QApplication> app;
     std::unique_ptr<spectra::PluginUIRegistry> registry;
 
     QtPluginUIEnv()
     {
-        static int argc = 0;
-        static char* argv[] = {nullptr};
-        qputenv("QT_QPA_PLATFORM", "offscreen");
-        app = std::make_unique<QApplication>(argc, argv);
         registry = std::make_unique<spectra::PluginUIRegistry>();
     }
 };

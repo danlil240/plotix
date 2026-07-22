@@ -20,13 +20,6 @@ namespace spectra
 {
 class ApplicationServices;
 class FigureRegistry;
-class VulkanBackend;
-class Renderer;
-
-namespace ui
-{
-class ThemeManager;
-}
 
 namespace adapters::qt
 {
@@ -94,12 +87,13 @@ class QtApplicationController
     bool connect_to_daemon(const std::string& socket_path);
 
    private:
+    // Register frontend-neutral command IDs with Qt implementations before
+    // QtActionBridge snapshots the registry.
+    void register_qt_commands();
+
     bool initialized_ = false;
 
     // Core infrastructure (owned)
-    std::unique_ptr<ui::ThemeManager>  theme_mgr_;
-    std::unique_ptr<VulkanBackend>     backend_;
-    std::unique_ptr<Renderer>          renderer_;
     std::unique_ptr<QtRuntime>         runtime_;
     std::unique_ptr<ApplicationServices> services_;
 

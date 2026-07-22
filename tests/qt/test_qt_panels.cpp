@@ -24,8 +24,12 @@
 #include "adapters/qt/qt_main_window.hpp"
 #include "adapters/qt/qt_action_bridge.hpp"
 #include "adapters/qt/split_view_container.hpp"
+#include "adapters/qt/components/spectra_app_header.hpp"
+#include "adapters/qt/components/spectra_menu_strip.hpp"
+#include "adapters/qt/components/spectra_status_bar.hpp"
 
 #include "ui/commands/command_registry.hpp"
+#include "ui/input/input.hpp"
 
 #include <spectra/figure.hpp>
 #include <spectra/figure_registry.hpp>
@@ -36,22 +40,18 @@ namespace {
 
 struct QtPanelEnv
 {
-    std::unique_ptr<QApplication> app;
     std::unique_ptr<spectra::FigureRegistry> registry;
     std::unique_ptr<spectra::CommandRegistry> cmd_registry;
     std::unique_ptr<spectra::adapters::qt::QtActionBridge> action_bridge;
 
     QtPanelEnv()
     {
-        static int argc = 0;
-        static char* argv[] = {nullptr};
-        qputenv("QT_QPA_PLATFORM", "offscreen");
-        app = std::make_unique<QApplication>(argc, argv);
         registry = std::make_unique<spectra::FigureRegistry>();
         cmd_registry = std::make_unique<spectra::CommandRegistry>();
         action_bridge = std::make_unique<spectra::adapters::qt::QtActionBridge>(*cmd_registry);
         action_bridge->rebuild();
     }
+
 };
 
 QtPanelEnv& env()
@@ -148,10 +148,12 @@ TEST(QtPanels, MainWindowWithoutServicesHasMenus)
 
     spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
 
-    // Menus should still be built (they use action_bridge, not services)
-    auto* menubar = mw.menuBar();
-    ASSERT_NE(menubar, nullptr);
-    EXPECT_GT(menubar->actions().size(), 0);
+    // The native menu bar is intentionally hidden; the Spectra header owns
+    // the legacy menu buttons and their QMenu popups.
+    auto* header = mw.findChild<spectra::adapters::qt::SpectraAppHeader*>(
+        "spectra_app_header");
+    ASSERT_NE(header, nullptr);
+    EXPECT_EQ(header->findChildren<spectra::adapters::qt::SpectraMenuButton*>().size(), 8);
 }
 
 TEST(QtPanels, MainWindowHasStatusBar)
@@ -160,14 +162,11 @@ TEST(QtPanels, MainWindowHasStatusBar)
 
     spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
 
-    auto* status = mw.statusBar();
+    auto* status = mw.findChild<spectra::adapters::qt::SpectraStatusBar*>(
+        "spectra_status_bar");
     ASSERT_NE(status, nullptr);
-
-    // Set a status message
     mw.set_status("Test message");
-    auto* label = mw.findChild<QLabel*>("status_label");
-    ASSERT_NE(label, nullptr);
-    EXPECT_EQ(label->text().toStdString(), "Test message");
+    EXPECT_EQ(status->message().toStdString(), "Test message");
 }
 
 TEST(QtPanels, MainWindowHasWelcomePage)
@@ -211,9 +210,43 @@ TEST(QtPanels, SplitViewReset)
 
     spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
 
-    // reset_splits() calls rebuild_splitter() which deletes/recreates pane widgets
-    // This can segfault in offscreen mode due to Qt widget lifecycle timing
-    GTEST_SKIP() << "reset_splits requires display; tested via integration";
+    mw.reset_splits();
+    EXPECT_FALSE(mw.is_split());
+    EXPECT_EQ(mw.pane_count(), 1u);
+}
+
+TEST(QtPanels, SplitPreservesOpenCanvasesAndToolState)
+{
+    auto& e = env();
+    spectra::FigureRegistry registry;
+    const auto first = registry.register_figure(std::make_unique<spectra::Figure>());
+    const auto second = registry.register_figure(std::make_unique<spectra::Figure>());
+
+    spectra::adapters::qt::SpectraMainWindow mw(
+        nullptr, &registry, e.action_bridge.get(), nullptr);
+    ASSERT_GE(mw.add_figure_tab(first), 0);
+    ASSERT_GE(mw.add_figure_tab(second), 0);
+
+    auto* first_canvas = mw.canvas_for(first);
+    auto* second_canvas = mw.canvas_for(second);
+    ASSERT_NE(first_canvas, nullptr);
+    ASSERT_NE(second_canvas, nullptr);
+
+    mw.central_view()->set_active_tool(spectra::ToolMode::Select);
+    EXPECT_EQ(mw.central_view()->active_tool(), spectra::ToolMode::Select);
+
+    ASSERT_TRUE(mw.split_right());
+    EXPECT_EQ(mw.pane_count(), 2u);
+    EXPECT_EQ(mw.canvas_for(first), first_canvas);
+    EXPECT_EQ(mw.canvas_for(second), second_canvas);
+    EXPECT_EQ(mw.central_view()->active_tool(), spectra::ToolMode::Select);
+
+    ASSERT_TRUE(mw.close_split());
+    EXPECT_EQ(mw.pane_count(), 1u);
+    EXPECT_EQ(mw.figure_tab_count(), 2);
+    EXPECT_EQ(mw.canvas_for(first), first_canvas);
+    EXPECT_EQ(mw.canvas_for(second), second_canvas);
+    EXPECT_EQ(mw.central_view()->active_tool(), spectra::ToolMode::Select);
 }
 
 // ── View menu toggle actions (when services is null, no toggle actions) ──────
@@ -225,17 +258,7 @@ TEST(QtPanels, ViewMenuHasNoToggleActionsWithoutServices)
     spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
 
     // Without services, build_panels() returns early, so no toggle actions
-    auto* view_menu = mw.menuBar()->findChild<QMenu*>("");
-    // Find the View menu by text
-    QMenu* found_view = nullptr;
-    for (auto* action : mw.menuBar()->actions())
-    {
-        if (action->text() == "&View" && action->menu())
-        {
-            found_view = action->menu();
-            break;
-        }
-    }
+    QMenu* found_view = mw.findChild<QMenu*>("menu_view");
     ASSERT_NE(found_view, nullptr);
 
     // Should NOT have toggle actions for panels (since no panels were built)
@@ -289,9 +312,7 @@ TEST(QtPanels, StableObjectNames)
     // Central view should have stable object name
     EXPECT_EQ(mw.central_view()->objectName().toStdString(), "central_view");
 
-    // Status label should have stable object name
-    EXPECT_NE(mw.findChild<QLabel*>("status_label"), nullptr);
-
-    // Main toolbar should have stable object name
-    EXPECT_NE(mw.findChild<QToolBar*>("main_toolbar"), nullptr);
+    EXPECT_NE(mw.findChild<QWidget*>("spectra_status_bar"), nullptr);
+    EXPECT_NE(mw.findChild<QWidget*>("spectra_app_header"), nullptr);
+    EXPECT_NE(mw.findChild<QWidget*>("spectra_nav_rail"), nullptr);
 }

@@ -13,6 +13,7 @@
 #include "qt_workspace_bridge.hpp"
 #include "qt_automation_adapter.hpp"
 #include "qt_ipc_client.hpp"
+#include "split_view_container.hpp"
 
 #include "ui/workspace/workspace.hpp"
 #include "ui/workspace/workspace_autosave.hpp"
@@ -22,19 +23,24 @@
 #include "app/inproc_topic_server.hpp"
 
 #include <QObject>
+#include <QCoreApplication>
 #include <QMessageBox>
 #include <QTimer>
 
 #include "app/application_services.hpp"
-#include "render/renderer.hpp"
 #include "render/vulkan/vk_backend.hpp"
-#include "ui/theme/theme.hpp"
+#include "ui/commands/command_registry.hpp"
+#include "ui/commands/shortcut_manager.hpp"
+#include "ui/commands/undo_manager.hpp"
+#include "ui/input/input.hpp"
 
 #include <spectra/figure.hpp>
 #include <spectra/figure_registry.hpp>
 #include <spectra/logger.hpp>
 
 #include <cstdlib>
+#include <algorithm>
+#include <functional>
 
 namespace spectra::adapters::qt
 {
@@ -51,26 +57,7 @@ bool QtApplicationController::init()
     if (initialized_)
         return true;
 
-    // 1. Create Vulkan backend + renderer (shared infrastructure)
-    backend_ = std::make_unique<VulkanBackend>();
-    if (!backend_->init(false))
-    {
-        SPECTRA_LOG_ERROR("qt_app", "Failed to initialize Vulkan backend");
-        return false;
-    }
-
-    theme_mgr_ = std::make_unique<ui::ThemeManager>();
-    ui::ThemeManager::set_current(theme_mgr_.get());
-    theme_mgr_->ensure_initialized();
-
-    renderer_ = std::make_unique<Renderer>(*backend_, *theme_mgr_);
-    if (!renderer_->init())
-    {
-        SPECTRA_LOG_ERROR("qt_app", "Failed to initialize renderer");
-        return false;
-    }
-
-    // 2. Create Qt runtime (owns QVulkanInstance wrapping our VkInstance)
+    // 1. Create the single process-scoped Qt/Vulkan/rendering runtime.
     runtime_ = std::make_unique<QtRuntime>();
     if (!runtime_->init())
     {
@@ -78,12 +65,20 @@ bool QtApplicationController::init()
         return false;
     }
 
-    // 3. Create ApplicationServices
+    // 2. Create ApplicationServices on the same backend/renderer/theme used
+    // by the canvases. A separate stack here breaks command/export parity and
+    // doubles Vulkan ownership.
     // Use a static registry owned by the controller.
     // The registry is populated by user code (App::figure()) or by
     // the QtApplicationController itself for standalone operation.
     services_ = std::make_unique<ApplicationServices>();
-    services_->init(figure_registry(), *backend_, *renderer_, *theme_mgr_, 60.0f);
+    services_->init(figure_registry(),
+                    *runtime_->backend(),
+                    *runtime_->renderer(),
+                    *runtime_->theme_manager(),
+                    60.0f);
+
+    register_qt_commands();
 
     // 4. Create QtActionBridge from the shared CommandRegistry
     action_bridge_ = std::make_unique<QtActionBridge>(services_->commands());
@@ -115,6 +110,7 @@ bool QtApplicationController::init()
             auto fig = std::make_unique<Figure>();
             fig->set_size(w, h);
             fig->set_tab_title(title);
+            fig->subplot(1, 1, 1);
             FigureId id = figure_registry().register_figure(std::move(fig));
             if (main_window_)
                 main_window_->add_figure_tab(id);
@@ -194,6 +190,174 @@ bool QtApplicationController::init()
     return true;
 }
 
+void QtApplicationController::register_qt_commands()
+{
+    auto& commands = services_->commands();
+
+    auto add = [&commands](std::string id,
+                           std::string label,
+                           std::string shortcut,
+                           std::string category,
+                           std::function<void()> callback)
+    {
+        commands.register_command(std::move(id),
+                                  std::move(label),
+                                  std::move(callback),
+                                  std::move(shortcut),
+                                  std::move(category));
+    };
+
+    auto active_figure = [this]() -> Figure*
+    {
+        if (!main_window_)
+            return nullptr;
+        const FigureId id = main_window_->active_figure_id();
+        return id == INVALID_FIGURE_ID ? nullptr : figure_registry().get(id);
+    };
+
+    auto request_redraw = [this]()
+    {
+        if (redraw_request_)
+            redraw_request_->request_redraw();
+    };
+
+    add("edit.undo", "Undo", "Ctrl+Z", "Edit",
+        [this]() { services_->undo().undo(); });
+    add("edit.redo", "Redo", "Ctrl+Y", "Edit",
+        [this]() { services_->undo().redo(); });
+
+    add("figure.new", "New Figure", "Ctrl+T", "Figure", [this]()
+    {
+        auto figure = std::make_unique<Figure>();
+        figure->subplot(1, 1, 1);
+        const FigureId id = figure_registry().register_figure(std::move(figure));
+        if (main_window_)
+            main_window_->add_figure_tab(id);
+    });
+    add("figure.close", "Close Figure", "Ctrl+W", "Figure", [this]()
+    {
+        if (!main_window_)
+            return;
+        const FigureId id = main_window_->active_figure_id();
+        if (id == INVALID_FIGURE_ID)
+            return;
+        main_window_->close_figure_tab(id);
+        figure_registry().unregister_figure(id);
+    });
+
+    auto activate_relative = [this](int delta)
+    {
+        if (!main_window_)
+            return;
+        const auto ids = main_window_->open_figure_ids();
+        if (ids.empty())
+            return;
+        const auto it = std::find(ids.begin(), ids.end(), main_window_->active_figure_id());
+        const int current = it == ids.end()
+            ? 0
+            : static_cast<int>(std::distance(ids.begin(), it));
+        const int count = static_cast<int>(ids.size());
+        const int next = (current + delta + count) % count;
+        main_window_->central_view()->activate_figure(ids[static_cast<size_t>(next)]);
+    };
+    add("figure.next_tab", "Next Figure Tab", "Ctrl+Tab", "Figure",
+        [activate_relative]() { activate_relative(1); });
+    add("figure.prev_tab", "Previous Figure Tab", "Ctrl+Shift+Tab", "Figure",
+        [activate_relative]() { activate_relative(-1); });
+    for (int i = 0; i < 9; ++i)
+    {
+        add("figure.tab_" + std::to_string(i + 1),
+            "Switch to Figure " + std::to_string(i + 1),
+            "Alt+" + std::to_string(i + 1),
+            "Figure",
+            [this, i]()
+            {
+                if (!main_window_)
+                    return;
+                const auto ids = main_window_->open_figure_ids();
+                if (static_cast<size_t>(i) < ids.size())
+                    main_window_->central_view()->activate_figure(ids[static_cast<size_t>(i)]);
+            });
+    }
+
+    auto reset_view = [active_figure, request_redraw]()
+    {
+        Figure* figure = active_figure();
+        if (!figure)
+            return;
+        for (auto& axes : figure->axes_mut())
+        {
+            if (axes)
+                axes->auto_fit();
+        }
+        for (auto& axes : figure->all_axes_mut())
+        {
+            if (axes)
+                axes->auto_fit();
+        }
+        request_redraw();
+    };
+    add("view.reset", "Reset View", "R", "View", reset_view);
+    add("view.autofit", "Auto-Fit Active Figure", "Shift+A", "View", reset_view);
+    add("view.fullscreen", "Toggle Fullscreen", "F11", "View", [this]()
+    {
+        if (!main_window_)
+            return;
+        main_window_->isFullScreen() ? main_window_->showNormal()
+                                     : main_window_->showFullScreen();
+    });
+    add("view.split_right", "Split Right", "Ctrl+\\", "View",
+        [this]() { if (main_window_) main_window_->split_right(); });
+    add("view.split_down", "Split Down", "Ctrl+Shift+\\", "View",
+        [this]() { if (main_window_) main_window_->split_down(); });
+    add("view.close_split", "Close Split Pane", "", "View",
+        [this]() { if (main_window_) main_window_->close_split(); });
+    add("view.reset_layout", "Reset Layout", "", "View",
+        [this]() { if (main_window_) main_window_->reset_layout(); });
+
+    auto set_tool = [this](ToolMode tool)
+    {
+        if (main_window_)
+            main_window_->central_view()->set_active_tool(tool);
+    };
+    add("tool.select", "Select Tool", "V", "Tools",
+        [set_tool]() { set_tool(ToolMode::Select); });
+    add("tool.pan", "Pan Tool", "H", "Tools",
+        [set_tool]() { set_tool(ToolMode::Pan); });
+    add("tool.box_zoom", "Box Zoom Tool", "Z", "Tools",
+        [set_tool]() { set_tool(ToolMode::BoxZoom); });
+    add("tool.measure", "Measure Tool", "M", "Tools",
+        [set_tool]() { set_tool(ToolMode::Measure); });
+    add("tool.annotate", "Annotate Tool", "A", "Tools",
+        [set_tool]() { set_tool(ToolMode::Annotate); });
+    add("tool.roi", "ROI Tool", "Shift+R", "Tools",
+        [set_tool]() { set_tool(ToolMode::ROI); });
+
+    auto invoke_window_slot = [this](const char* slot)
+    {
+        if (main_window_)
+            QMetaObject::invokeMethod(main_window_.get(), slot, Qt::DirectConnection);
+    };
+    add("panel.toggle_inspector", "Toggle Inspector", "I", "View",
+        [invoke_window_slot]() { invoke_window_slot("on_toggle_inspector"); });
+    add("panel.toggle_topics", "Toggle Topics", "Ctrl+Shift+T", "View",
+        [invoke_window_slot]() { invoke_window_slot("on_toggle_topics"); });
+    add("panel.open_settings", "Settings", "Ctrl+,", "View",
+        [invoke_window_slot]() { invoke_window_slot("on_toggle_settings"); });
+    add("panel.toggle_timeline", "Toggle Timeline", "T", "View",
+        [invoke_window_slot]() { invoke_window_slot("on_toggle_timeline"); });
+    add("panel.toggle_data_editor", "Toggle Data Editor", "D", "View",
+        [invoke_window_slot]() { invoke_window_slot("on_toggle_data_editor"); });
+    add("file.export", "Export Figure", "Ctrl+S", "File",
+        [invoke_window_slot]() { invoke_window_slot("on_toggle_export"); });
+    add("app.quit", "Quit Spectra", "Ctrl+Q", "File",
+        []() { QCoreApplication::quit(); });
+
+    services_->shortcuts().register_defaults();
+    SPECTRA_LOG_INFO("qt_app",
+                     "Registered " + std::to_string(commands.count()) + " Qt commands");
+}
+
 void QtApplicationController::shutdown()
 {
     if (!initialized_)
@@ -212,7 +376,7 @@ void QtApplicationController::shutdown()
     automation_adapter_.reset();
 
     // Save workspace on shutdown if autosave is configured
-    if (autosave_)
+    if (autosave_ && autosave_->has_unsaved_changes())
         autosave_->save_now();
     autosave_.reset();
 
@@ -225,17 +389,6 @@ void QtApplicationController::shutdown()
     if (runtime_)
         runtime_->shutdown();
     runtime_.reset();
-
-    // Destroy renderer + backend
-    renderer_.reset();
-    ui::ThemeManager::set_current(nullptr);
-    theme_mgr_.reset();
-
-    if (backend_)
-    {
-        backend_->shutdown();
-        backend_.reset();
-    }
 
     // Frontend services
     window_service_.reset();

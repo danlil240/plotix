@@ -25,15 +25,10 @@ namespace {
 
 struct QtAutomationEnv
 {
-    std::unique_ptr<QApplication> app;
     std::unique_ptr<spectra::CommandRegistry> cmd_registry;
 
     QtAutomationEnv()
     {
-        static int argc = 0;
-        static char* argv[] = {nullptr};
-        qputenv("QT_QPA_PLATFORM", "offscreen");
-        app = std::make_unique<QApplication>(argc, argv);
         cmd_registry = std::make_unique<spectra::CommandRegistry>();
     }
 };

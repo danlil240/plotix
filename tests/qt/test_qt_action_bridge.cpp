@@ -20,16 +20,10 @@ namespace {
 // We need a QApplication for Qt widgets.  Use offscreen platform.
 struct QtTestEnv
 {
-    std::unique_ptr<QApplication> app;
     std::unique_ptr<spectra::CommandRegistry> registry;
 
     QtTestEnv()
     {
-        static int argc = 0;
-        static char* argv[] = {nullptr};
-        // Force offscreen platform for headless testing
-        qputenv("QT_QPA_PLATFORM", "offscreen");
-        app = std::make_unique<QApplication>(argc, argv);
         registry = std::make_unique<spectra::CommandRegistry>();
     }
 };

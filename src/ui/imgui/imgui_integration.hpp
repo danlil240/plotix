@@ -399,6 +399,11 @@ class ImGuiIntegration
     bool is_canvas_visible() const { return canvas_visible_; }
     void set_canvas_visible(bool v) { canvas_visible_ = v; }
 
+    // Shell chrome (inspector toggle, pane tab headers, splitters, chrome backdrops).
+    // Set to false by adapters that provide their own dock/tab chrome (e.g. Qt).
+    bool is_shell_chrome_visible() const { return shell_chrome_visible_; }
+    void set_shell_chrome_visible(bool v) { shell_chrome_visible_ = v; }
+
     // When true, Vulkan figure rendering (axes, series, gridlines) proceeds
     // even if the ImGui canvas overlay is hidden.  This lets adapter shells
     // suppress Spectra's canvas chrome while still rendering plot content.
@@ -609,6 +614,7 @@ class ImGuiIntegration
     bool command_bar_began_   = false;   // ImGui::Begin succeeded for begin_command_bar()
     bool status_bar_visible_  = true;    // Spectra status bar
     bool canvas_visible_      = true;    // Plot canvas, overlays, splitters, tab headers
+    bool shell_chrome_visible_ = true;   // Inspector toggle, pane tabs, splitters, backdrops
     bool render_figure_       = true;    // Vulkan figure rendering (independent of canvas UI)
 
     enum class Section

@@ -116,6 +116,7 @@ class QtRuntime
     QVulkanInstance* vulkan_instance() const;
     VulkanBackend*   backend() const { return backend_.get(); }
     Renderer*        renderer() const { return renderer_.get(); }
+    ui::ThemeManager* theme_manager() { return &theme_mgr_; }
     WindowContext*   window_context(QWindow* window) const;
     WindowContext*   window_context() const;
 

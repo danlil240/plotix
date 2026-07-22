@@ -517,6 +517,20 @@ if(SPECTRA_USE_QT)
         src/adapters/qt/panels/plugins_widget.cpp
         src/adapters/qt/split_view_container.cpp
         src/adapters/qt/qt_overlay_draw_list.cpp
+        src/adapters/qt/components/spectra_design_tokens.cpp
+        src/adapters/qt/components/spectra_title_bar.cpp
+        src/adapters/qt/components/spectra_app_header.cpp
+        src/adapters/qt/components/spectra_menu_strip.cpp
+        src/adapters/qt/components/spectra_nav_button.cpp
+        src/adapters/qt/components/spectra_nav_rail.cpp
+        src/adapters/qt/components/spectra_document_tab_bar.cpp
+        src/adapters/qt/components/spectra_status_chip.cpp
+        src/adapters/qt/components/spectra_status_bar.cpp
+        src/adapters/qt/components/spectra_canvas_frame.cpp
+        src/adapters/qt/components/spectra_dock_header.cpp
+        src/adapters/qt/components/spectra_panel.cpp
+        src/adapters/qt/components/spectra_controls.cpp
+        src/adapters/qt/components/spectra_inspector_drawer.cpp
     )
     # ROS2 panel composition (requires both Qt and ROS2)
     if(SPECTRA_USE_ROS2)

@@ -537,14 +537,16 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
 
     // Opaque chrome backdrops cover the plot clear color in UI zones during
     // live resize when layout briefly lags the swapchain extent.
-    draw_chrome_backdrops();
+    if (shell_chrome_visible_)
+        draw_chrome_backdrops();
 
     // Draw all zones using layout manager.
     // Each draw call is gated so adapter shells (e.g. spectra-ros) can suppress
     // Spectra's own chrome and replace it with their own menu/status/canvas.
     if (command_bar_visible_)
         draw_command_bar();
-    draw_nav_rail();
+    if (show_nav_rail_)
+        draw_nav_rail();
     if (canvas_visible_)
     {
         draw_canvas(figure);
@@ -555,22 +557,22 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
     }
     if (canvas_visible_)
     {
-        if (app_shell_)
+        if (app_shell_ && shell_chrome_visible_)
         {
             app_shell_->draw_registered_panels();
         }
-        else if (layout_manager_->inspector_animated_width() >= 1.0f)
+        else if (shell_chrome_visible_ && layout_manager_->inspector_animated_width() >= 1.0f)
         {
             draw_inspector(figure);
         }
     }
-    if (canvas_visible_)
+    if (canvas_visible_ && shell_chrome_visible_)
     {
         draw_inspector_toggle();
     }
     if (status_bar_visible_)
         draw_status_bar();
-    if (canvas_visible_)
+    if (canvas_visible_ && shell_chrome_visible_)
     {
         draw_pane_tab_headers();   // Must run before splitters so pane_tab_hovered_ is set
         draw_split_view_splitters();

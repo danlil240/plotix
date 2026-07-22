@@ -21,21 +21,13 @@
 #ifdef SPECTRA_HAS_QT6
 
     #include <QApplication>
-    #include <QTimer>
-
     #include "adapters/qt/qt_application.hpp"
     #include "adapters/qt/qt_main_window.hpp"
-    #include "adapters/qt/docking/main_window_registry.hpp"
-    #include "adapters/qt/docking/docking_host.hpp"
-    #include "adapters/qt/docking/native_qt_docking_host.hpp"
 
     using namespace spectra::adapters::qt;
 
-    #include <spectra/figure.hpp>
-    #include <spectra/figure_registry.hpp>
     #include <spectra/logger.hpp>
 
-    #include <cmath>
     #include <cstring>
     #include <iostream>
     #include <string>
@@ -190,105 +182,16 @@ int main(int argc, char* argv[])
 
         auto* main_window = controller.main_window();
         main_window->show();
-        main_window->set_status("Connected to daemon — Spectra Qt frontend (Phase 7: multiprocess IPC)");
+        main_window->set_status("Connected to daemon");
     }
     else
     {
-        // ── In-process mode: start topic server, create demo figures ──
+        // ── In-process mode: start topic server and show the same empty
+        //    welcome workspace as the legacy application. Production startup must
+        //    never create sample documents or mutate the layout on a timer.
         controller.start_topic_server();
-
-        auto& registry = controller.figure_registry();
-
-        // Create a sample figure
-        auto fig = std::make_unique<spectra::Figure>();
-        auto& ax = fig->subplot(1, 1, 1);
-
-        constexpr int k_points = 200;
-        std::vector<float> x(k_points), y(k_points);
-        for (int i = 0; i < k_points; ++i)
-        {
-            const float t = static_cast<float>(i) * 0.05f;
-            x[i] = t;
-            y[i] = std::sin(t) * 0.5f * std::cos(2.0f * t);
-        }
-        ax.line(x, y).label("signal").color(spectra::colors::cyan).width(2.0f);
-        ax.title("Spectra Qt Application");
-        ax.xlabel("t");
-        ax.ylabel("amplitude");
-        ax.grid(true);
-        ax.auto_fit();
-
-        auto fig_id = registry.register_figure(std::move(fig));
-
         auto* main_window = controller.main_window();
-        main_window->add_figure_tab(fig_id);
-
-        // Create a second figure to demonstrate multi-tab
-        auto fig2 = std::make_unique<spectra::Figure>();
-        auto& ax2 = fig2->subplot(1, 1, 1);
-        std::vector<float> x2(100), y2(100);
-        for (int i = 0; i < 100; ++i)
-        {
-            x2[i] = static_cast<float>(i) * 0.1f;
-            y2[i] = std::cos(x2[i]) * std::exp(-x2[i] * 0.05f);
-        }
-        ax2.line(x2, y2).label("damped").color(spectra::colors::orange).width(2.0f);
-        ax2.title("Damped Cosine");
-        ax2.xlabel("t");
-        ax2.ylabel("amplitude");
-        ax2.grid(true);
-        ax2.auto_fit();
-        auto fig2_id = registry.register_figure(std::move(fig2));
-        main_window->add_figure_tab(fig2_id);
-
-        // Create a third figure for split view demo
-        auto fig3 = std::make_unique<spectra::Figure>();
-        auto& ax3 = fig3->subplot(1, 1, 1);
-        std::vector<float> x3(150), y3(150);
-        for (int i = 0; i < 150; ++i)
-        {
-            x3[i] = static_cast<float>(i) * 0.04f;
-            y3[i] = std::sin(x3[i] * 3.0f) * std::exp(-x3[i] * 0.1f);
-        }
-        ax3.line(x3, y3).label("wavelet").color(spectra::colors::magenta).width(2.0f);
-        ax3.title("Damped Sine");
-        ax3.xlabel("t");
-        ax3.ylabel("amplitude");
-        ax3.grid(true);
-        ax3.auto_fit();
-        auto fig3_id = registry.register_figure(std::move(fig3));
-        (void)fig3_id; // used by split_right() demo — picked up from registry
-
         main_window->show();
-        main_window->set_status("Ready — Spectra Qt frontend (Phase 7: in-process + multiprocess IPC, topic server)");
-
-        // Demonstrate programmatic detach after 2 seconds
-        QTimer::singleShot(2000, [&controller, fig2_id]() {
-            auto* reg = controller.window_registry();
-            if (reg)
-            {
-                auto host_id = reg->find_host_for_figure(fig2_id);
-                if (host_id != INVALID_HOST_ID)
-                {
-                    auto* host = reg->native_host(host_id);
-                    if (host)
-                    {
-                        host->detach_document(static_cast<DocumentId>(fig2_id));
-                        std::cout << "PASS: detached figure " << fig2_id
-                                  << " into new window\n";
-                    }
-                }
-            }
-        });
-
-        // Demonstrate split view after 4 seconds
-        QTimer::singleShot(4000, [&controller]() {
-            auto* mw = controller.main_window();
-            if (mw && mw->split_right())
-                std::cout << "PASS: split right\n";
-            else
-                std::cout << "INFO: split right not applied (need 3+ figures)\n";
-        });
     }
 
     // Enter the Qt event loop

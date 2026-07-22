@@ -26,6 +26,10 @@
 #include "adapters/qt/qt_main_window.hpp"
 #include "adapters/qt/qt_action_bridge.hpp"
 #include "adapters/qt/spectra_vulkan_window.hpp"
+#include "adapters/qt/components/spectra_app_header.hpp"
+#include "adapters/qt/components/spectra_document_tab_bar.hpp"
+#include "adapters/qt/components/spectra_menu_strip.hpp"
+#include "adapters/qt/components/spectra_status_bar.hpp"
 
 #include "ui/commands/command_registry.hpp"
 
@@ -39,22 +43,18 @@ namespace {
 
 struct QtWindowOpsEnv
 {
-    std::unique_ptr<QApplication> app;
     std::unique_ptr<spectra::FigureRegistry> registry;
     std::unique_ptr<spectra::CommandRegistry> cmd_registry;
     std::unique_ptr<spectra::adapters::qt::QtActionBridge> action_bridge;
 
     QtWindowOpsEnv()
     {
-        static int argc = 0;
-        static char* argv[] = {nullptr};
-        qputenv("QT_QPA_PLATFORM", "offscreen");
-        app = std::make_unique<QApplication>(argc, argv);
         registry = std::make_unique<spectra::FigureRegistry>();
         cmd_registry = std::make_unique<spectra::CommandRegistry>();
         action_bridge = std::make_unique<spectra::adapters::qt::QtActionBridge>(*cmd_registry);
         action_bridge->rebuild();
     }
+
 };
 
 QtWindowOpsEnv& env()
@@ -259,6 +259,29 @@ TEST(QtWindowOps, OpenFigureIdsEmptyInitially)
     EXPECT_TRUE(mw.open_figure_ids().empty());
 }
 
+TEST(QtWindowOps, DocumentAddControlExecutesNewFigureCommand)
+{
+    spectra::CommandRegistry commands;
+    bool                     executed = false;
+    commands.register_command("figure.new", "New Figure",
+                              [&executed]() { executed = true; },
+                              "Ctrl+T", "Figure");
+
+    spectra::adapters::qt::QtActionBridge bridge(commands);
+    bridge.rebuild();
+    spectra::FigureRegistry registry;
+    spectra::adapters::qt::SpectraMainWindow mw(
+        nullptr, &registry, &bridge, nullptr);
+
+    auto* tab_bar = mw.findChild<spectra::adapters::qt::SpectraDocumentTabBar*>(
+        "spectra_doc_tab_bar");
+    ASSERT_NE(tab_bar, nullptr);
+
+    ASSERT_TRUE(QMetaObject::invokeMethod(tab_bar, "tab_add_requested",
+                                          Qt::DirectConnection));
+    EXPECT_TRUE(executed);
+}
+
 // ── SpectraVulkanWindow lifecycle (platform-surface destroy/recreate) ────────
 
 TEST(QtWindowOps, VulkanWindowCreation)
@@ -329,14 +352,15 @@ TEST(QtWindowOps, MenuBarHasStandardMenus)
 
     spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
 
-    auto* menubar = mw.menuBar();
-    ASSERT_NE(menubar, nullptr);
+    auto* header = mw.findChild<spectra::adapters::qt::SpectraAppHeader*>(
+        "spectra_app_header");
+    ASSERT_NE(header, nullptr);
 
-    // Should have File, Edit, View, Figure, Help menus
-    QStringList expected_menus = {"&File", "&Edit", "&View", "&Figure", "&Help"};
+    QStringList expected_menus = {
+        "File", "Edit", "View", "Tools", "Plot", "Data", "Axes", "Transforms"};
     QStringList actual_menus;
-    for (auto* action : menubar->actions())
-        actual_menus << action->text();
+    for (auto* button : header->findChildren<spectra::adapters::qt::SpectraMenuButton*>())
+        actual_menus << button->text();
 
     for (const auto& expected : expected_menus)
         EXPECT_TRUE(actual_menus.contains(expected))
@@ -349,16 +373,7 @@ TEST(QtWindowOps, ViewMenuHasSplitActions)
 
     spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
 
-    // Find View menu
-    QMenu* view_menu = nullptr;
-    for (auto* action : mw.menuBar()->actions())
-    {
-        if (action->text() == "&View" && action->menu())
-        {
-            view_menu = action->menu();
-            break;
-        }
-    }
+    QMenu* view_menu = mw.findChild<QMenu*>("menu_view");
     ASSERT_NE(view_menu, nullptr);
 
     // Split actions are only created when services_ is not null (inside build_panels)
@@ -370,15 +385,14 @@ TEST(QtWindowOps, ViewMenuHasSplitActions)
 
 // ── Toolbar structure ────────────────────────────────────────────────────────
 
-TEST(QtWindowOps, ToolbarExists)
+TEST(QtWindowOps, CustomHeaderReplacesToolbar)
 {
     auto& e = env();
 
     spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
 
-    auto* toolbar = mw.findChild<QToolBar*>("main_toolbar");
-    ASSERT_NE(toolbar, nullptr);
-    EXPECT_FALSE(toolbar->isMovable());
+    EXPECT_EQ(mw.findChild<QToolBar*>("main_toolbar"), nullptr);
+    EXPECT_NE(mw.findChild<QWidget*>("spectra_app_header"), nullptr);
 }
 
 // ── Multiple SpectraMainWindow instances ─────────────────────────────────────
@@ -393,11 +407,17 @@ TEST(QtWindowOps, MultipleMainWindowInstances)
     // Both should have independent central views
     EXPECT_NE(mw1.central_view(), mw2.central_view());
 
-    // Both should have independent status labels
+    // Both should have independent custom status bars
     mw1.set_status("Window 1");
     mw2.set_status("Window 2");
-    EXPECT_EQ(mw1.findChild<QLabel*>("status_label")->text().toStdString(), "Window 1");
-    EXPECT_EQ(mw2.findChild<QLabel*>("status_label")->text().toStdString(), "Window 2");
+    auto* status1 = mw1.findChild<spectra::adapters::qt::SpectraStatusBar*>(
+        "spectra_status_bar");
+    auto* status2 = mw2.findChild<spectra::adapters::qt::SpectraStatusBar*>(
+        "spectra_status_bar");
+    ASSERT_NE(status1, nullptr);
+    ASSERT_NE(status2, nullptr);
+    EXPECT_EQ(status1->message().toStdString(), "Window 1");
+    EXPECT_EQ(status2->message().toStdString(), "Window 2");
 }
 
 // ── Command registry integration with actions ────────────────────────────────

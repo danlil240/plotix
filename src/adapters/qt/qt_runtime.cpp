@@ -132,9 +132,26 @@ bool QtRuntime::init()
     // Apply dark theme by default
     theme_mgr_.set_theme("dark");
 
+    // The Qt frontend must use this same backend/renderer/theme graph for
+    // application services and every canvas. Creating another stack in the
+    // application controller made commands, export, cleanup, and rendering
+    // operate on different Vulkan devices.
+    renderer_ = std::make_unique<Renderer>(*backend_, theme_mgr_);
+    if (!renderer_->init())
+    {
+        SPECTRA_LOG_ERROR("qt_runtime", "Failed to initialize shared renderer");
+        renderer_.reset();
+        backend_->shutdown();
+        backend_.reset();
+        surface_host_.reset();
+        vulkan_instance_.reset();
+        ui::ThemeManager::set_current(nullptr);
+        return false;
+    }
+
     initialized_ = true;
     SPECTRA_LOG_INFO("qt_runtime",
-                     "Initialized (swapchain/pipelines deferred until attach_window)");
+                     "Initialized shared backend/renderer (swapchain/pipelines deferred until attach_window)");
     return true;
 }
 
@@ -273,6 +290,14 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
                 imgui_ui_->set_input_handler(state->input_handler);
                 state->input_handler->set_data_interaction(data_interaction_.get());
             }
+
+            // Qt owns the application shell — suppress all legacy ImGui chrome.
+            // Only plot overlays (legends, tooltips, data interaction) remain.
+            imgui_ui_->set_command_bar_visible(false);
+            imgui_ui_->set_status_bar_visible(false);
+            imgui_ui_->set_nav_rail_visible(false);
+            imgui_ui_->set_shell_chrome_visible(false);
+            imgui_ui_->get_layout_manager().set_inspector_visible(false);
         }
     }
 #endif
@@ -605,6 +630,13 @@ void QtRuntime::render_figure(QWindow* window, Figure& figure)
         fi.mouse_down[2]               = (buttons & Qt::MiddleButton) != 0;
 
         imgui_ui_->new_frame_headless(fi);
+
+        // The QWindow is already the plot canvas: Qt owns the title, menus,
+        // document tabs, navigation rail, inspector, and status bar outside
+        // this surface. Reusing the legacy layout without an override subtracts
+        // its command/status chrome a second time and visibly shifts/shrinks the
+        // renderer relative to the GLFW reference.
+        imgui_ui_->get_layout_manager().set_canvas_override(Rect{0.0f, 0.0f, sw, sh});
         imgui_ui_->build_ui(figure);
 
         auto& lm = imgui_ui_->get_layout_manager();
