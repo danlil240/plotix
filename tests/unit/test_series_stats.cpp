@@ -361,6 +361,28 @@ TEST(HistogramSeries, GeometryIsStepFunction)
     EXPECT_FLOAT_EQ(hist.y_data()[hist.point_count() - 1], 0.0f);
 }
 
+TEST(HistogramSeries, IgnoresNonFiniteSamples)
+{
+    const float        inf  = std::numeric_limits<float>::infinity();
+    const float        nan  = std::numeric_limits<float>::quiet_NaN();
+    std::vector<float> data = {1.0f, inf, -inf, nan, 3.0f};
+    HistogramSeries    hist(data, 2);
+
+    ASSERT_EQ(hist.raw_values().size(), 2u);
+    EXPECT_FLOAT_EQ(hist.raw_values()[0], 1.0f);
+    EXPECT_FLOAT_EQ(hist.raw_values()[1], 3.0f);
+    for (float edge : hist.bin_edges())
+        EXPECT_TRUE(std::isfinite(edge));
+
+    float total = 0.0f;
+    for (float count : hist.bin_counts())
+    {
+        EXPECT_TRUE(std::isfinite(count));
+        total += count;
+    }
+    EXPECT_FLOAT_EQ(total, 2.0f);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // BarSeries
 // ═══════════════════════════════════════════════════════════════════════════
@@ -533,6 +555,21 @@ TEST(AxesStats, AutoFitIgnoresNonFiniteCoordinates)
     EXPECT_TRUE(std::isfinite(ylim.max));
     EXPECT_LE(xlim.min, 1.0);
     EXPECT_GE(xlim.max, 2.0);
+}
+
+TEST(AxesStats, AutoFitIncludesStemSeries)
+{
+    Axes               ax;
+    std::vector<float> x = {10.0f, 20.0f};
+    std::vector<float> y = {100.0f, 200.0f};
+    ax.stem(x, y).baseline(300.0f);
+
+    const auto xlim = ax.x_limits();
+    const auto ylim = ax.y_limits();
+    EXPECT_LE(xlim.min, 10.0);
+    EXPECT_GE(xlim.max, 20.0);
+    EXPECT_LE(ylim.min, 100.0);
+    EXPECT_GE(ylim.max, 300.0);
 }
 
 TEST(AxesStats, MixedSeriesTypes)

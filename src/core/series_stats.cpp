@@ -555,10 +555,10 @@ HistogramSeries::HistogramSeries(std::span<const float> values, int bins)
 HistogramSeries& HistogramSeries::set_data(std::span<const float> values, int bins)
 {
     raw_values_.assign(values.begin(), values.end());
-    // Remove NaN
+    // Non-finite samples cannot be assigned to finite-width bins.
     raw_values_.erase(std::remove_if(raw_values_.begin(),
                                      raw_values_.end(),
-                                     [](float v) { return std::isnan(v); }),
+                                     [](float v) { return !std::isfinite(v); }),
                       raw_values_.end());
     bins_  = bins;
     dirty_ = true;

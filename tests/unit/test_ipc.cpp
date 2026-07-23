@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <gtest/gtest.h>
 #include <thread>
 
@@ -280,6 +281,27 @@ TEST(IpcTransport, ServerListenAndClose)
     EXPECT_FALSE(server.is_listening());
     // Socket file should be removed
     EXPECT_FALSE(std::filesystem::exists(sock_path));
+}
+
+TEST(IpcTransport, ServerRefusesToReplaceRegularFile)
+{
+    std::string path = "/tmp/spectra-test-file-" + std::to_string(::getpid()) + ".sock";
+    {
+        std::ofstream out(path);
+        out << "keep me";
+    }
+
+    Server server;
+    EXPECT_FALSE(server.listen(path));
+    EXPECT_FALSE(server.is_listening());
+
+    std::ifstream in(path);
+    std::string   contents;
+    std::getline(in, contents);
+    EXPECT_EQ(contents, "keep me");
+
+    server.close();
+    std::filesystem::remove(path);
 }
 
 TEST(IpcTransport, ServerDoubleClose)
