@@ -7,8 +7,7 @@
 // - Opens via chevron or menu action
 // - 300-380 px wide
 // - Custom dock header (no default QDockWidget title bar)
-// - Custom controls: SpectraLineEdit, SpectraComboBox, SpectraCheckBox, SpectraSpinBox
-// - Figure and axes property tabs
+// - Hosts the existing functional inspector rather than duplicating controls
 
 #include <QWidget>
 
@@ -19,8 +18,6 @@ namespace spectra::adapters::qt
 {
 
 class SpectraDockHeader;
-class SpectraPanel;
-
 class SpectraInspectorDrawer : public QWidget
 {
     Q_OBJECT
@@ -32,6 +29,7 @@ public:
 
     bool is_open() const { return open_; }
 
+    void set_content_widget(QWidget* widget);
     void open();
     void close();
     void toggle();
@@ -50,7 +48,7 @@ private:
 
     bool                open_       = false;
     SpectraDockHeader*  header_     = nullptr;
-    SpectraPanel*       content_    = nullptr;
+    QWidget*            content_    = nullptr;
     QVBoxLayout*        layout_     = nullptr;
 };
 

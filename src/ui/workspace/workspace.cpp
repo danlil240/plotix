@@ -907,9 +907,10 @@ WorkspaceData Workspace::capture(const std::vector<Figure*>& figures,
             continue;
 
         WorkspaceData::FigureState fs;
-        fs.title     = "";   // Figure has no title accessor yet
-        fs.width     = fig->width();
-        fs.height    = fig->height();
+        fs.title            = fig->tab_title();
+        fs.custom_tab_title = fig->tab_title();
+        fs.width            = fig->width();
+        fs.height           = fig->height();
         fs.grid_rows = fig->grid_rows();
         fs.grid_cols = fig->grid_cols();
 

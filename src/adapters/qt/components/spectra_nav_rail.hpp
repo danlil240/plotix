@@ -28,28 +28,33 @@ class SpectraNavButton;
 class SpectraNavRail : public QWidget
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraNavRail(QWidget* parent = nullptr);
     ~SpectraNavRail() override;
-    SpectraNavRail(const SpectraNavRail&) = delete;
+    SpectraNavRail(const SpectraNavRail&)            = delete;
     SpectraNavRail& operator=(const SpectraNavRail&) = delete;
 
     void set_active_tool(int tool_index);
     void set_compact_mode(bool compact);
     bool is_compact() const { return compact_; }
 
+    void set_button_visible(int tool_index, bool visible);
+
     int width_hint() const;
 
-signals:
+   signals:
     void tool_selected(int tool_index);
 
-private:
+   protected:
+    void paintEvent(QPaintEvent* event) override;
+
+   private:
     void build_buttons();
 
-    QVBoxLayout*           layout_   = nullptr;
+    QVBoxLayout*             layout_ = nullptr;
     QList<SpectraNavButton*> buttons_;
-    bool                   compact_  = false;
-    int                    active_   = 1;  // Pan is default active
+    bool                     compact_ = false;
+    int                      active_  = 1;   // Pan is default active
 };
 
 }   // namespace spectra::adapters::qt

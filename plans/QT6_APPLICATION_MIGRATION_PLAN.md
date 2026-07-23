@@ -5,6 +5,11 @@
 **Repository baseline:** `main` at `d6fd85633a941440938cff3e44f5c32dc2fed8cc`  
 **Primary goal:** Make Qt 6 the production cross-platform desktop platform for Spectra, including multiple native OS windows, detachable/dockable panels, native Wayland operation, menus, shortcuts, dialogs, accessibility, and high-DPI behavior, while retaining Spectra's Vulkan renderer and framework-neutral core.
 
+**Detailed parity evidence:** [QT6_APPLICATION_PARITY_GAP_REPORT.md](QT6_APPLICATION_PARITY_GAP_REPORT.md)
+records the 2026-07-22 live legacy-vs-Qt `spectra-mcp` audit, the exhaustive command and visible-control
+gaps, visual measurements, source-confirmed defects, and the required closure tests. Treat that report
+as a blocking input to every phase completion and default-frontend decision in this plan.
+
 ## 0. Parity audit correction (2026-07-21)
 
 The earlier phase checkmarks measured code presence, widget construction, serialization helpers, and

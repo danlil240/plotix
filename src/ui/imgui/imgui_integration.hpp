@@ -403,6 +403,13 @@ class ImGuiIntegration
     // Set to false by adapters that provide their own dock/tab chrome (e.g. Qt).
     bool is_shell_chrome_visible() const { return shell_chrome_visible_; }
     void set_shell_chrome_visible(bool v) { shell_chrome_visible_ = v; }
+    void set_external_inspector_toggle_callbacks(std::function<void()> toggle,
+                                                 std::function<bool()> is_open)
+    {
+        external_inspector_toggle_visible_ = static_cast<bool>(toggle);
+        external_inspector_toggle_cb_      = std::move(toggle);
+        external_inspector_open_cb_        = std::move(is_open);
+    }
 
     // When true, Vulkan figure rendering (axes, series, gridlines) proceeds
     // even if the ImGui canvas overlay is hidden.  This lets adapter shells
@@ -610,12 +617,15 @@ class ImGuiIntegration
     bool show_nav_rail_ = true;   // Nav rail toolbar visibility
 
     // Adapter chrome suppression flags (all default true — safe for normal builds)
-    bool command_bar_visible_ = true;    // Spectra command bar / menu
-    bool command_bar_began_   = false;   // ImGui::Begin succeeded for begin_command_bar()
-    bool status_bar_visible_  = true;    // Spectra status bar
-    bool canvas_visible_      = true;    // Plot canvas, overlays, splitters, tab headers
-    bool shell_chrome_visible_ = true;   // Inspector toggle, pane tabs, splitters, backdrops
-    bool render_figure_       = true;    // Vulkan figure rendering (independent of canvas UI)
+    bool command_bar_visible_  = true;    // Spectra command bar / menu
+    bool command_bar_began_    = false;   // ImGui::Begin succeeded for begin_command_bar()
+    bool status_bar_visible_   = true;    // Spectra status bar
+    bool canvas_visible_       = true;    // Plot canvas, overlays, splitters, tab headers
+    bool shell_chrome_visible_ = true;    // Inspector toggle, pane tabs, splitters, backdrops
+    bool render_figure_        = true;    // Vulkan figure rendering (independent of canvas UI)
+    bool external_inspector_toggle_visible_ = false;
+    std::function<void()> external_inspector_toggle_cb_;
+    std::function<bool()> external_inspector_open_cb_;
 
     enum class Section
     {

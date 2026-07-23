@@ -373,6 +373,18 @@ void AutomationServer::send_response(int fd, const std::string& json)
 
 void AutomationServer::poll(App& app, WindowUIContext* ui_ctx)
 {
+    poll_pending([this, &app, ui_ctx](AutomationRequest& request)
+                 { execute(request, app, ui_ctx); });
+}
+
+void AutomationServer::poll(const RequestDispatcher& dispatcher)
+{
+    if (dispatcher)
+        poll_pending(dispatcher);
+}
+
+void AutomationServer::poll_pending(const RequestDispatcher& dispatcher)
+{
     {
         std::lock_guard lock(pending_mutex_);
 
@@ -415,7 +427,7 @@ void AutomationServer::poll(App& app, WindowUIContext* ui_ctx)
     }
     for (auto& req : to_exec)
     {
-        execute(req, app, ui_ctx);
+        dispatcher(req);
         std::lock_guard lock(pending_mutex_);
         for (auto& pr : pending_)
         {

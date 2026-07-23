@@ -11,7 +11,9 @@
 #include <gtest/gtest.h>
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
 #include <QMainWindow>
 #include <QAction>
 #include <QMenu>
@@ -25,8 +27,10 @@
 #include "adapters/qt/qt_action_bridge.hpp"
 #include "adapters/qt/split_view_container.hpp"
 #include "adapters/qt/components/spectra_app_header.hpp"
+#include "adapters/qt/components/spectra_inspector_drawer.hpp"
 #include "adapters/qt/components/spectra_menu_strip.hpp"
 #include "adapters/qt/components/spectra_status_bar.hpp"
+#include "adapters/qt/panels/inspector_widget.hpp"
 
 #include "ui/commands/command_registry.hpp"
 #include "ui/input/input.hpp"
@@ -153,7 +157,7 @@ TEST(QtPanels, MainWindowWithoutServicesHasMenus)
     auto* header = mw.findChild<spectra::adapters::qt::SpectraAppHeader*>(
         "spectra_app_header");
     ASSERT_NE(header, nullptr);
-    EXPECT_EQ(header->findChildren<spectra::adapters::qt::SpectraMenuButton*>().size(), 8);
+    EXPECT_EQ(header->findChildren<spectra::adapters::qt::SpectraMenuButton*>().size(), 9);
 }
 
 TEST(QtPanels, MainWindowHasStatusBar)
@@ -315,4 +319,84 @@ TEST(QtPanels, StableObjectNames)
     EXPECT_NE(mw.findChild<QWidget*>("spectra_status_bar"), nullptr);
     EXPECT_NE(mw.findChild<QWidget*>("spectra_app_header"), nullptr);
     EXPECT_NE(mw.findChild<QWidget*>("spectra_nav_rail"), nullptr);
+}
+
+TEST(QtPanels, InspectorAxisLimitEditsUseLiveControls)
+{
+    spectra::FigureRegistry registry;
+    auto figure = std::make_unique<spectra::Figure>();
+    auto& axes = figure->subplot(1, 1, 1);
+    axes.xlim(1.0, 5.0);
+    axes.ylim(2.0, 6.0);
+    const auto figure_id = registry.register_figure(std::move(figure));
+
+    {
+        spectra::adapters::qt::QtInspectorWidget inspector(&registry);
+        inspector.set_active_figure(figure_id);
+
+        auto* xmin = inspector.findChild<QDoubleSpinBox*>("axes_0_x_min");
+        auto* xmax = inspector.findChild<QDoubleSpinBox*>("axes_0_x_max");
+        auto* ymin = inspector.findChild<QDoubleSpinBox*>("axes_0_y_min");
+        auto* ymax = inspector.findChild<QDoubleSpinBox*>("axes_0_y_max");
+        ASSERT_NE(xmin, nullptr);
+        ASSERT_NE(xmax, nullptr);
+        ASSERT_NE(ymin, nullptr);
+        ASSERT_NE(ymax, nullptr);
+
+        xmin->setValue(-3.0);
+        EXPECT_DOUBLE_EQ(axes.x_limits().min, -3.0);
+        EXPECT_DOUBLE_EQ(axes.x_limits().max, 5.0);
+
+        xmax->setValue(8.0);
+        EXPECT_DOUBLE_EQ(axes.x_limits().min, -3.0);
+        EXPECT_DOUBLE_EQ(axes.x_limits().max, 8.0);
+
+        ymin->setValue(-4.0);
+        EXPECT_DOUBLE_EQ(axes.y_limits().min, -4.0);
+        EXPECT_DOUBLE_EQ(axes.y_limits().max, 6.0);
+
+        ymax->setValue(9.0);
+        EXPECT_DOUBLE_EQ(axes.y_limits().min, -4.0);
+        EXPECT_DOUBLE_EQ(axes.y_limits().max, 9.0);
+    }
+
+    EXPECT_DOUBLE_EQ(axes.x_limits().min, -3.0);
+    EXPECT_DOUBLE_EQ(axes.y_limits().max, 9.0);
+}
+
+TEST(QtPanels, InspectorLegendControlUpdatesFigure)
+{
+    spectra::FigureRegistry registry;
+    auto figure = std::make_unique<spectra::Figure>();
+    figure->subplot(1, 1, 1);
+    auto* figure_ptr = figure.get();
+    const auto figure_id = registry.register_figure(std::move(figure));
+
+    spectra::adapters::qt::QtInspectorWidget inspector(&registry);
+    inspector.set_active_figure(figure_id);
+
+    auto* legend = inspector.findChild<QCheckBox*>("figure_legend_visible");
+    ASSERT_NE(legend, nullptr);
+    ASSERT_TRUE(figure_ptr->legend().visible);
+
+    legend->setChecked(false);
+    EXPECT_FALSE(figure_ptr->legend().visible);
+    legend->setChecked(true);
+    EXPECT_TRUE(figure_ptr->legend().visible);
+}
+
+TEST(QtPanels, InspectorSemanticCommandTogglesDrawer)
+{
+    auto& e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(
+        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto* drawer = mw.findChild<spectra::adapters::qt::SpectraInspectorDrawer*>(
+        "spectra_inspector");
+    ASSERT_NE(drawer, nullptr);
+    EXPECT_FALSE(drawer->is_open());
+
+    mw.toggle_inspector();
+    EXPECT_TRUE(drawer->is_open());
+    mw.toggle_inspector();
+    EXPECT_FALSE(drawer->is_open());
 }

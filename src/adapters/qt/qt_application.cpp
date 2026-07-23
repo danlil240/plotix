@@ -17,6 +17,7 @@
 
 #include "ui/workspace/workspace.hpp"
 #include "ui/workspace/workspace_autosave.hpp"
+#include "ui/automation/automation_json.hpp"
 
 #include "ipc/figure_snapshot.hpp"
 
@@ -25,6 +26,7 @@
 #include <QObject>
 #include <QCoreApplication>
 #include <QMessageBox>
+#include <QPixmap>
 #include <QTimer>
 
 #include "app/application_services.hpp"
@@ -41,6 +43,7 @@
 #include <cstdlib>
 #include <algorithm>
 #include <functional>
+#include <sstream>
 
 namespace spectra::adapters::qt
 {
@@ -145,6 +148,83 @@ bool QtApplicationController::init()
 
     // 6c. Create the automation adapter (starts MCP server if SPECTRA_AUTOMATION is set)
     automation_adapter_ = std::make_unique<QtAutomationAdapter>();
+    automation_adapter_->set_execute_command(
+        [this](const std::string& command_id)
+        { return services_ && services_->commands().execute(command_id); });
+    automation_adapter_->set_create_figure(
+        [this](uint32_t width, uint32_t height) -> FigureId
+        {
+            auto figure = std::make_unique<Figure>();
+            figure->set_size(width, height);
+            figure->subplot(1, 1, 1);
+            const FigureId id = figure_registry().register_figure(std::move(figure));
+            if (main_window_)
+                main_window_->add_figure_tab(id);
+            return id;
+        });
+    automation_adapter_->set_get_state(
+        [this]() -> std::string
+        {
+            const auto ids = figure_registry().all_ids();
+            std::ostringstream state;
+            state << "{\"figure_count\":" << ids.size();
+            const FigureId active_id =
+                main_window_ ? main_window_->active_figure_id() : INVALID_FIGURE_ID;
+            if (active_id == INVALID_FIGURE_ID)
+                state << ",\"active_figure_id\":null";
+            else
+                state << ",\"active_figure_id\":" << active_id;
+            state << ",\"figures\":[";
+            for (size_t i = 0; i < ids.size(); ++i)
+            {
+                if (i > 0)
+                    state << ',';
+                Figure* figure = figure_registry().get(ids[i]);
+                state << "{\"id\":" << ids[i];
+                if (figure)
+                {
+                    size_t series_count = 0;
+                    figure->for_each_axes(
+                        [&series_count](AxesBase* axes)
+                        {
+                            if (axes)
+                                series_count += axes->series().size();
+                        });
+                    state << ",\"width\":" << figure->width() << ",\"height\":"
+                          << figure->height() << ",\"axes_count\":"
+                          << figure->all_axes().size() + figure->axes().size()
+                          << ",\"total_series\":" << series_count << ",\"title\":\""
+                          << json_escape(figure->tab_title()) << "\"";
+                }
+                state << '}';
+            }
+            state << "]}";
+            return state.str();
+        });
+    automation_adapter_->set_capture_screenshot(
+        [this](const std::string& path) -> std::string
+        {
+            if (!main_window_)
+                return {};
+            const QPixmap capture = main_window_->grab();
+            if (capture.isNull() || !capture.save(QString::fromStdString(path), "PNG"))
+                return {};
+            return path;
+        });
+    automation_adapter_->set_resize_window(
+        [this](uint32_t width, uint32_t height)
+        {
+            if (main_window_)
+                main_window_->resize(static_cast<int>(width), static_cast<int>(height));
+        });
+    automation_adapter_->set_get_window_size(
+        [this]() -> std::pair<uint32_t, uint32_t>
+        {
+            if (!main_window_)
+                return {0, 0};
+            return {static_cast<uint32_t>(main_window_->width()),
+                    static_cast<uint32_t>(main_window_->height())};
+        });
     const char* env_auto = std::getenv("SPECTRA_AUTOMATION");
     if (env_auto && *env_auto)
     {
@@ -156,9 +236,57 @@ bool QtApplicationController::init()
     autosave_->set_serialize_fn([this]() -> std::string {
         WorkspaceData data;
         data.version = WorkspaceData::FORMAT_VERSION;
-        // TODO: populate from current application state
+
+        // Capture figure and series data from the registry
+        auto& reg = figure_registry();
+        auto  ids = reg.all_ids();
+        std::vector<Figure*> figures;
+        figures.reserve(ids.size());
+        for (auto id : ids)
+        {
+            Figure* f = reg.get(id);
+            if (f)
+                figures.push_back(f);
+        }
+
+        // Determine active figure index
+        size_t active_index = 0;
+        if (main_window_)
+        {
+            FigureId active_id = main_window_->active_figure_id();
+            for (size_t i = 0; i < ids.size(); ++i)
+            {
+                if (ids[i] == active_id)
+                {
+                    active_index = i;
+                    break;
+                }
+            }
+        }
+
+        // Get theme name
+        std::string theme_name = "dark";
+        if (services_)
+            theme_name = services_->theme().current_theme_name();
+
+        // Get panel states from main window
+        bool  inspector_visible = false;
+        float inspector_width   = 300.0f;
+        bool  nav_rail_expanded = true;
+        if (main_window_)
+        {
+            inspector_visible = main_window_->is_inspector_open();
+            nav_rail_expanded = !main_window_->is_nav_rail_compact();
+        }
+
+        data = Workspace::capture(figures, active_index, theme_name,
+                                  inspector_visible, inspector_width,
+                                  nav_rail_expanded);
+
+        // Also capture desktop layout (docking state)
         if (workspace_bridge_)
             workspace_bridge_->capture_layout(data);
+
         return Workspace::serialize_json(data);
     });
 
@@ -339,7 +467,10 @@ void QtApplicationController::register_qt_commands()
             QMetaObject::invokeMethod(main_window_.get(), slot, Qt::DirectConnection);
     };
     add("panel.toggle_inspector", "Toggle Inspector", "I", "View",
-        [invoke_window_slot]() { invoke_window_slot("on_toggle_inspector"); });
+        [this]() {
+            if (main_window_)
+                main_window_->toggle_inspector();
+        });
     add("panel.toggle_topics", "Toggle Topics", "Ctrl+Shift+T", "View",
         [invoke_window_slot]() { invoke_window_slot("on_toggle_topics"); });
     add("panel.open_settings", "Settings", "Ctrl+,", "View",

@@ -130,7 +130,7 @@ bool QtRuntime::init()
     ui::ThemeManager::set_current(&theme_mgr_);
 
     // Apply dark theme by default
-    theme_mgr_.set_theme("dark");
+    theme_mgr_.set_theme("night");
 
     // The Qt frontend must use this same backend/renderer/theme graph for
     // application services and every canvas. Creating another stack in the
@@ -150,8 +150,9 @@ bool QtRuntime::init()
     }
 
     initialized_ = true;
-    SPECTRA_LOG_INFO("qt_runtime",
-                     "Initialized shared backend/renderer (swapchain/pipelines deferred until attach_window)");
+    SPECTRA_LOG_INFO(
+        "qt_runtime",
+        "Initialized shared backend/renderer (swapchain/pipelines deferred until attach_window)");
     return true;
 }
 
@@ -297,6 +298,8 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
             imgui_ui_->set_status_bar_visible(false);
             imgui_ui_->set_nav_rail_visible(false);
             imgui_ui_->set_shell_chrome_visible(false);
+            imgui_ui_->set_external_inspector_toggle_callbacks(inspector_toggle_cb_,
+                                                               inspector_open_cb_);
             imgui_ui_->get_layout_manager().set_inspector_visible(false);
         }
     }
@@ -318,6 +321,18 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
     SPECTRA_LOG_INFO("qt_runtime",
                      "Window attached: " + std::to_string(width) + "x" + std::to_string(height));
     return true;
+}
+
+void QtRuntime::set_inspector_toggle_callbacks(std::function<void()> toggle,
+                                               std::function<bool()> is_open)
+{
+    inspector_toggle_cb_ = std::move(toggle);
+    inspector_open_cb_   = std::move(is_open);
+#ifdef SPECTRA_USE_IMGUI
+    if (imgui_ui_)
+        imgui_ui_->set_external_inspector_toggle_callbacks(inspector_toggle_cb_,
+                                                           inspector_open_cb_);
+#endif
 }
 
 void QtRuntime::detach_window(QWindow* window)

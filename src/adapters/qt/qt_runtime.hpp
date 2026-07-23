@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <unordered_map>
 
@@ -100,6 +101,11 @@ class QtRuntime
     void set_input_handler(QWindow* window, InputHandler* input);
     void set_input_handler(InputHandler* input);
 
+    // Keep the exact legacy-rendered inspector chevron while delegating its
+    // state and action to the Qt-owned inspector drawer.
+    void set_inspector_toggle_callbacks(std::function<void()> toggle,
+                                        std::function<bool()> is_open);
+
     // ── Surface generation API ─────────────────────────────────────────────
     // Returns the current surface generation for a window, or 0 if invalid.
     uint32_t surface_generation(QWindow* window) const;
@@ -113,12 +119,12 @@ class QtRuntime
     void end_frame(WindowContext* wctx);
 
     // Accessors
-    QVulkanInstance* vulkan_instance() const;
-    VulkanBackend*   backend() const { return backend_.get(); }
-    Renderer*        renderer() const { return renderer_.get(); }
+    QVulkanInstance*  vulkan_instance() const;
+    VulkanBackend*    backend() const { return backend_.get(); }
+    Renderer*         renderer() const { return renderer_.get(); }
     ui::ThemeManager* theme_manager() { return &theme_mgr_; }
-    WindowContext*   window_context(QWindow* window) const;
-    WindowContext*   window_context() const;
+    WindowContext*    window_context(QWindow* window) const;
+    WindowContext*    window_context() const;
 
    private:
     struct WindowState
@@ -132,7 +138,7 @@ class QtRuntime
 
         // Surface generation: 0 = invalid, >0 = valid surface.
         // Incremented on attach, invalidated on detach.
-        uint32_t                              surface_generation       = 0;
+        uint32_t surface_generation = 0;
     };
 
     WindowState*       find_window_state(QWindow* window);
@@ -150,6 +156,8 @@ class QtRuntime
     QWindow*                                                   primary_window_       = nullptr;
     QWindow*                                                   current_frame_window_ = nullptr;
     uint32_t                                                   next_window_id_       = 1;
+    std::function<void()>                                      inspector_toggle_cb_;
+    std::function<bool()>                                      inspector_open_cb_;
 
 #ifdef SPECTRA_USE_IMGUI
     std::unique_ptr<ImGuiIntegration>     imgui_ui_;

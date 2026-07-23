@@ -13,8 +13,7 @@ namespace spectra::adapters::qt
 
 SpectraDocumentTabBar::~SpectraDocumentTabBar() = default;
 
-SpectraDocumentTabBar::SpectraDocumentTabBar(QWidget* parent)
-    : QWidget(parent)
+SpectraDocumentTabBar::SpectraDocumentTabBar(QWidget* parent) : QWidget(parent)
 {
     setAttribute(Qt::WA_StyledBackground, true);
     setFixedHeight(spectra_geometry().tab_bar_height);
@@ -104,36 +103,36 @@ void SpectraDocumentTabBar::update_layout()
 {
     tab_layouts_.clear();
 
-    const auto& g = spectra_geometry();
-    auto& fm = SpectraFontManager::instance();
+    auto& fm       = SpectraFontManager::instance();
     QFont tab_font = fm.font_base();
+    tab_font.setPixelSize(14);
 
-    int x = g.space_2;
-    const int tab_h = height();
-    const int min_w = 104;
-    const int max_w = 220;
-    const int close_btn_size = 14;
-    const int close_pad = 10;
+    int       x              = 2;
+    const int tab_h          = height();
+    const int min_w          = 60;
+    const int max_w          = 150;
+    const int close_btn_size = 12;
 
     for (int i = 0; i < tabs_.size(); ++i)
     {
         QFontMetrics metrics(tab_font);
-        int text_w = metrics.horizontalAdvance(tabs_[i].title);
-        int tab_w = qBound(min_w, text_w + 48, max_w);
+        int          text_w = metrics.horizontalAdvance(tabs_[i].title);
+        int          tab_w  = qBound(min_w, text_w + 16 + close_btn_size, max_w);
 
         TabLayout tl;
-        tl.rect = QRect(x, 0, tab_w, tab_h);
-        tl.close_rect = QRect(x + tab_w - close_btn_size - close_pad,
+        tl.rect       = QRect(x, 0, tab_w, tab_h);
+        tl.close_rect = QRect(x + tab_w - close_btn_size - 4,
                               (tab_h - close_btn_size) / 2,
-                              close_btn_size, close_btn_size);
-        tl.index = i;
+                              close_btn_size,
+                              close_btn_size);
+        tl.index      = i;
         tab_layouts_.append(tl);
 
-        x += tab_w;
+        x += tab_w + 1;
     }
 
     // Add button
-    add_btn_rect_ = QRect(x + 4, 0, 34, tab_h);
+    add_btn_rect_ = QRect(x, 0, 22, tab_h);
 }
 
 int SpectraDocumentTabBar::tab_at(const QPoint& pos) const
@@ -156,9 +155,8 @@ void SpectraDocumentTabBar::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    const auto& c = spectra_colors();
-    const auto& g = spectra_geometry();
-    auto& fm = SpectraFontManager::instance();
+    const auto& c  = spectra_colors();
+    auto&       fm = SpectraFontManager::instance();
 
     // Background
     p.fillRect(rect(), c.workspace_surface);
@@ -171,43 +169,53 @@ void SpectraDocumentTabBar::paintEvent(QPaintEvent*)
 
     // Draw tabs
     QFont tab_font = fm.font_base();
+    tab_font.setPixelSize(14);
     p.setFont(tab_font);
 
     for (int i = 0; i < tab_layouts_.size(); ++i)
     {
-        const auto& tl = tab_layouts_[i];
-        const auto& tab = tabs_[i];
-        bool is_active = (tab.id == active_id_);
-        bool is_hover = (i == hover_tab_);
+        const auto& tl        = tab_layouts_[i];
+        const auto& tab       = tabs_[i];
+        bool        is_active = (tab.id == active_id_);
+        bool        is_hover  = (i == hover_tab_);
 
         // Tab background
         if (is_active)
         {
-            p.fillRect(tl.rect, c.panel_surface);
+            QColor active_bg = c.elevated_surface;
+            active_bg = QColor::fromRgbF(active_bg.redF() * 0.84 + c.cyan_accent.redF() * 0.16,
+                                         active_bg.greenF() * 0.84 + c.cyan_accent.greenF() * 0.16,
+                                         active_bg.blueF() * 0.84 + c.cyan_accent.blueF() * 0.16,
+                                         0.96);
+            p.setBrush(active_bg);
+            p.setPen(QPen(c.border_default, 1));
+            p.drawRoundedRect(QRectF(tl.rect).adjusted(0.5, 1.5, -0.5, 0.5), 4, 4);
         }
         else if (is_hover)
         {
-            p.fillRect(tl.rect, QColor(c.elevated_surface.red(),
-                                       c.elevated_surface.green(),
-                                       c.elevated_surface.blue(), 120));
+            p.fillRect(tl.rect,
+                       QColor(c.elevated_surface.red(),
+                              c.elevated_surface.green(),
+                              c.elevated_surface.blue(),
+                              120));
         }
 
         // Tab text
         QColor text_color = is_active ? c.text_primary : c.text_muted;
         p.setPen(text_color);
 
-        QRect text_rect = tl.rect.adjusted(16, 0, -32, 0);
+        QRect text_rect = tl.rect.adjusted(8, 0, -18, 0);
         p.drawText(text_rect, Qt::AlignLeft | Qt::AlignVCenter, tab.title);
 
         // Close button (X)
         if (is_active || is_hover)
         {
-            p.setPen(c.text_muted);
-            QFont close_font = fm.font_base();
-            close_font.setPointSize(9);
-            p.setFont(close_font);
-            p.drawText(tl.close_rect, Qt::AlignCenter, QStringLiteral("\u2715"));
-            p.setFont(tab_font);
+            QColor close_color = c.text_muted;
+            close_color.setAlpha(is_hover ? 216 : 128);
+            p.setPen(QPen(close_color, 1.5));
+            const QPoint center = tl.close_rect.center();
+            p.drawLine(center.x() - 3, center.y() - 3, center.x() + 3, center.y() + 3);
+            p.drawLine(center.x() - 3, center.y() + 3, center.x() + 3, center.y() - 3);
         }
 
         // Active tab underline (cyan)
@@ -215,8 +223,7 @@ void SpectraDocumentTabBar::paintEvent(QPaintEvent*)
         {
             p.setPen(Qt::NoPen);
             p.setBrush(c.cyan_accent);
-            QRect underline(tl.rect.x() + 2, height() - 2,
-                           tl.rect.width() - 4, 2);
+            QRect underline(tl.rect.x() + 5, height() - 2, tl.rect.width() - 10, 2);
             p.drawRect(underline);
         }
     }
@@ -259,7 +266,7 @@ void SpectraDocumentTabBar::mousePressEvent(QMouseEvent* event)
         emit tab_selected(tabs_[idx].id);
 
         // Start potential drag
-        drag_tab_ = idx;
+        drag_tab_   = idx;
         drag_start_ = pos;
     }
 }

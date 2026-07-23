@@ -15,32 +15,23 @@ SpectraNavButton::SpectraNavButton(const QString& icon_codepoint,
                                    const QString& label,
                                    const QString& shortcut_hint,
                                    QWidget*       parent)
-    : QPushButton(parent),
-      icon_codepoint_(icon_codepoint),
-      label_(label),
+    : QPushButton(parent), icon_codepoint_(icon_codepoint), label_(label),
       shortcut_hint_(shortcut_hint)
 {
     setAttribute(Qt::WA_StyledBackground, true);
     setCursor(Qt::PointingHandCursor);
     setFocusPolicy(Qt::StrongFocus);
-    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-    setMinimumHeight(32);
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    setMinimumHeight(30);
     setMaximumHeight(64);
     setToolTip(label + (shortcut_hint.isEmpty() ? "" : " (" + shortcut_hint + ")"));
 
-    setStyleSheet(QString(
-        "QPushButton {"
-        "  background: transparent;"
-        "  border: none;"
-        "  border-radius: %1px;"
-        "}"
-        "QPushButton:hover {"
-        "  background: rgba(31, 34, 41, 180);"
-        "}"
-        "QPushButton:focus {"
-        "  border: 1px solid #2A2D36;"
-        "}"
-    ).arg(spectra_geometry().radius_md));
+    setStyleSheet(QString("QPushButton {"
+                          "  background: transparent;"
+                          "  border: none;"
+                          "  border-radius: %1px;"
+                          "}")
+                      .arg(spectra_geometry().radius_md));
 }
 
 void SpectraNavButton::set_active(bool active)
@@ -60,7 +51,7 @@ QSize SpectraNavButton::sizeHint() const
     const auto& g = spectra_geometry();
     if (compact_)
         return QSize(g.nav_rail_width_compact, 56);
-    return QSize(g.nav_rail_width, 64);
+    return QSize(g.nav_rail_width, 56);
 }
 
 void SpectraNavButton::paintEvent(QPaintEvent*)
@@ -68,9 +59,9 @@ void SpectraNavButton::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    const auto& c = spectra_colors();
-    const auto& g = spectra_geometry();
-    auto& fm = SpectraFontManager::instance();
+    const auto& c  = spectra_colors();
+    const auto& g  = spectra_geometry();
+    auto&       fm = SpectraFontManager::instance();
 
     bool hovered = underMouse();
     bool focused = hasFocus();
@@ -78,22 +69,23 @@ void SpectraNavButton::paintEvent(QPaintEvent*)
     // Active glow background
     if (active_)
     {
-        QRectF glow_rect = rect().adjusted(4, 4, -4, -4);
-        p.setBrush(QColor(c.cyan_accent.red(), c.cyan_accent.green(),
-                          c.cyan_accent.blue(), 24));
+        QRectF glow_rect = rect().adjusted(7, 1, -7, -1);
+        p.setBrush(QColor(c.cyan_accent.red(), c.cyan_accent.green(), c.cyan_accent.blue(), 24));
         p.setPen(Qt::NoPen);
         p.drawRoundedRect(glow_rect, g.radius_md, g.radius_md);
 
         // Cyan border
         p.setBrush(Qt::NoBrush);
-        p.setPen(QPen(c.cyan_accent, 1.5));
+        p.setPen(QPen(c.cyan_accent, 1.0));
         p.drawRoundedRect(glow_rect, g.radius_md, g.radius_md);
     }
     else if (hovered)
     {
-        QRectF hover_rect = rect().adjusted(4, 4, -4, -4);
-        p.setBrush(QColor(c.elevated_surface.red(), c.elevated_surface.green(),
-                          c.elevated_surface.blue(), 180));
+        QRectF hover_rect = rect().adjusted(7, 1, -7, -1);
+        p.setBrush(QColor(c.elevated_surface.red(),
+                          c.elevated_surface.green(),
+                          c.elevated_surface.blue(),
+                          180));
         p.setPen(Qt::NoPen);
         p.drawRoundedRect(hover_rect, g.radius_md, g.radius_md);
     }
@@ -101,19 +93,18 @@ void SpectraNavButton::paintEvent(QPaintEvent*)
     // Focus ring
     if (focused && !active_)
     {
-        QRectF focus_rect = rect().adjusted(3, 3, -3, -3);
+        QRectF focus_rect = rect().adjusted(6, 1, -6, -1);
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(c.border_strong, 1));
         p.drawRoundedRect(focus_rect, g.radius_md, g.radius_md);
     }
 
     // Icon
-    QColor icon_color = active_ ? c.cyan_accent :
-                        hovered ? c.text_primary : c.text_secondary;
+    QColor icon_color = active_ ? c.cyan_accent : hovered ? c.text_primary : c.text_secondary;
 
-    const bool condensed = !compact_ && height() < 52;
-    int icon_size = condensed ? 14 : 20;
-    int icon_y = compact_ ? (height() - icon_size) / 2 : (condensed ? 3 : 14);
+    const int icon_size      = compact_ ? 16 : qBound(14, height() / 2 - 5, 20);
+    const int content_height = compact_ ? icon_size : icon_size + 13;
+    const int icon_y         = (height() - content_height) / 2;
 
     // Draw icon using icon font
     if (fm.has_icon_font())
@@ -136,13 +127,11 @@ void SpectraNavButton::paintEvent(QPaintEvent*)
     // Label (hidden in compact mode)
     if (!compact_)
     {
-        p.setFont(condensed ? fm.font_status() : fm.font_small());
-        p.setPen(active_ ? c.text_primary :
-                 hovered ? c.text_secondary : c.text_muted);
-        QRect label_rect(0,
-                         icon_y + icon_size + (condensed ? 1 : 4),
-                         width(),
-                         condensed ? 14 : 16);
+        QFont label_font = fm.font_small();
+        label_font.setPixelSize(qBound(10, height() / 4, 12));
+        p.setFont(label_font);
+        p.setPen(active_ ? c.text_primary : hovered ? c.text_secondary : c.text_muted);
+        QRect label_rect(0, icon_y + icon_size, width(), 13);
         p.drawText(label_rect, Qt::AlignCenter, label_);
     }
 }

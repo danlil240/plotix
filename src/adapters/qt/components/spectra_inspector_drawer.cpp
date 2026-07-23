@@ -3,11 +3,7 @@
 #include "spectra_inspector_drawer.hpp"
 #include "spectra_design_tokens.hpp"
 #include "spectra_dock_header.hpp"
-#include "spectra_panel.hpp"
-#include "spectra_controls.hpp"
 
-#include <QHBoxLayout>
-#include <QLabel>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QVBoxLayout>
@@ -41,57 +37,31 @@ void SpectraInspectorDrawer::build_ui()
             this, &SpectraInspectorDrawer::close);
     layout_->addWidget(header_);
 
-    // Content panel
-    content_ = new SpectraPanel(this);
-    auto* content_layout = content_->content_layout();
+}
 
-    // Figure title
-    auto* title_label = new QLabel("Title");
-    title_label->setStyleSheet("color: #8A909C; font-size: 11px; font-family: 'Inter';");
-    content_layout->addWidget(title_label);
+void SpectraInspectorDrawer::set_content_widget(QWidget* widget)
+{
+    if (!widget || widget == content_)
+        return;
 
-    auto* title_edit = new SpectraLineEdit(content_);
-    title_edit->setText("Figure 1");
-    content_layout->addWidget(title_edit);
+    if (content_)
+    {
+        layout_->removeWidget(content_);
+        content_->hide();
+        content_->setParent(nullptr);
+    }
 
-    content_layout->addSpacing(12);
-
-    // Axes section
-    auto* axes_label = new QLabel("Axes");
-    axes_label->setStyleSheet("color: #8A909C; font-size: 11px; font-family: 'Inter';");
-    content_layout->addWidget(axes_label);
-
-    auto* x_label_check = new SpectraCheckBox("X Label Visible", content_);
-    x_label_check->setChecked(true);
-    content_layout->addWidget(x_label_check);
-
-    auto* y_label_check = new SpectraCheckBox("Y Label Visible", content_);
-    y_label_check->setChecked(true);
-    content_layout->addWidget(y_label_check);
-
-    auto* grid_check = new SpectraCheckBox("Show Grid", content_);
-    grid_check->setChecked(true);
-    content_layout->addWidget(grid_check);
-
-    content_layout->addSpacing(12);
-
-    // Legend
-    auto* legend_label = new QLabel("Legend");
-    legend_label->setStyleSheet("color: #8A909C; font-size: 11px; font-family: 'Inter';");
-    content_layout->addWidget(legend_label);
-
-    auto* legend_check = new SpectraCheckBox("Show Legend", content_);
-    legend_check->setChecked(false);
-    content_layout->addWidget(legend_check);
-
-    content_layout->addStretch();
-
+    content_ = widget;
+    content_->setParent(this);
     layout_->addWidget(content_, 1);
+    content_->show();
 }
 
 void SpectraInspectorDrawer::open()
 {
     open_ = true;
+    if (content_)
+        content_->show();
     show();
     emit opened();
 }

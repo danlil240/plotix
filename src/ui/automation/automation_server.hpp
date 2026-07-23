@@ -39,6 +39,8 @@ struct AutomationRequest
 class AutomationServer
 {
    public:
+    using RequestDispatcher = std::function<void(AutomationRequest& request)>;
+
     AutomationServer();
     ~AutomationServer();
 
@@ -55,6 +57,10 @@ class AutomationServer
     // Must be called from the main thread each frame.
     // Drains pending requests, executes them, sends responses.
     void poll(App& app, WindowUIContext* ui_ctx);
+
+    // Frontend-neutral main-thread dispatch. Qt uses this overload from its
+    // event loop because it does not own an App or WindowUIContext.
+    void poll(const RequestDispatcher& dispatcher);
 
     std::string invoke(const std::string&        method,
                        const std::string&        params_json = "{}",
@@ -107,6 +113,8 @@ class AutomationServer
 
     // Populate handlers_ from the handler group factories.
     void register_handlers();
+
+    void poll_pending(const RequestDispatcher& dispatcher);
 };
 
 }   // namespace spectra

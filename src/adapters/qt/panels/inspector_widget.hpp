@@ -7,13 +7,14 @@
 // Uses the same Axes/Figure API as the ImGui inspector — no duplicated
 // business logic.
 
-#include <QDockWidget>
+#include <QWidget>
 
 #include <spectra/fwd.hpp>
 
 namespace spectra
 {
 class FigureRegistry;
+class ApplicationServices;
 }   // namespace spectra
 
 class QTabWidget;
@@ -30,12 +31,12 @@ class QSpinBox;
 namespace spectra::adapters::qt
 {
 
-class QtInspectorWidget : public QDockWidget
+class QtInspectorWidget : public QWidget
 {
     Q_OBJECT
 
    public:
-    QtInspectorWidget(FigureRegistry* registry, QWidget* parent = nullptr);
+    QtInspectorWidget(FigureRegistry* registry, ApplicationServices* services = nullptr, QWidget* parent = nullptr);
     ~QtInspectorWidget() override = default;
 
     QtInspectorWidget(const QtInspectorWidget&)            = delete;
@@ -50,8 +51,9 @@ class QtInspectorWidget : public QDockWidget
     void build_axes_tab(spectra::Axes& ax, int index);
     void clear_axes_tabs();
 
-    FigureRegistry* registry_ = nullptr;
-    FigureId        active_id_ = INVALID_FIGURE_ID;
+    FigureRegistry*      registry_ = nullptr;
+    ApplicationServices* services_ = nullptr;
+    FigureId             active_id_ = INVALID_FIGURE_ID;
 
     QTabWidget* tab_widget_ = nullptr;
 
@@ -86,7 +88,7 @@ class QtInspectorWidget : public QDockWidget
     };
     std::vector<SeriesControls> series_controls_;
 
-    void build_series_section(spectra::AxesBase& ax, QVBoxLayout* layout, QWidget* parent);
+    void build_series_section(spectra::AxesBase& ax, int axes_idx, QVBoxLayout* layout, QWidget* parent);
 };
 
 }   // namespace spectra::adapters::qt

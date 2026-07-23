@@ -101,6 +101,10 @@ class SpectraMainWindow : public QMainWindow
     // Get all FigureIds currently open as tabs in this window.
     std::vector<FigureId> open_figure_ids() const;
 
+    // Workspace state accessors (for autosave)
+    bool is_inspector_open() const;
+    bool is_nav_rail_compact() const;
+
     // ── Split view ────────────────────────────────────────────────────────
 
     QtSplitViewContainer* central_view() { return central_view_; }
@@ -144,6 +148,10 @@ class SpectraMainWindow : public QMainWindow
     // Reset dock state, panel visibility, and window layout to defaults.
     void reset_layout();
 
+   public slots:
+    // Semantic no-argument toggle used by commands and shortcuts.
+    void toggle_inspector();
+
    signals:
     void figure_closed(FigureId id);
     void figure_activated(FigureId id);
@@ -152,7 +160,7 @@ class SpectraMainWindow : public QMainWindow
    private slots:
     void on_tab_changed(int index);
     void on_tab_close_requested(int index);
-    void on_toggle_inspector();
+    void on_toggle_inspector(bool checked);
     void on_toggle_topics();
     void on_toggle_settings();
     void on_toggle_timeline();
@@ -217,6 +225,7 @@ class SpectraMainWindow : public QMainWindow
     QMenu*   menu_transforms_ = nullptr;
     QMenu*   menu_help_   = nullptr;
     QToolBar* toolbar_    = nullptr;
+    QAction* inspector_toggle_action_ = nullptr;
 
     // Dockable panels
     QtInspectorWidget*      inspector_panel_      = nullptr;

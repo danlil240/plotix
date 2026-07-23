@@ -566,7 +566,7 @@ void ImGuiIntegration::build_ui(Figure& figure, FigureViewModel* vm)
             draw_inspector(figure);
         }
     }
-    if (canvas_visible_ && shell_chrome_visible_)
+    if (canvas_visible_ && (shell_chrome_visible_ || external_inspector_toggle_visible_))
     {
         draw_inspector_toggle();
     }
