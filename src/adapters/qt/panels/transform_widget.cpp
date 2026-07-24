@@ -2,6 +2,9 @@
 
 #include "transform_widget.hpp"
 
+#include "app/frontend_services.hpp"
+#include "ui/commands/undoable_property.hpp"
+
 #include <spectra/axes.hpp>
 #include <spectra/figure.hpp>
 #include <spectra/figure_registry.hpp>
@@ -25,8 +28,12 @@
 namespace spectra::adapters::qt
 {
 
-QtTransformWidget::QtTransformWidget(FigureRegistry* registry, QWidget* parent)
-    : QDockWidget("Transforms", parent), registry_(registry)
+QtTransformWidget::QtTransformWidget(FigureRegistry*           registry,
+                                     ::spectra::UndoManager*   undo_manager,
+                                     ::spectra::RedrawRequest* redraw,
+                                     QWidget*                  parent)
+    : QDockWidget("Transforms", parent), registry_(registry), undo_manager_(undo_manager),
+      redraw_(redraw)
 {
     setObjectName("transform_panel");
     setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -36,13 +43,13 @@ QtTransformWidget::QtTransformWidget(FigureRegistry* registry, QWidget* parent)
 
 void QtTransformWidget::build_ui()
 {
-    auto* container = new QWidget(this);
+    auto* container   = new QWidget(this);
     auto* main_layout = new QVBoxLayout(container);
     main_layout->setContentsMargins(8, 8, 8, 8);
     main_layout->setSpacing(8);
 
     // ── Transform selector ─────────────────────────────────────────────
-    auto* xform_group = new QGroupBox("Available Transforms", container);
+    auto* xform_group  = new QGroupBox("Available Transforms", container);
     auto* xform_layout = new QVBoxLayout(xform_group);
 
     transform_combo_ = new QComboBox(xform_group);
@@ -56,27 +63,31 @@ void QtTransformWidget::build_ui()
 
     // ── Parameters ──────────────────────────────────────────────────────
     auto* param_group = new QGroupBox("Parameters", xform_group);
-    auto* param_form = new QFormLayout(param_group);
+    auto* param_form  = new QFormLayout(param_group);
 
     scale_spin_ = new QDoubleSpinBox(param_group);
+    scale_spin_->setObjectName("transform_scale");
     scale_spin_->setRange(-1e9, 1e9);
     scale_spin_->setDecimals(4);
     scale_spin_->setValue(1.0);
     param_form->addRow("Scale Factor", scale_spin_);
 
     offset_spin_ = new QDoubleSpinBox(param_group);
+    offset_spin_->setObjectName("transform_offset");
     offset_spin_->setRange(-1e9, 1e9);
     offset_spin_->setDecimals(4);
     offset_spin_->setValue(0.0);
     param_form->addRow("Offset Value", offset_spin_);
 
     clamp_min_spin_ = new QDoubleSpinBox(param_group);
+    clamp_min_spin_->setObjectName("transform_clamp_min");
     clamp_min_spin_->setRange(-1e9, 1e9);
     clamp_min_spin_->setDecimals(4);
     clamp_min_spin_->setValue(0.0);
     param_form->addRow("Clamp Min", clamp_min_spin_);
 
     clamp_max_spin_ = new QDoubleSpinBox(param_group);
+    clamp_max_spin_->setObjectName("transform_clamp_max");
     clamp_max_spin_->setRange(-1e9, 1e9);
     clamp_max_spin_->setDecimals(4);
     clamp_max_spin_->setValue(1.0);
@@ -95,9 +106,10 @@ void QtTransformWidget::build_ui()
 
     // ── Action buttons ──────────────────────────────────────────────────
     auto* btn_layout = new QHBoxLayout();
-    apply_btn_ = new QPushButton("Apply", xform_group);
+    apply_btn_       = new QPushButton("Apply", xform_group);
     apply_btn_->setObjectName("apply_transform_btn");
     add_to_pipeline_btn_ = new QPushButton("Add to Pipeline", xform_group);
+    add_to_pipeline_btn_->setObjectName("add_transform_pipeline_btn");
     btn_layout->addWidget(apply_btn_);
     btn_layout->addWidget(add_to_pipeline_btn_);
     xform_layout->addLayout(btn_layout);
@@ -105,7 +117,7 @@ void QtTransformWidget::build_ui()
     main_layout->addWidget(xform_group);
 
     // ── Pipeline ────────────────────────────────────────────────────────
-    auto* pipeline_group = new QGroupBox("Pipeline", container);
+    auto* pipeline_group  = new QGroupBox("Pipeline", container);
     auto* pipeline_layout = new QVBoxLayout(pipeline_group);
 
     pipeline_list_ = new QListWidget(pipeline_group);
@@ -114,9 +126,10 @@ void QtTransformWidget::build_ui()
     pipeline_layout->addWidget(pipeline_list_);
 
     auto* pipe_btn_layout = new QHBoxLayout();
-    remove_step_btn_ = new QPushButton("Remove", pipeline_group);
-    clear_pipeline_btn_ = new QPushButton("Clear", pipeline_group);
-    apply_pipeline_btn_ = new QPushButton("Apply Pipeline", pipeline_group);
+    remove_step_btn_      = new QPushButton("Remove", pipeline_group);
+    clear_pipeline_btn_   = new QPushButton("Clear", pipeline_group);
+    apply_pipeline_btn_   = new QPushButton("Apply Pipeline", pipeline_group);
+    apply_pipeline_btn_->setObjectName("apply_transform_pipeline_btn");
     pipe_btn_layout->addWidget(remove_step_btn_);
     pipe_btn_layout->addWidget(clear_pipeline_btn_);
     pipe_btn_layout->addWidget(apply_pipeline_btn_);
@@ -125,7 +138,7 @@ void QtTransformWidget::build_ui()
     main_layout->addWidget(pipeline_group);
 
     // ── Presets ─────────────────────────────────────────────────────────
-    auto* preset_group = new QGroupBox("Saved Pipelines", container);
+    auto* preset_group  = new QGroupBox("Saved Pipelines", container);
     auto* preset_layout = new QHBoxLayout(preset_group);
 
     preset_name_edit_ = new QComboBox(preset_group);
@@ -148,21 +161,35 @@ void QtTransformWidget::build_ui()
     setWidget(scroll);
 
     // ── Connections ─────────────────────────────────────────────────────
-    connect(transform_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, &QtTransformWidget::on_transform_selected);
+    connect(transform_combo_,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            &QtTransformWidget::on_transform_selected);
     connect(apply_btn_, &QPushButton::clicked, this, &QtTransformWidget::on_apply_transform);
-    connect(add_to_pipeline_btn_, &QPushButton::clicked,
-            this, &QtTransformWidget::on_add_to_pipeline);
-    connect(remove_step_btn_, &QPushButton::clicked,
-            this, &QtTransformWidget::on_remove_pipeline_step);
-    connect(clear_pipeline_btn_, &QPushButton::clicked,
-            this, &QtTransformWidget::on_clear_pipeline);
-    connect(apply_pipeline_btn_, &QPushButton::clicked,
-            this, &QtTransformWidget::on_apply_pipeline);
-    connect(save_preset_btn_, &QPushButton::clicked,
-            this, &QtTransformWidget::on_save_pipeline_preset);
-    connect(load_preset_btn_, &QPushButton::clicked,
-            this, &QtTransformWidget::on_load_pipeline_preset);
+    connect(add_to_pipeline_btn_,
+            &QPushButton::clicked,
+            this,
+            &QtTransformWidget::on_add_to_pipeline);
+    connect(remove_step_btn_,
+            &QPushButton::clicked,
+            this,
+            &QtTransformWidget::on_remove_pipeline_step);
+    connect(clear_pipeline_btn_,
+            &QPushButton::clicked,
+            this,
+            &QtTransformWidget::on_clear_pipeline);
+    connect(apply_pipeline_btn_,
+            &QPushButton::clicked,
+            this,
+            &QtTransformWidget::on_apply_pipeline);
+    connect(save_preset_btn_,
+            &QPushButton::clicked,
+            this,
+            &QtTransformWidget::on_save_pipeline_preset);
+    connect(load_preset_btn_,
+            &QPushButton::clicked,
+            this,
+            &QtTransformWidget::on_load_pipeline_preset);
 }
 
 void QtTransformWidget::set_active_figure(FigureId id)
@@ -216,7 +243,7 @@ void QtTransformWidget::on_transform_selected(int index)
         return;
     }
 
-    QString name = transform_combo_->itemText(index);
+    QString       name = transform_combo_->itemText(index);
     DataTransform xform;
     if (!TransformRegistry::instance().get_transform(name.toStdString(), xform))
     {
@@ -241,11 +268,11 @@ void QtTransformWidget::on_transform_selected(int index)
 }
 
 static TransformParams collect_params(const QDoubleSpinBox* scale,
-                                       const QDoubleSpinBox* offset,
-                                       const QDoubleSpinBox* clamp_min,
-                                       const QDoubleSpinBox* clamp_max,
-                                       const QCheckBox* fft_db,
-                                       const QDoubleSpinBox* fft_sr)
+                                      const QDoubleSpinBox* offset,
+                                      const QDoubleSpinBox* clamp_min,
+                                      const QDoubleSpinBox* clamp_max,
+                                      const QCheckBox*      fft_db,
+                                      const QDoubleSpinBox* fft_sr)
 {
     TransformParams p;
     p.scale_factor    = static_cast<float>(scale->value());
@@ -257,8 +284,7 @@ static TransformParams collect_params(const QDoubleSpinBox* scale,
     return p;
 }
 
-static DataTransform create_transform_from_ui(const QString& name,
-                                               const TransformParams& params)
+static DataTransform create_transform_from_ui(const QString& name, const TransformParams& params)
 {
     DataTransform xform;
     if (!TransformRegistry::instance().get_transform(name.toStdString(), xform))
@@ -272,15 +298,17 @@ static DataTransform create_transform_from_ui(const QString& name,
     return xform;
 }
 
-static void apply_transform_to_figure(Figure* figure, const DataTransform& xform)
+static bool apply_transform_to_figure(Figure* figure, const DataTransform& xform)
 {
     if (!figure)
-        return;
+        return false;
 
+    bool changed = false;
     for (auto& ax : figure->axes_mut())
     {
         if (!ax)
             continue;
+        bool axes_changed = false;
         for (auto& series_ptr : ax->series_mut())
         {
             if (!series_ptr || !series_ptr->visible())
@@ -290,17 +318,33 @@ static void apply_transform_to_figure(Figure* figure, const DataTransform& xform
             {
                 std::vector<float> rx, ry;
                 xform.apply_y(ls->x_data(), ls->y_data(), rx, ry);
-                ls->set_x(rx).set_y(ry);
+                const EditableSeriesData current{
+                    std::vector<float>(ls->x_data().begin(), ls->x_data().end()),
+                    std::vector<float>(ls->y_data().begin(), ls->y_data().end())};
+                if (current.x == rx && current.y == ry)
+                    continue;
+                restore_editable_series_data(*ls, {std::move(rx), std::move(ry)});
+                changed      = true;
+                axes_changed = true;
             }
             else if (auto* sc = dynamic_cast<ScatterSeries*>(series_ptr.get()))
             {
                 std::vector<float> rx, ry;
                 xform.apply_y(sc->x_data(), sc->y_data(), rx, ry);
-                sc->set_x(rx).set_y(ry);
+                const EditableSeriesData current{
+                    std::vector<float>(sc->x_data().begin(), sc->x_data().end()),
+                    std::vector<float>(sc->y_data().begin(), sc->y_data().end())};
+                if (current.x == rx && current.y == ry)
+                    continue;
+                restore_editable_series_data(*sc, {std::move(rx), std::move(ry)});
+                changed      = true;
+                axes_changed = true;
             }
         }
-        ax->auto_fit();
+        if (axes_changed)
+            ax->auto_fit();
     }
+    return changed;
 }
 
 void QtTransformWidget::on_apply_transform()
@@ -316,10 +360,24 @@ void QtTransformWidget::on_apply_transform()
     if (name.isEmpty())
         return;
 
-    auto params = collect_params(scale_spin_, offset_spin_, clamp_min_spin_,
-                                  clamp_max_spin_, fft_db_check_, fft_sr_spin_);
-    DataTransform xform = create_transform_from_ui(name, params);
-    apply_transform_to_figure(figure, xform);
+    auto          params = collect_params(scale_spin_,
+                                 offset_spin_,
+                                 clamp_min_spin_,
+                                 clamp_max_spin_,
+                                 fft_db_check_,
+                                 fft_sr_spin_);
+    DataTransform xform  = create_transform_from_ui(name, params);
+    undoable_edit_figure_data(
+        undo_manager_,
+        *registry_,
+        active_id_,
+        "Apply transform: " + name.toStdString(),
+        [xform](Figure& target) { return apply_transform_to_figure(&target, xform); },
+        [redraw = redraw_, figure_id = active_id_]()
+        {
+            if (redraw)
+                redraw->request_redraw(figure_id);
+        });
 
     SPECTRA_LOG_INFO("qt_transform", "Applied transform: {}", name.toStdString());
 }
@@ -330,9 +388,13 @@ void QtTransformWidget::on_add_to_pipeline()
     if (name.isEmpty())
         return;
 
-    auto params = collect_params(scale_spin_, offset_spin_, clamp_min_spin_,
-                                  clamp_max_spin_, fft_db_check_, fft_sr_spin_);
-    DataTransform xform = create_transform_from_ui(name, params);
+    auto          params = collect_params(scale_spin_,
+                                 offset_spin_,
+                                 clamp_min_spin_,
+                                 clamp_max_spin_,
+                                 fft_db_check_,
+                                 fft_sr_spin_);
+    DataTransform xform  = create_transform_from_ui(name, params);
     pipeline_.push_back(xform);
 
     // Update list widget
@@ -352,10 +414,11 @@ void QtTransformWidget::on_remove_pipeline_step()
     // Re-number remaining items
     for (int i = 0; i < pipeline_list_->count(); ++i)
     {
-        QString text = pipeline_list_->item(i)->text();
-        int dot_pos = text.indexOf('.');
+        QString text    = pipeline_list_->item(i)->text();
+        int     dot_pos = text.indexOf('.');
         if (dot_pos > 0)
-            pipeline_list_->item(i)->setText(QString("%1.%2").arg(i + 1).arg(text.mid(dot_pos + 1)));
+            pipeline_list_->item(i)->setText(
+                QString("%1.%2").arg(i + 1).arg(text.mid(dot_pos + 1)));
     }
 }
 
@@ -377,30 +440,52 @@ void QtTransformWidget::on_apply_pipeline()
     if (pipeline_.is_identity())
         return;
 
-    for (auto& ax : figure->axes_mut())
-    {
-        if (!ax)
-            continue;
-        for (auto& series_ptr : ax->series_mut())
+    const TransformPipeline pipeline = pipeline_;
+    undoable_edit_figure_data(
+        undo_manager_,
+        *registry_,
+        active_id_,
+        "Apply transform pipeline",
+        [pipeline](Figure& target)
         {
-            if (!series_ptr || !series_ptr->visible())
-                continue;
+            bool changed = false;
+            for (auto& axes : target.axes_mut())
+            {
+                if (!axes)
+                    continue;
+                bool axes_changed = false;
+                for (auto& series : axes->series_mut())
+                {
+                    if (!series || !series->visible())
+                        continue;
 
-            if (auto* ls = dynamic_cast<LineSeries*>(series_ptr.get()))
-            {
-                std::vector<float> rx, ry;
-                pipeline_.apply(ls->x_data(), ls->y_data(), rx, ry);
-                ls->set_x(rx).set_y(ry);
+                    std::vector<float> x;
+                    std::vector<float> y;
+                    if (auto* line = dynamic_cast<LineSeries*>(series.get()))
+                        pipeline.apply(line->x_data(), line->y_data(), x, y);
+                    else if (auto* scatter = dynamic_cast<ScatterSeries*>(series.get()))
+                        pipeline.apply(scatter->x_data(), scatter->y_data(), x, y);
+                    else
+                        continue;
+
+                    EditableSeriesData current;
+                    capture_editable_series_data(*series, current);
+                    if (current.x == x && current.y == y)
+                        continue;
+                    restore_editable_series_data(*series, {std::move(x), std::move(y)});
+                    changed      = true;
+                    axes_changed = true;
+                }
+                if (axes_changed)
+                    axes->auto_fit();
             }
-            else if (auto* sc = dynamic_cast<ScatterSeries*>(series_ptr.get()))
-            {
-                std::vector<float> rx, ry;
-                pipeline_.apply(sc->x_data(), sc->y_data(), rx, ry);
-                sc->set_x(rx).set_y(ry);
-            }
-        }
-        ax->auto_fit();
-    }
+            return changed;
+        },
+        [redraw = redraw_, figure_id = active_id_]()
+        {
+            if (redraw)
+                redraw->request_redraw(figure_id);
+        });
 
     SPECTRA_LOG_INFO("qt_transform", "Applied pipeline with {} steps", pipeline_.step_count());
 }
@@ -432,13 +517,15 @@ void QtTransformWidget::on_load_pipeline_preset()
 
     for (size_t i = 0; i < pipeline_.step_count(); ++i)
     {
-        const auto& step = pipeline_.step(i);
-        QString entry = QString("%1. %2").arg(i + 1).arg(QString::fromStdString(step.name()));
+        const auto& step  = pipeline_.step(i);
+        QString     entry = QString("%1. %2").arg(i + 1).arg(QString::fromStdString(step.name()));
         pipeline_list_->addItem(entry);
     }
 
-    SPECTRA_LOG_INFO("qt_transform", "Loaded pipeline preset: {} ({} steps)",
-                     name.toStdString(), pipeline_.step_count());
+    SPECTRA_LOG_INFO("qt_transform",
+                     "Loaded pipeline preset: {} ({} steps)",
+                     name.toStdString(),
+                     pipeline_.step_count());
 }
 
 }   // namespace spectra::adapters::qt

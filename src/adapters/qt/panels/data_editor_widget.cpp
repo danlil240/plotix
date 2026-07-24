@@ -2,6 +2,9 @@
 
 #include "data_editor_widget.hpp"
 
+#include "app/frontend_services.hpp"
+#include "ui/commands/undoable_property.hpp"
+
 #include <spectra/axes.hpp>
 #include <spectra/figure.hpp>
 #include <spectra/figure_registry.hpp>
@@ -19,11 +22,17 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <cmath>
+
 namespace spectra::adapters::qt
 {
 
-QtDataEditorWidget::QtDataEditorWidget(FigureRegistry* registry, QWidget* parent)
-    : QDockWidget("Data Editor", parent), registry_(registry)
+QtDataEditorWidget::QtDataEditorWidget(FigureRegistry*           registry,
+                                       ::spectra::UndoManager*   undo_manager,
+                                       ::spectra::RedrawRequest* redraw,
+                                       QWidget*                  parent)
+    : QDockWidget("Data Editor", parent), registry_(registry), undo_manager_(undo_manager),
+      redraw_(redraw)
 {
     setObjectName("data_editor_panel");
     setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -33,13 +42,13 @@ QtDataEditorWidget::QtDataEditorWidget(FigureRegistry* registry, QWidget* parent
 void QtDataEditorWidget::build_ui()
 {
     auto* container = new QWidget(this);
-    auto* layout = new QVBoxLayout(container);
+    auto* layout    = new QVBoxLayout(container);
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
 
     // ── Selectors ───────────────────────────────────────────────────────
     auto* sel_group = new QGroupBox("Selection", container);
-    auto* sel_form = new QFormLayout(sel_group);
+    auto* sel_form  = new QFormLayout(sel_group);
 
     axes_combo_ = new QComboBox(sel_group);
     axes_combo_->setObjectName("de_axes_combo");
@@ -52,7 +61,7 @@ void QtDataEditorWidget::build_ui()
     layout->addWidget(sel_group);
 
     // ── Data table ──────────────────────────────────────────────────────
-    auto* table_group = new QGroupBox("Data Points", container);
+    auto* table_group  = new QGroupBox("Data Points", container);
     auto* table_layout = new QVBoxLayout(table_group);
 
     table_ = new QTableWidget(table_group);
@@ -73,12 +82,15 @@ void QtDataEditorWidget::build_ui()
     setWidget(container);
 
     // ── Connections ─────────────────────────────────────────────────────
-    connect(axes_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, &QtDataEditorWidget::on_axes_selected);
-    connect(series_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, &QtDataEditorWidget::on_series_selected);
-    connect(table_, &QTableWidget::cellChanged,
-            this, &QtDataEditorWidget::on_cell_changed);
+    connect(axes_combo_,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            &QtDataEditorWidget::on_axes_selected);
+    connect(series_combo_,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            &QtDataEditorWidget::on_series_selected);
+    connect(table_, &QTableWidget::cellChanged, this, &QtDataEditorWidget::on_cell_changed);
 }
 
 void QtDataEditorWidget::set_active_figure(FigureId id)
@@ -116,14 +128,17 @@ void QtDataEditorWidget::populate_axes_combo(Figure& figure)
     axes_combo_->clear();
 
     int idx = 0;
-    figure.for_each_axes([&](AxesBase* ab) {
-        auto* ax = dynamic_cast<Axes*>(ab);
-        QString label = ax ? QString::fromStdString(ax->title()) : QString("Axes %1").arg(idx + 1);
-        if (label.isEmpty())
-            label = QString("Axes %1").arg(idx + 1);
-        axes_combo_->addItem(label, idx);
-        ++idx;
-    });
+    figure.for_each_axes(
+        [&](AxesBase* ab)
+        {
+            auto*   ax = dynamic_cast<Axes*>(ab);
+            QString label =
+                ax ? QString::fromStdString(ax->title()) : QString("Axes %1").arg(idx + 1);
+            if (label.isEmpty())
+                label = QString("Axes %1").arg(idx + 1);
+            axes_combo_->addItem(label, idx);
+            ++idx;
+        });
 
     axes_combo_->blockSignals(false);
     if (axes_combo_->count() > 0)
@@ -215,13 +230,15 @@ void QtDataEditorWidget::on_axes_selected(int index)
     if (!figure)
         return;
 
-    int idx = 0;
+    int       idx    = 0;
     AxesBase* target = nullptr;
-    figure->for_each_axes([&](AxesBase* ab) {
-        if (idx == index)
-            target = ab;
-        ++idx;
-    });
+    figure->for_each_axes(
+        [&](AxesBase* ab)
+        {
+            if (idx == index)
+                target = ab;
+            ++idx;
+        });
 
     if (target)
         populate_series_combo(*target);
@@ -236,26 +253,29 @@ void QtDataEditorWidget::on_series_selected(int index)
     if (!figure)
         return;
 
-    int axes_idx = axes_combo_->currentIndex();
+    int axes_idx = axes_combo_->currentData().toInt();
     if (axes_idx < 0)
         return;
 
-    int a_idx = 0;
+    int       a_idx       = 0;
     AxesBase* target_axes = nullptr;
-    figure->for_each_axes([&](AxesBase* ab) {
-        if (a_idx == axes_idx)
-            target_axes = ab;
-        ++a_idx;
-    });
+    figure->for_each_axes(
+        [&](AxesBase* ab)
+        {
+            if (a_idx == axes_idx)
+                target_axes = ab;
+            ++a_idx;
+        });
 
     if (!target_axes)
         return;
 
+    const int   series_idx  = series_combo_->itemData(index).toInt();
     const auto& series_list = target_axes->series();
-    if (static_cast<size_t>(index) >= series_list.size())
+    if (series_idx < 0 || static_cast<size_t>(series_idx) >= series_list.size())
         return;
 
-    auto* s = series_list[index].get();
+    auto* s = series_list[static_cast<size_t>(series_idx)].get();
     if (s)
         populate_data_table(*s);
 }
@@ -272,18 +292,20 @@ void QtDataEditorWidget::on_cell_changed(int row, int col)
     if (!figure)
         return;
 
-    int axes_idx = axes_combo_->currentIndex();
-    int series_idx = series_combo_->currentIndex();
+    int axes_idx   = axes_combo_->currentData().toInt();
+    int series_idx = series_combo_->currentData().toInt();
     if (axes_idx < 0 || series_idx < 0)
         return;
 
-    int a_idx = 0;
+    int       a_idx       = 0;
     AxesBase* target_axes = nullptr;
-    figure->for_each_axes([&](AxesBase* ab) {
-        if (a_idx == axes_idx)
-            target_axes = ab;
-        ++a_idx;
-    });
+    figure->for_each_axes(
+        [&](AxesBase* ab)
+        {
+            if (a_idx == axes_idx)
+                target_axes = ab;
+            ++a_idx;
+        });
 
     if (!target_axes)
         return;
@@ -296,55 +318,46 @@ void QtDataEditorWidget::on_cell_changed(int row, int col)
     if (!s)
         return;
 
-    auto* ls = dynamic_cast<LineSeries*>(s);
-    auto* sc = dynamic_cast<ScatterSeries*>(s);
-    if (!ls && !sc)
+    EditableSeriesData data;
+    if (!capture_editable_series_data(*s, data))
         return;
 
     auto* item = table_->item(row, col);
     if (!item)
         return;
 
-    bool ok = false;
+    bool  ok  = false;
     float val = item->text().toFloat(&ok);
-    if (!ok)
+    if (!ok || !std::isfinite(val))
+    {
+        const auto& current   = col == 0 ? data.x : data.y;
+        suppress_cell_signal_ = true;
+        if (row >= 0 && static_cast<size_t>(row) < current.size())
+            item->setText(QString::number(current[static_cast<size_t>(row)], 'g', 6));
+        suppress_cell_signal_ = false;
+        info_label_->setText("Invalid numeric value");
         return;
+    }
 
-    // Update the data in-place
-    if (ls)
-    {
-        auto x = ls->x_data();
-        auto y = ls->y_data();
-        if (col == 0 && static_cast<size_t>(row) < x.size())
-        {
-            std::vector<float> xv(x.begin(), x.end());
-            xv[static_cast<size_t>(row)] = val;
-            ls->set_x(xv);
-        }
-        else if (col == 1 && static_cast<size_t>(row) < y.size())
-        {
-            std::vector<float> yv(y.begin(), y.end());
-            yv[static_cast<size_t>(row)] = val;
-            ls->set_y(yv);
-        }
-    }
-    else if (sc)
-    {
-        auto x = sc->x_data();
-        auto y = sc->y_data();
-        if (col == 0 && static_cast<size_t>(row) < x.size())
-        {
-            std::vector<float> xv(x.begin(), x.end());
-            xv[static_cast<size_t>(row)] = val;
-            sc->set_x(xv);
-        }
-        else if (col == 1 && static_cast<size_t>(row) < y.size())
-        {
-            std::vector<float> yv(y.begin(), y.end());
-            yv[static_cast<size_t>(row)] = val;
-            sc->set_y(yv);
-        }
-    }
+    auto& values = col == 0 ? data.x : data.y;
+    if (row < 0 || static_cast<size_t>(row) >= values.size())
+        return;
+    values[static_cast<size_t>(row)] = val;
+
+    const std::string axis_name = col == 0 ? "X" : "Y";
+    undoable_set_series_data(undo_manager_,
+                             *registry_,
+                             active_id_,
+                             static_cast<size_t>(axes_idx),
+                             static_cast<size_t>(series_idx),
+                             std::move(data),
+                             "Edit series " + axis_name + " data",
+                             [redraw = redraw_, figure_id = active_id_]()
+                             {
+                                 if (redraw)
+                                     redraw->request_redraw(figure_id);
+                             });
+    info_label_->setText(QString("%1 data points").arg(table_->rowCount()));
 }
 
 }   // namespace spectra::adapters::qt

@@ -239,6 +239,40 @@ TEST(UndoProperty, UndoSetLineWidth)
     EXPECT_FLOAT_EQ(ls->width(), 5.0f);
 }
 
+TEST(UndoProperty, RegistryBackedInspectorPropertiesAreUndoable)
+{
+    FigureRegistry registry;
+    auto           figure    = std::make_unique<Figure>(make_test_figure());
+    const FigureId figure_id = registry.register_figure(std::move(figure));
+    Figure*        stored    = registry.get(figure_id);
+    ASSERT_NE(stored, nullptr);
+    Series* series = stored->axes()[0]->series()[0].get();
+    ASSERT_NE(series, nullptr);
+    const float old_width = series->plot_style().line_width;
+
+    UndoManager mgr;
+    ASSERT_TRUE(undoable_set_figure_title(&mgr, registry, figure_id, "Renamed"));
+    ASSERT_TRUE(undoable_set_series_label(&mgr, registry, figure_id, 0, 0, "renamed_series"));
+    ASSERT_TRUE(undoable_set_series_line_width(&mgr, registry, figure_id, 0, 0, 7.0f));
+    EXPECT_EQ(stored->tab_title(), "Renamed");
+    EXPECT_EQ(series->label(), "renamed_series");
+    EXPECT_FLOAT_EQ(series->plot_style().line_width, 7.0f);
+
+    ASSERT_TRUE(mgr.undo());
+    EXPECT_FLOAT_EQ(series->plot_style().line_width, old_width);
+    ASSERT_TRUE(mgr.undo());
+    EXPECT_EQ(series->label(), "test_line");
+    ASSERT_TRUE(mgr.undo());
+    EXPECT_TRUE(stored->tab_title().empty());
+
+    ASSERT_TRUE(mgr.redo());
+    ASSERT_TRUE(mgr.redo());
+    ASSERT_TRUE(mgr.redo());
+    EXPECT_EQ(stored->tab_title(), "Renamed");
+    EXPECT_EQ(series->label(), "renamed_series");
+    EXPECT_FLOAT_EQ(series->plot_style().line_width, 7.0f);
+}
+
 // ─── Legend visibility ───────────────────────────────────────────────────────
 
 TEST(UndoProperty, UndoToggleLegend)

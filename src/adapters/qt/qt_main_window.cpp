@@ -402,13 +402,15 @@ void SpectraMainWindow::build_panels()
     shortcut_panel_->hide();
 
     // Transform panel (hidden by default)
-    transform_panel_ = new QtTransformWidget(registry_, this);
+    transform_panel_ =
+        new QtTransformWidget(registry_, &services_->undo(), services_->redraw_request(), this);
     transform_panel_->setObjectName("transform_dock");
     addDockWidget(Qt::RightDockWidgetArea, transform_panel_);
     transform_panel_->hide();
 
     // Data editor panel (hidden by default)
-    data_editor_panel_ = new QtDataEditorWidget(registry_, this);
+    data_editor_panel_ =
+        new QtDataEditorWidget(registry_, &services_->undo(), services_->redraw_request(), this);
     data_editor_panel_->setObjectName("data_editor_dock");
     addDockWidget(Qt::RightDockWidgetArea, data_editor_panel_);
     data_editor_panel_->hide();
@@ -815,9 +817,9 @@ void SpectraMainWindow::build_spectra_ui()
     nav_rail_ = new SpectraNavRail(this);
     nav_rail_->setObjectName("spectra_nav_rail");
     // Hide buttons that have no panel or command wired yet
-    nav_rail_->set_button_visible(6, false);   // Markers
-    nav_rail_->set_button_visible(10, false);  // Curve Editor
-    nav_rail_->set_button_visible(14, false);  // Help (accessible via menu)
+    nav_rail_->set_button_visible(6, false);    // Markers
+    nav_rail_->set_button_visible(10, false);   // Curve Editor
+    nav_rail_->set_button_visible(14, false);   // Help (accessible via menu)
     connect(nav_rail_,
             &SpectraNavRail::tool_selected,
             this,

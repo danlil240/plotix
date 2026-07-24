@@ -20,6 +20,7 @@ namespace spectra
 {
 class ApplicationServices;
 class FigureRegistry;
+class TimelineEditor;
 
 namespace adapters::qt
 {
@@ -105,6 +106,7 @@ class QtApplicationController
     std::unique_ptr<QtAutomationAdapter> automation_adapter_;
     std::unique_ptr<WorkspaceAutosave>   autosave_;
     std::unique_ptr<QtIpcClient>         ipc_client_;
+    std::unique_ptr<TimelineEditor>      timeline_editor_;
 
     // Frontend service implementations (owned, injected into ApplicationServices)
     std::unique_ptr<QtDialogService>     dialog_service_;

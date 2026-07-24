@@ -5,6 +5,7 @@
 #include <spectra/axes3d.hpp>
 #include <spectra/color.hpp>
 #include <spectra/figure.hpp>
+#include <spectra/figure_registry.hpp>
 #include <spectra/series.hpp>
 #include <string>
 #include <vector>
@@ -239,6 +240,330 @@ inline void undoable_set_opacity(UndoManager* mgr, Series& s, float new_opacity)
                              [ptr, old_opacity]() { ptr->opacity(old_opacity); },
                              [ptr, new_opacity]() { ptr->opacity(new_opacity); }});
     }
+}
+
+// ─── Editable series data ───────────────────────────────────────────────────
+
+struct EditableSeriesData
+{
+    std::vector<float> x;
+    std::vector<float> y;
+};
+
+inline bool capture_editable_series_data(const Series& series, EditableSeriesData& data)
+{
+    if (const auto* line = dynamic_cast<const LineSeries*>(&series))
+    {
+        data.x.assign(line->x_data().begin(), line->x_data().end());
+        data.y.assign(line->y_data().begin(), line->y_data().end());
+        return true;
+    }
+    if (const auto* scatter = dynamic_cast<const ScatterSeries*>(&series))
+    {
+        data.x.assign(scatter->x_data().begin(), scatter->x_data().end());
+        data.y.assign(scatter->y_data().begin(), scatter->y_data().end());
+        return true;
+    }
+    return false;
+}
+
+inline bool restore_editable_series_data(Series& series, const EditableSeriesData& data)
+{
+    if (auto* line = dynamic_cast<LineSeries*>(&series))
+    {
+        line->set_x(data.x).set_y(data.y);
+        return true;
+    }
+    if (auto* scatter = dynamic_cast<ScatterSeries*>(&series))
+    {
+        scatter->set_x(data.x).set_y(data.y);
+        return true;
+    }
+    return false;
+}
+
+inline AxesBase* find_figure_axes(Figure& figure, size_t axes_index)
+{
+    size_t    current = 0;
+    AxesBase* result  = nullptr;
+    figure.for_each_axes(
+        [&](AxesBase* axes)
+        {
+            if (current == axes_index)
+                result = axes;
+            ++current;
+        });
+    return result;
+}
+
+inline Series* find_figure_series(FigureRegistry& registry,
+                                  FigureId        figure_id,
+                                  size_t          axes_index,
+                                  size_t          series_index)
+{
+    Figure* figure = registry.get(figure_id);
+    if (!figure)
+        return nullptr;
+    AxesBase* axes = find_figure_axes(*figure, axes_index);
+    if (!axes || series_index >= axes->series().size())
+        return nullptr;
+    return axes->series()[series_index].get();
+}
+
+inline bool undoable_set_figure_title(UndoManager*       mgr,
+                                      FigureRegistry&    registry,
+                                      FigureId           figure_id,
+                                      const std::string& new_title)
+{
+    Figure* figure = registry.get(figure_id);
+    if (!figure || figure->tab_title() == new_title)
+        return false;
+
+    const std::string old_title = figure->tab_title();
+    figure->set_tab_title(new_title);
+    if (mgr)
+    {
+        auto* registry_ptr = &registry;
+        mgr->push(UndoAction{"Change figure title",
+                             [registry_ptr, figure_id, old_title]()
+                             {
+                                 if (Figure* target = registry_ptr->get(figure_id))
+                                     target->set_tab_title(old_title);
+                             },
+                             [registry_ptr, figure_id, new_title]()
+                             {
+                                 if (Figure* target = registry_ptr->get(figure_id))
+                                     target->set_tab_title(new_title);
+                             }});
+    }
+    return true;
+}
+
+inline bool undoable_set_series_label(UndoManager*       mgr,
+                                      FigureRegistry&    registry,
+                                      FigureId           figure_id,
+                                      size_t             axes_index,
+                                      size_t             series_index,
+                                      const std::string& new_label)
+{
+    Series* series = find_figure_series(registry, figure_id, axes_index, series_index);
+    if (!series || series->label() == new_label)
+        return false;
+
+    const std::string old_label = series->label();
+    series->label(new_label);
+    if (mgr)
+    {
+        auto* registry_ptr = &registry;
+        mgr->push(UndoAction{
+            "Change series label",
+            [registry_ptr, figure_id, axes_index, series_index, old_label]()
+            {
+                if (Series* target =
+                        find_figure_series(*registry_ptr, figure_id, axes_index, series_index))
+                    target->label(old_label);
+            },
+            [registry_ptr, figure_id, axes_index, series_index, new_label]()
+            {
+                if (Series* target =
+                        find_figure_series(*registry_ptr, figure_id, axes_index, series_index))
+                    target->label(new_label);
+            }});
+    }
+    return true;
+}
+
+inline bool undoable_set_series_line_width(UndoManager*    mgr,
+                                           FigureRegistry& registry,
+                                           FigureId        figure_id,
+                                           size_t          axes_index,
+                                           size_t          series_index,
+                                           float           new_width)
+{
+    Series* series = find_figure_series(registry, figure_id, axes_index, series_index);
+    if (!series || series->plot_style().line_width == new_width)
+        return false;
+
+    const float old_width = series->plot_style().line_width;
+    auto        style     = series->plot_style();
+    style.line_width      = new_width;
+    series->plot_style(style);
+
+    if (mgr)
+    {
+        auto* registry_ptr = &registry;
+        auto  set_width    = [registry_ptr, figure_id, axes_index, series_index](float width)
+        {
+            Series* target = find_figure_series(*registry_ptr, figure_id, axes_index, series_index);
+            if (!target)
+                return;
+            auto target_style       = target->plot_style();
+            target_style.line_width = width;
+            target->plot_style(target_style);
+        };
+        mgr->push(UndoAction{"Change series line width",
+                             [set_width, old_width]() { set_width(old_width); },
+                             [set_width, new_width]() { set_width(new_width); }});
+    }
+    return true;
+}
+
+inline bool undoable_set_series_data(UndoManager*          mgr,
+                                     FigureRegistry&       registry,
+                                     FigureId              figure_id,
+                                     size_t                axes_index,
+                                     size_t                series_index,
+                                     EditableSeriesData    after,
+                                     const std::string&    description,
+                                     std::function<void()> notify = {})
+{
+    Series* series = find_figure_series(registry, figure_id, axes_index, series_index);
+    if (!series)
+        return false;
+
+    EditableSeriesData before;
+    if (!capture_editable_series_data(*series, before)
+        || (before.x == after.x && before.y == after.y))
+        return false;
+
+    if (!restore_editable_series_data(*series, after))
+        return false;
+    if (notify)
+        notify();
+
+    if (mgr)
+    {
+        auto* registry_ptr = &registry;
+        mgr->push(UndoAction{
+            description,
+            [registry_ptr, figure_id, axes_index, series_index, before, notify]()
+            {
+                Series* target =
+                    find_figure_series(*registry_ptr, figure_id, axes_index, series_index);
+                if (target && restore_editable_series_data(*target, before) && notify)
+                    notify();
+            },
+            [registry_ptr, figure_id, axes_index, series_index, after, notify]()
+            {
+                Series* target =
+                    find_figure_series(*registry_ptr, figure_id, axes_index, series_index);
+                if (target && restore_editable_series_data(*target, after) && notify)
+                    notify();
+            }});
+    }
+    return true;
+}
+
+struct FigureEditableDataSnapshot
+{
+    struct SeriesEntry
+    {
+        size_t             axes_index   = 0;
+        size_t             series_index = 0;
+        EditableSeriesData data;
+    };
+
+    struct AxesEntry
+    {
+        size_t     axes_index = 0;
+        AxisLimits x_limits;
+        AxisLimits y_limits;
+    };
+
+    std::vector<SeriesEntry> series;
+    std::vector<AxesEntry>   axes;
+};
+
+inline FigureEditableDataSnapshot capture_figure_editable_data(Figure& figure)
+{
+    FigureEditableDataSnapshot snapshot;
+    size_t                     axes_index = 0;
+    figure.for_each_axes(
+        [&](AxesBase* axes)
+        {
+            if (auto* axes_2d = dynamic_cast<Axes*>(axes))
+            {
+                snapshot.axes.push_back({axes_index, axes_2d->x_limits(), axes_2d->y_limits()});
+            }
+
+            const auto& series = axes->series();
+            for (size_t series_index = 0; series_index < series.size(); ++series_index)
+            {
+                if (!series[series_index])
+                    continue;
+                EditableSeriesData data;
+                if (capture_editable_series_data(*series[series_index], data))
+                {
+                    snapshot.series.push_back({axes_index, series_index, std::move(data)});
+                }
+            }
+            ++axes_index;
+        });
+    return snapshot;
+}
+
+inline bool restore_figure_editable_data(FigureRegistry&                   registry,
+                                         FigureId                          figure_id,
+                                         const FigureEditableDataSnapshot& snapshot)
+{
+    Figure* figure = registry.get(figure_id);
+    if (!figure)
+        return false;
+
+    bool restored = false;
+    for (const auto& entry : snapshot.series)
+    {
+        Series* series =
+            find_figure_series(registry, figure_id, entry.axes_index, entry.series_index);
+        restored = (series && restore_editable_series_data(*series, entry.data)) || restored;
+    }
+    for (const auto& entry : snapshot.axes)
+    {
+        if (auto* axes = dynamic_cast<Axes*>(find_figure_axes(*figure, entry.axes_index)))
+        {
+            axes->xlim(entry.x_limits.min, entry.x_limits.max);
+            axes->ylim(entry.y_limits.min, entry.y_limits.max);
+            restored = true;
+        }
+    }
+    return restored;
+}
+
+inline bool undoable_edit_figure_data(UndoManager*                 mgr,
+                                      FigureRegistry&              registry,
+                                      FigureId                     figure_id,
+                                      const std::string&           description,
+                                      std::function<bool(Figure&)> mutation,
+                                      std::function<void()>        notify = {})
+{
+    Figure* figure = registry.get(figure_id);
+    if (!figure || !mutation)
+        return false;
+
+    const auto before = capture_figure_editable_data(*figure);
+    if (!mutation(*figure))
+        return false;
+    const auto after = capture_figure_editable_data(*figure);
+    if (notify)
+        notify();
+
+    if (mgr)
+    {
+        auto* registry_ptr = &registry;
+        mgr->push(UndoAction{
+            description,
+            [registry_ptr, figure_id, before, notify]()
+            {
+                if (restore_figure_editable_data(*registry_ptr, figure_id, before) && notify)
+                    notify();
+            },
+            [registry_ptr, figure_id, after, notify]()
+            {
+                if (restore_figure_editable_data(*registry_ptr, figure_id, after) && notify)
+                    notify();
+            }});
+    }
+    return true;
 }
 
 // ─── Legend visibility ───────────────────────────────────────────────────────

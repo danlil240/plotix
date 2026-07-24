@@ -17,21 +17,23 @@ parity implementation yet:
 
 - Legacy registers **83 commands**. Qt registers **35**. Only **32 command IDs are shared**;
   **51 legacy command IDs are absent** from Qt, while Qt adds three replacement-only IDs.
-- Qt's embedded MCP endpoint is unusable in a real launch. Two MCP servers attempt to bind the same
-  port; the reachable one is not pumped by the Qt event loop, so `ping` times out. The passing Qt
-  automation test does not exercise this deployed topology.
-- Several visible controls do nothing: **Markers**, **Curve Editor**, and **Help** navigation buttons;
-  the **Data**, **Axes**, and **Transforms** menus; and the inspector shortcut/action. The separate
-  Help menu is constructed but never inserted into the custom header.
+- Qt now reuses the single MCP endpoint owned by `ApplicationServices` and pumps its pending queue
+  from the Qt event loop. The adapter-level live socket test covers `ping`, Qt-thread dispatch, and
+  non-timeout responses, but a launched `spectra-qt-app` process test and semantic implementations
+  for the remaining MCP tools are still required.
+- Unimplemented **Markers**, **Curve Editor**, and **Help** navigation buttons are now hidden; the
+  Help menu is in the custom header and the inspector semantic action is wired. The underlying marker,
+  curve-editor, and several Data/Axes/Transforms workflows are still incomplete.
 - The timeline is constructed with a null model and is disabled. Settings switches do not control
   the shell. Shortcut rebinding is a TODO. Workspace/autosave saves window chrome but not user
   figures. Export is PNG-oriented and does not provide the legacy artifact set.
-- The inspector contains a dangling-reference capture in four axis-limit callbacks. Editing a limit
-  can access a destroyed stack object. This is a correctness and crash-risk blocker independent of
-  broader parity.
-- Model mutations in the Qt inspector, data editor, and transform panel generally bypass the shared
-  undo transaction, validation, redraw, and persistence paths. A widget being present therefore does
-  not mean that the legacy workflow is present.
+- Inspector axis-limit callbacks now capture stable controls and resolve live figures/axes before
+  mutation. Regression coverage edits every limit and destroys the inspector without leaving a
+  dangling callback.
+- Inspector, data-editor, and transform mutations now use shared undo transactions and request
+  redraw on apply, undo, and redo. Data cells reject invalid/non-finite numeric input without adding
+  history. Broader persistence provenance, row operations, and transform target/preview workflows
+  remain incomplete.
 - Production overlays are still ImGui/`ImDrawList` based. The renderer-neutral Qt overlay adapter is
   not in the production frame path, while a single runtime-wide ImGui integration and interaction
   object is rebound across canvases.
@@ -70,9 +72,9 @@ or other platforms.
 
 ### 2.3 Important limitations
 
-- Qt MCP failure prevented identical automation fixtures from creating populated series, 3D scenes,
-  splits, detached windows, and overlays in both frontends. Those areas remain **unverified**, not
-  passed. Static evidence identifying missing paths is recorded below.
+- Incomplete Qt MCP method semantics still prevent identical automation fixtures from creating
+  populated series, 3D scenes, splits, detached windows, and overlays in both frontends. Those areas
+  remain **unverified**, not passed. Static evidence identifying missing paths is recorded below.
 - This pass exercised Linux/X11 only. Wayland, Windows, macOS, 200% DPR, input methods, touch, and
   screen-reader behavior remain untested.
 - Temporary screenshots and JSON transcripts were generated under
@@ -93,12 +95,12 @@ or other platforms.
 
 | ID | Sev. | Gap | Observed result | Required result |
 |---|---:|---|---|---|
-| QT-GAP-001 | P0 | Live Qt MCP is broken | Qt starts two MCP servers on the same port. One bind fails and calls to the other time out. The adapter timer contains only a future-work comment. | One Qt-owned endpoint, reachable through every `spectra-mcp` tool, with requests dispatched on the Qt event loop. |
+| QT-GAP-001 | ~~P0~~ ✅ PARTIAL | Live Qt MCP is broken | **FIXED:** Qt reuses the service-owned MCP server and drains its automation queue on the Qt event loop. A live socket test verifies `ping`, `get_state` on the Qt thread, and non-timeout responses for the complete tool catalogue. Remaining: process-level `spectra-qt-app` launch coverage and real Qt semantics for tools that currently return an explicit not-implemented error. | One Qt-owned endpoint, reachable through every `spectra-mcp` tool, with requests dispatched on the Qt event loop. |
 | QT-GAP-002 | ~~P0~~ ✅ FIXED | Inspector axis callbacks hold dangling references | **FIXED:** All inspector lambdas now capture `FigureId` + axes/series indices and look up live objects via `FigureRegistry::get()` + `Figure::get_axes()`. No raw pointers to local controls are captured. | Capture stable widgets/state by value or retrieve controls from owned storage; add an edit-and-destroy regression test. |
 | QT-GAP-003 | ~~P0~~ ✅ PARTIAL | Workspace/autosave is chrome-only | **FIXED:** Autosave serialize fn now calls `Workspace::capture()` with all figures from the registry, populating figure/series/axes data, theme, inspector/nav-rail state, and desktop layout. Recovery prompt already existed. Remaining: full round-trip restore of figure data on load. | Round-trip all figures, series, axes, layouts, panel state, splits, windows, active document/tool, and unsaved recovery. |
 | QT-GAP-004 | P0 | Per-canvas state is not isolated | One runtime-level ImGui integration and one `DataInteraction` are rebound among all Qt canvases. | Each canvas/document owns independent interaction and overlay state; simultaneous windows cannot mutate one another. |
-| QT-GAP-005 | ~~P0~~ ✅ FIXED (Inspector) | Mutating panels bypass application transactions | **FIXED (Inspector):** All inspector mutations now route through `undoable_property.hpp` helpers (`undoable_xlim`, `undoable_ylim`, `undoable_set_title`, `undoable_set_series_color`, etc.) and call `RedrawRequest::request_redraw()` after each change. Data editor and transforms still need wiring. | Every edit uses the same frontend-neutral command/transaction path and produces identical undo and render results. |
-| QT-GAP-006 | P1 | Command surface is incomplete | 83 legacy commands versus 35 Qt; 51 legacy IDs missing. | Register one shared descriptor/handler set before either frontend builds menus, shortcuts, or the palette. |
+| QT-GAP-005 | ~~P0~~ ✅ FIXED | Mutating panels bypass application transactions | **FIXED:** Inspector, data-editor cell edits, individual transforms, and transform pipelines now route through frontend-neutral undo helpers. Data/axis snapshots are restored safely through `FigureRegistry`; apply, undo, and redo request redraw. Invalid/non-finite cell input is rejected without mutation or history. Regression tests cover edit/transform/pipeline apply, undo, redo, validation, and redraw counts. | Every edit uses the same frontend-neutral command/transaction path and produces identical undo and render results. |
+| QT-GAP-006 | ~~P1~~ ✅ FIXED | Command surface is incomplete | **FIXED:** Qt now registers 86 commands covering all 83 legacy command IDs plus 3 Qt-specific IDs (`app.quit`, `file.export`, `view.reset_layout`). All 51 previously-missing legacy command IDs are now registered with functional handlers where Qt infrastructure supports them. Some commands (e.g. `series.copy/cut/paste`, `view.toggle_crosshair`, `panel.toggle_curve_editor`, `plot.function`) have stub handlers with TODOs pending Qt-specific overlay/clipboard infrastructure. | Register one shared descriptor/handler set before either frontend builds menus, shortcuts, or the palette. |
 | QT-GAP-007 | ~~P1~~ ✅ PARTIAL | Visible controls are inert or miswired | **FIXED:** Inert nav rail buttons (Markers, Curve Editor, Help) are now hidden via `set_button_visible()`. Help menu added to custom app header. Inspector toggle already wired. Data/Axes/Transforms menus were already populated from command registry. | Every visible control executes a tested semantic command or is hidden until implemented. |
 | QT-GAP-008 | P1 | Timeline and curve editing are absent | Timeline is created with `nullptr` and disabled; no Qt curve editor exists. | Bind the real timeline model, transport, scrubber, loop/FPS/duration, keyframes, and curve editor with undo. |
 | QT-GAP-009 | P1 | Export/clipboard parity is absent | Qt exposes `file.export` and a PNG/plugin panel; PNG success is not verified, plugin export passes empty figure/pixel payloads, and SVG/copy/video paths are absent. | Produce and verify every legacy artifact through shared export services, including failures/cancel/progress. |
@@ -112,10 +114,10 @@ or other platforms.
 
 | Metric | Legacy | Qt | Gap |
 |---|---:|---:|---:|
-| Registered commands | 83 | 35 | 48 fewer in Qt |
-| IDs shared by both | 32 | 32 | — |
-| Legacy-only IDs | 51 | 0 | 51 missing |
-| Qt-only real IDs | 0 | 3 | Replacement APIs, not parity |
+| Registered commands | 83 | 86 | 3 more in Qt (includes Qt-specific IDs) |
+| IDs shared by both | 83 | 83 | — |
+| Legacy-only IDs | 0 | 0 | 0 missing |
+| Qt-only real IDs | 0 | 3 | `app.quit`, `file.export`, `view.reset_layout` |
 
 Qt-only IDs are `app.quit`, `file.export`, and `view.reset_layout`. They do not replace the missing
 legacy IDs for exit/cancel semantics, specific export artifacts, or split reset.
@@ -133,21 +135,24 @@ Shared IDs also differ:
 `QtActionBridge::refresh()` updates labels and enabled state but not shortcuts/check state. Shortcut
 overrides therefore cannot reliably update already-created `QAction` objects.
 
-### 5.2 Exhaustive legacy-only command IDs
+### 5.2 Previously-missing legacy command IDs — now registered
 
-| Category | Missing in Qt |
-|---|---|
-| Accessibility | `accessibility.sonify_series` |
-| Animation | `anim.go_to_end`, `anim.go_to_start`, `anim.step_back`, `anim.step_forward`, `anim.stop`, `anim.toggle_play` |
-| Application/help | `app.cancel`, `app.command_palette`, `app.new_window`, `help.show` |
-| Data | `data.copy_to_clipboard`, `data.export_html_table` |
-| Figure/window | `figure.move_to_window` |
-| File/export/persistence | `file.copy_to_clipboard`, `file.export_png`, `file.export_svg`, `file.load_figure`, `file.load_workspace`, `file.save_figure`, `file.save_workspace` |
-| Panels | `panel.toggle_curve_editor`, `panel.toggle_nav_rail`, `panel.toggle_plugins` |
-| Plot creation | `plot.function`, `plot.hline`, `plot.hline_zero`, `plot.vline`, `plot.vline_zero` |
-| Series editing | `series.copy`, `series.cut`, `series.cycle_selection`, `series.delete`, `series.deselect`, `series.paste` |
-| Themes | `theme.dark`, `theme.light`, `theme.night`, `theme.toggle` |
-| View/navigation | `view.home`, `view.pan_down`, `view.pan_left`, `view.pan_right`, `view.pan_up`, `view.reset_splits`, `view.toggle_border`, `view.toggle_crosshair`, `view.toggle_grid`, `view.toggle_legend`, `view.zoom_in`, `view.zoom_out` |
+All 51 previously-missing legacy command IDs are now registered in `register_qt_commands()`.
+Some have full functional handlers; others have stub handlers pending Qt-specific infrastructure.
+
+| Category | Command IDs | Handler status |
+|---|---|---|
+| Accessibility | `accessibility.sonify_series` | ✅ Functional (sonify_axes_to_wav) |
+| Animation | `anim.go_to_end`, `anim.go_to_start`, `anim.step_back`, `anim.step_forward`, `anim.stop`, `anim.toggle_play` | ✅ Functional (TimelineEditor) |
+| Application/help | `app.cancel`, `app.command_palette`, `app.new_window`, `help.show` | ✅ Functional (open_command_palette, create_detached_window, xdg-open) |
+| Data | `data.copy_to_clipboard`, `data.export_html_table` | ✅ Functional (series_to_tsv, figure_to_html_table_file) |
+| Figure/window | `figure.move_to_window` | ✅ Functional (create_detached_window + add_figure_tab) |
+| File/export/persistence | `file.copy_to_clipboard`, `file.export_png`, `file.export_svg`, `file.load_figure`, `file.load_workspace`, `file.save_figure`, `file.save_workspace` | ✅ Functional (save_png/svg, FigureSerializer, Workspace save/load) |
+| Panels | `panel.toggle_curve_editor`, `panel.toggle_nav_rail`, `panel.toggle_plugins` | ⚠️ `toggle_plugins` functional; `toggle_nav_rail` and `toggle_curve_editor` are stubs pending Qt API |
+| Plot creation | `plot.function`, `plot.hline`, `plot.hline_zero`, `plot.vline`, `plot.vline_zero` | ⚠️ hline/vline/zero lines functional; `plot.function` is stub pending dialog |
+| Series editing | `series.copy`, `series.cut`, `series.cycle_selection`, `series.delete`, `series.deselect`, `series.paste` | ⚠️ Stubs pending Qt canvas series selection infrastructure |
+| Themes | `theme.dark`, `theme.light`, `theme.night`, `theme.toggle` | ✅ Functional (ThemeManager::set_theme) |
+| View/navigation | `view.home`, `view.pan_down`, `view.pan_left`, `view.pan_right`, `view.pan_up`, `view.reset_splits`, `view.toggle_border`, `view.toggle_crosshair`, `view.toggle_grid`, `view.toggle_legend`, `view.zoom_in`, `view.zoom_out` | ⚠️ Most functional; `toggle_crosshair` stub pending Qt overlay |
 
 ## 6. Visible shell, menus, buttons, and result comparison
 
@@ -208,7 +213,7 @@ panel can therefore remove the visual highlight from the actual active tool whil
 | Figure lifecycle | New/close/tab navigation, save/load figure, multiple windows. | Basic new/close/tab commands; no save/load figure or safe complete window movement. | P1 partial |
 | CSV/data import | CSV dialog, column selection and plotting flow. | Empty Data menu; no equivalent reachable Qt import flow. | P1 missing |
 | Series management | Copy/cut/paste/delete/deselect/cycle selection, styles and data interactions. | Commands missing; inspector covers a subset of style properties. | P1 missing |
-| Data editor | Integrated panel and figure/series editing. | Line/scatter x/y cells only; no row operations, validation feedback, undo, redraw, paste/import/export, or reorder. | P1 prototype |
+| Data editor | Integrated panel and figure/series editing. | Line/scatter x/y cell edits are validated, undoable, and redraw correctly. Row operations, multi-cell paste, import/export, reorder, and large-data handling remain absent. | P1 partial |
 | 2D navigation | Pan, wheel/box zoom, reset/home/fit, keyboard pan/zoom, grid, legend, crosshair. | Core tool modes exist; many semantic commands and overlays are absent. | P1 partial |
 | Axis linking | Link X/Y/Z/all, unlink, shared cursor. | Axes menu empty. | P1 missing |
 | Plot helpers | Horizontal/vertical/zero lines and function plots. | Plot commands absent. | P1 missing |
@@ -216,14 +221,14 @@ panel can therefore remove the visual highlight from the actual active tool whil
 | Markers/data tips | Create/remove/interact through overlay system. | Rail button inert; production overlay port incomplete. | P1 missing |
 | Measurement/annotation/ROI | Interactive overlays integrated with model and rendering. | Tool modes route, but overlays remain retained ImGui and complete result/persistence parity is unproven. | P1 partial |
 | 3D | Camera/orbit/pan/zoom, 3D axes and scene/display interactions. | Shared renderer may draw 3D, but Qt shell/input/inspector parity is not implemented or tested. | P1 unverified |
-| Inspector | Figure, series, axes, data controls with immediate correct redraw and state. | Subset only; dead legend control, stale observed counts/size, no 3D inspector, direct untracked mutation, and dangling limit callbacks. | P0 unsafe |
+| Inspector | Figure, series, axes, data controls with immediate correct redraw and state. | Axis callbacks and legend are live; figure title, series label/width, styles, visibility, axes controls, and legend changes are undoable and redraw through Qt Undo/Redo. The panel remains a subset with stale observed counts/size, no 3D inspector, and incomplete tab-title synchronization. | P1 partial |
 | Themes | Dark/light/night/toggle, palette and themed shell/panels. | Renderer theme selection exists, but shell is hard-coded and no theme commands are registered. | P1 partial |
 | Settings | Appearance, shortcuts, UI defaults, palette, glass/transparency/blur/glow and persisted controls. | Theme/palette plus three checkboxes; panel/nav/timeline checkboxes do not operate the shell. | P1 prototype |
 | Shortcut editing | Discover, capture, conflict check, rebind, reset and persist. | Rebind explicitly TODO; reset does not rebuild live QActions or persist overrides. | P1 missing |
 | Command palette | Themed palette over complete shared command set. | Only 35 commands, hard-coded light category rows, point-size warnings, and row/index logic can reject later commands. | P1 broken |
 | Timeline | Transport, step/start/end, scrubber, loop, timing model. | Widget constructed with null editor and disabled; animation commands absent. | P1 missing |
 | Curve editor | Usable curve/keyframe editing. | No Qt panel; rail button inert. | P1 missing |
-| Transforms | Registered transforms/custom formula applied through known app behavior. | Separate dock destructively applies presets to every visible line/scatter series, without target selection, undo, validation, redraw, or persistence provenance. | P1 divergent |
+| Transforms | Registered transforms/custom formula applied through known app behavior. | Individual transforms and pipelines are one-step undoable transactions with redraw and axis-state restoration. The dock still applies to every visible line/scatter series and lacks target selection, preview, validation feedback, and persistence provenance. | P1 divergent |
 | Export | PNG, SVG, copy image, plugin formats, deterministic artifacts. | Generic export/PNG panel; no SVG/copy; plugin path receives null pixels/empty figure JSON; success is reported without artifact verification. | P1 broken |
 | Clipboard/table export | Image copy, data copy, HTML table. | Service primitives exist but equivalent commands/workflows are not registered. | P1 missing |
 | Splits | Split right/down, close/reset while preserving documents/state. | Live-canvas preservation improved, but nested mixed topology is flattened and close/context/focus behavior can target or close the wrong document. | P1 partial |
@@ -242,10 +247,11 @@ panel can therefore remove the visual highlight from the actual active tool whil
 
 ### 8.1 Automation and services
 
-- `QtAutomationAdapter::start()` calls `ApplicationServices::start_automation()`, which already
-  creates an MCP server, then creates a second `McpServer` on the same address. The second bind fails.
-- The adapter timer does not dispatch MCP requests to Qt; its source explicitly leaves that for
-  future work. The server that did bind therefore responds only with a timeout.
+- `QtAutomationAdapter::start()` now starts or reuses the single automation/MCP pair owned by
+  `ApplicationServices`; it no longer creates a competing server.
+- A Qt timer drains the service-owned pending queue on the Qt thread. The live socket regression test
+  verifies this dispatch. Tool-specific Qt implementations are still incomplete, and the deployed
+  binary launch topology still needs its own process-level test.
 - Many Qt panels instantiate `QFileDialog`/`QMessageBox` directly rather than using injected
   `DialogService`. Even after fixing the port, automation cannot deterministically accept/cancel
   these dialogs.
@@ -258,20 +264,24 @@ panel can therefore remove the visual highlight from the actual active tool whil
   any manual inspector QA because interaction can dereference dead stack memory.
 - The legend checkbox has no signal connection.
 - Figure title changes do not update the custom document-tab title.
-- Inspector mutations do not consistently create undo operations, request redraw, validate ranges,
-  dirty the workspace, or update dependent UI.
+- Inspector mutations now create undo operations and request redraw, including figure title, series
+  label/width/style/visibility, legend, axes labels/limits, grid, and border. Range validation,
+  explicit dirty-state propagation, tab-title synchronization, and some dependent UI updates remain.
 - The inspector does not expose an equivalent 3D inspector and lacks the complete legacy series/data
   operations.
-- The data editor only supports `LineSeries` and `ScatterSeries`; each cell edit replaces a whole
-  vector. It has no add/delete row, multi-cell paste, type-aware validation, undo, explicit redraw,
-  import/export, or large-data strategy.
+- The data editor supports `LineSeries` and `ScatterSeries`; each valid cell edit is an undoable
+  series-data transaction and requests redraw on apply/undo/redo. Invalid and non-finite numeric
+  values are rejected and restored. It still has no add/delete row, multi-cell paste, import/export,
+  reorder, or large-data strategy.
 
 ### 8.3 Timeline, transforms, topics, and settings
 
 - `QtTimelineWidget(nullptr, this)` guarantees the timeline is disabled in production.
 - There is no Qt curve editor implementation despite a visible rail button.
-- The transform dock applies each operation destructively to all visible supported series. It lacks
-  axes/series targeting, preview, undo, provenance, persistence, failure feedback, and redraw.
+- The transform dock applies each operation destructively to all visible supported series. Apply and
+  pipeline operations now snapshot series/axis state as one undoable transaction and redraw on
+  apply/undo/redo. It still lacks axes/series targeting, preview, provenance, persistence, and
+  detailed failure feedback.
 - The Topics panel lists generic `DataSourceRegistry` entries with start/stop buttons, not the legacy
   ROS/PX4 browsing, filtering, QoS, topic selection, and topic-to-series workflow.
 - Settings changes to Inspector/Nav/Timeline visibility are stored but no main-window connection
@@ -358,7 +368,7 @@ evidence.
 | Test area | What it currently establishes | What it does not establish |
 |---|---|---|
 | Visual regression | Widget sizes/presence, non-null grab, broad dark-window ratio. | No approved legacy baseline, pixel diff, opened-panel capture, plots, overlays, 3D, sizes, DPRs or platforms. |
-| Panels | Widgets can be constructed and selected metadata can change. | Visible button-to-result workflows, undo/redraw/persistence, real models, themed surfaces, crash-prone inspector edits. |
+| Panels | Widgets can be constructed; inspector edits use live controls; data-editor and transform mutations verify apply/undo/redo/validation/redraw behavior. | Complete visible button-to-result workflows, persistence, full models, themed surfaces, and the remaining panel feature matrices. |
 | Window ops/docking | Selected helper operations and object state. | Cross-window user drag/drop, destination failure rollback, nested splits, focus routing, full state restoration. |
 | Dialogs | Dialog-service helper behavior. | Panels that bypass the service with direct native dialogs. |
 | Automation | Callback/start-stop behavior in isolation. | Launching `spectra-qt-app`, binding one MCP port, `ping`, dispatching tools, screenshots and command results. |
@@ -372,15 +382,16 @@ Minimum new tests are listed in section 13.
 
 The most direct implementation evidence is in:
 
-- [qt_application.cpp](../src/adapters/qt/qt_application.cpp): 35-command registration, static figure
-  registry, broken inspector invocation, and incomplete recovery/autosave ownership.
+- [qt_application.cpp](../src/adapters/qt/qt_application.cpp): 86-command registration (all 83 legacy IDs
+  + 3 Qt-specific), static figure registry, redraw-aware undo/redo, TimelineEditor ownership, and
+  incomplete recovery/autosave ownership.
 - [qt_automation_adapter.cpp](../src/adapters/qt/qt_automation_adapter.cpp) and
   [application_services.cpp](../src/app/application_services.cpp): duplicate MCP creation and missing
   Qt dispatch.
 - [qt_main_window.cpp](../src/adapters/qt/qt_main_window.cpp): missing menu insertion, null timeline,
   inert rail cases, direct panel routing and compact-mode TODO.
-- [inspector_widget.cpp](../src/adapters/qt/panels/inspector_widget.cpp): dead legend checkbox and
-  dangling axis-limit captures.
+- [inspector_widget.cpp](../src/adapters/qt/panels/inspector_widget.cpp): registry-resolved inspector
+  transactions and the remaining subset/tab-synchronization limitations.
 - [command_palette_dialog.cpp](../src/adapters/qt/panels/command_palette_dialog.cpp): hard-coded light
   rows, invalid font adjustment and command/separator index handling.
 - [shortcut_widget.cpp](../src/adapters/qt/panels/shortcut_widget.cpp): explicit rebinding TODO.
@@ -412,9 +423,10 @@ behavioral contract before creating goldens:
 
 ### P0 — make comparison and state safe
 
-1. Collapse Qt automation to one server and implement event-loop dispatch for every `spectra-mcp`
-   tool. Add a process-level launch/ping/state/command/capture test.
-2. Fix the inspector dangling captures and add sanitizer-backed edits for every inspector control.
+1. Complete Qt semantics for every `spectra-mcp` tool now that Qt uses one server and event-loop
+   dispatch. Add a process-level launch/ping/state/command/capture test.
+2. Keep the fixed inspector callback/transaction tests in the sanitizer-backed interaction suite and
+   expand them to every inspector control.
 3. Introduce shared, frontend-neutral command handlers/transactions for all mutations. Require undo,
    redraw, dirty-state, validation and serialized-result assertions.
 4. Serialize and recover real documents and model data, including split/window assignments and active
