@@ -133,6 +133,7 @@ void QtSettingsWidget::on_inspector_toggled(bool checked)
         return;
     store_->data_mut().inspector_visible = checked;
     store_->notify_change();
+    emit inspector_visibility_changed(checked);
     emit settings_changed();
 }
 
@@ -142,6 +143,7 @@ void QtSettingsWidget::on_nav_rail_toggled(bool checked)
         return;
     store_->data_mut().nav_rail_visible = checked;
     store_->notify_change();
+    emit nav_rail_visibility_changed(checked);
     emit settings_changed();
 }
 
@@ -151,7 +153,23 @@ void QtSettingsWidget::on_timeline_toggled(bool checked)
         return;
     store_->data_mut().timeline_visible = checked;
     store_->notify_change();
+    emit timeline_visibility_changed(checked);
     emit settings_changed();
+}
+
+void QtSettingsWidget::set_inspector_visible(bool visible)
+{
+    inspector_check_->setChecked(visible);
+}
+
+void QtSettingsWidget::set_nav_rail_visible(bool visible)
+{
+    nav_rail_check_->setChecked(visible);
+}
+
+void QtSettingsWidget::set_timeline_visible(bool visible)
+{
+    timeline_check_->setChecked(visible);
 }
 
 }   // namespace spectra::adapters::qt

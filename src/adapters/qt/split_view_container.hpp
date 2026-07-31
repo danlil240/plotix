@@ -31,7 +31,7 @@ namespace spectra
 class SplitViewManager;
 class FigureRegistry;
 enum class ToolMode;
-}
+}   // namespace spectra
 
 namespace spectra::adapters::qt
 {
@@ -44,9 +44,7 @@ class QtSplitViewContainer : public QWidget
     Q_OBJECT
 
    public:
-    QtSplitViewContainer(QtRuntime*      runtime,
-                         FigureRegistry* registry,
-                         QWidget*        parent = nullptr);
+    QtSplitViewContainer(QtRuntime* runtime, FigureRegistry* registry, QWidget* parent = nullptr);
     ~QtSplitViewContainer() override;
 
     QtSplitViewContainer(const QtSplitViewContainer&)            = delete;
@@ -57,8 +55,13 @@ class QtSplitViewContainer : public QWidget
     // Add a figure as a new tab in the active pane.  Returns the tab index.
     int add_figure_tab(FigureId id);
 
-    // Close the tab containing the given figure (in any pane).
-    void close_figure_tab(FigureId id);
+    // Close the tab containing the given figure (in any pane) and notify the
+    // document lifecycle owner. Returns false when the figure is not open.
+    bool close_figure_tab(FigureId id);
+
+    // Remove an open tab without emitting figure_closed. Cross-window moves
+    // use this only after the destination has accepted the document.
+    bool release_figure_tab(FigureId id);
 
     // Get the FigureId of the currently active tab in the active pane.
     FigureId active_figure_id() const;
@@ -76,7 +79,7 @@ class QtSplitViewContainer : public QWidget
     bool activate_figure(FigureId id);
 
     // Select the interaction tool for the active document.
-    void set_active_tool(ToolMode tool);
+    void     set_active_tool(ToolMode tool);
     ToolMode active_tool() const;
 
     // ── Welcome page ───────────────────────────────────────────────────────
@@ -114,6 +117,7 @@ class QtSplitViewContainer : public QWidget
     void figure_closed(FigureId id);
     void figure_activated(FigureId id);
     void figure_detach_requested(FigureId id);
+    void canvas_created(FigureId id, FigureCanvasWidget* canvas);
 
    private slots:
     void on_tab_changed(int index);
@@ -126,17 +130,18 @@ class QtSplitViewContainer : public QWidget
     void rebuild_splitter();
     void sync_from_split_view();
     void update_active_from_focus();
+    bool remove_figure_tab(FigureId id, bool notify_closed);
 
     PaneWidget* active_pane() const;
     PaneWidget* pane_for_figure(FigureId id) const;
     int         find_pane_index(PaneWidget* pane) const;
 
-    QtRuntime*                           runtime_  = nullptr;
-    FigureRegistry*                      registry_ = nullptr;
-    std::unique_ptr<SplitViewManager>    split_view_;
+    QtRuntime*                        runtime_  = nullptr;
+    FigureRegistry*                   registry_ = nullptr;
+    std::unique_ptr<SplitViewManager> split_view_;
 
-    QSplitter*   splitter_     = nullptr;
-    QWidget*     welcome_page_ = nullptr;
+    QSplitter* splitter_     = nullptr;
+    QWidget*   welcome_page_ = nullptr;
 
     std::vector<PaneWidget*> panes_;
 };

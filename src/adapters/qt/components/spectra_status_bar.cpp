@@ -66,6 +66,11 @@ void SpectraStatusBar::set_active_tool(const QString& tool_name)
     tool_chip_->set_text(tool_name);
 }
 
+QString SpectraStatusBar::active_tool() const
+{
+    return tool_chip_->text();
+}
+
 void SpectraStatusBar::set_zoom(double zoom)
 {
     zoom_chip_->set_text(QString("Zoom: %1%").arg(static_cast<int>(zoom * 100)));

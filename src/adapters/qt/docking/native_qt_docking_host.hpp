@@ -41,17 +41,7 @@ class MainWindowRegistry;
 class NativeQtDockingHost : public DockingHost
 {
    public:
-    // Factory function to create a new SpectraMainWindow for detach operations.
-    // The registry, runtime, action_bridge, and services are passed through.
-    using CreateMainWindowFn = std::function<std::unique_ptr<SpectraMainWindow>()>;
-
-    // Detach callback — called when a document is detached into a new window.
-    // The new host is registered with the MainWindowRegistry by the caller.
-    using DetachCallback = std::function<HostId(NativeQtDockingHost* source, DocumentId doc_id)>;
-
-    NativeQtDockingHost(HostId              id,
-                        SpectraMainWindow*  window,
-                        MainWindowRegistry* registry);
+    NativeQtDockingHost(HostId id, SpectraMainWindow* window, MainWindowRegistry* registry);
     ~NativeQtDockingHost() override;
 
     NativeQtDockingHost(const NativeQtDockingHost&)            = delete;
@@ -64,9 +54,9 @@ class NativeQtDockingHost : public DockingHost
     void    set_panel_visible(PanelId id, bool visible) override;
     bool    is_panel_visible(PanelId id) const override;
 
-    DocumentId add_document(const DocumentDescriptor& desc) override;
-    void       remove_document(DocumentId id) override;
-    DocumentId active_document() const override;
+    DocumentId              add_document(const DocumentDescriptor& desc) override;
+    void                    remove_document(DocumentId id) override;
+    DocumentId              active_document() const override;
     std::vector<DocumentId> documents() const override;
 
     HostId detach_document(DocumentId id) override;
@@ -84,31 +74,27 @@ class NativeQtDockingHost : public DockingHost
     // Get the underlying SpectraMainWindow.
     SpectraMainWindow* main_window() const { return window_; }
 
-    // Set the detach callback (called by MainWindowRegistry).
-    void set_detach_callback(DetachCallback cb) { detach_cb_ = std::move(cb); }
-
     // Add a figure tab directly (used during move operations).
-    void add_figure_tab(FigureId fid);
+    // Returns false when the figure cannot be opened or is already present.
+    bool add_figure_tab(FigureId fid);
 
-    // Remove a figure tab (used during move operations).
-    // Returns the FigureId that was removed, or INVALID_FIGURE_ID.
-    FigureId remove_figure_tab(FigureId fid);
+    // Remove a figure tab without closing the underlying figure model.
+    bool release_figure_tab(FigureId fid);
 
    private:
     HostId              id_       = INVALID_HOST_ID;
     SpectraMainWindow*  window_   = nullptr;
     MainWindowRegistry* registry_ = nullptr;
-    DetachCallback      detach_cb_;
 
     // Panel tracking: panel_id -> QDockWidget
     struct PanelEntry
     {
-        PanelId      id    = INVALID_PANEL_ID;
-        QDockWidget* dock  = nullptr;
+        PanelId      id   = INVALID_PANEL_ID;
+        QDockWidget* dock = nullptr;
         std::string  area;
     };
     std::unordered_map<PanelId, PanelEntry> panels_;
-    PanelId next_panel_id_ = 1;
+    PanelId                                 next_panel_id_ = 1;
 };
 
 }   // namespace spectra::adapters::qt

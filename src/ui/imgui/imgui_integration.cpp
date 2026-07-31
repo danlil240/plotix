@@ -356,6 +356,7 @@ void ImGuiIntegration::shutdown()
         ImGui_ImplSDL3_Shutdown();
     #endif
     }
+    ui::IconFont::instance().release_context(this_ctx);
     ImGui::DestroyContext(this_ctx);
     imgui_context_ = nullptr;
 
@@ -374,6 +375,9 @@ void ImGuiIntegration::on_swapchain_recreated(VulkanBackend& backend)
 {
     if (!initialized_)
         return;
+
+    ImGuiContext* previous_context = ImGui::GetCurrentContext();
+    ImGui::SetCurrentContext(imgui_context_);
 
     ImGui_ImplVulkan_SetMinImageCount(backend.min_image_count());
 
@@ -417,6 +421,8 @@ void ImGuiIntegration::on_swapchain_recreated(VulkanBackend& backend)
 
         cached_render_pass_ = current_rp_bits;
     }
+
+    ImGui::SetCurrentContext(previous_context);
 }
 
 void ImGuiIntegration::update_layout(float window_width, float window_height, float dt)

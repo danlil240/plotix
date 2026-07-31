@@ -42,8 +42,7 @@ PanelId NativeQtDockingHost::add_panel(const PanelDescriptor& desc)
     entry.area = desc.area;
 
     // Find existing QDockWidget by object name
-    auto* dock = window_->findChild<QDockWidget*>(
-        QString::fromStdString(desc.id + "_dock"));
+    auto* dock = window_->findChild<QDockWidget*>(QString::fromStdString(desc.id + "_dock"));
     if (dock != nullptr)
     {
         entry.dock = dock;
@@ -80,14 +79,16 @@ DocumentId NativeQtDockingHost::add_document(const DocumentDescriptor& desc)
     if (!window_ || desc.figure_id == INVALID_FIGURE_ID)
         return INVALID_DOCUMENT_ID;
 
-    window_->add_figure_tab(desc.figure_id);
-    return desc.figure_id;  // DocumentId == FigureId
+    return add_figure_tab(desc.figure_id) ? desc.figure_id : INVALID_DOCUMENT_ID;
 }
 
 void NativeQtDockingHost::remove_document(DocumentId id)
 {
-    if (window_)
-        window_->close_figure_tab(static_cast<FigureId>(id));
+    const FigureId fid = static_cast<FigureId>(id);
+    if (registry_)
+        registry_->close_document(fid);
+    else if (window_)
+        window_->close_figure_tab(fid);
 }
 
 DocumentId NativeQtDockingHost::active_document() const
@@ -103,14 +104,8 @@ std::vector<DocumentId> NativeQtDockingHost::documents() const
     if (!window_)
         return result;
 
-    // Get all figure IDs from the registry that are open in this window.
-    // We check each canvas in the main window.
-    // For now, we rely on the main window's figure_tabs_ map.
-    // Since we don't have direct access, we query through the public API.
-    // The SpectraMainWindow tracks figure_tabs_ internally.
-    // We can get the active figure and count, but not the full list.
-    // TODO: Add a figures() accessor to SpectraMainWindow.
-    // For now, return empty — the detach/move logic uses find_host_for_figure.
+    for (FigureId fid : window_->open_figure_ids())
+        result.push_back(static_cast<DocumentId>(fid));
     return result;
 }
 
@@ -119,50 +114,19 @@ std::vector<DocumentId> NativeQtDockingHost::documents() const
 HostId NativeQtDockingHost::detach_document(DocumentId id)
 {
     FigureId fid = static_cast<FigureId>(id);
-    if (!window_ || fid == INVALID_FIGURE_ID)
+    if (!window_ || !registry_ || fid == INVALID_FIGURE_ID)
         return INVALID_HOST_ID;
 
-    // Remove the figure tab from this window (stops animation, detaches canvas)
-    window_->close_figure_tab(fid);
-
-    // Create a new detached window via the registry
-    if (detach_cb_)
-    {
-        return detach_cb_(this, id);
-    }
-
-    // Fallback: create via registry directly
-    if (registry_)
-    {
-        HostId new_host_id = registry_->create_detached_window();
-        if (new_host_id != INVALID_HOST_ID)
-        {
-            auto* new_host = registry_->native_host(new_host_id);
-            if (new_host)
-                new_host->add_figure_tab(fid);
-        }
-        return new_host_id;
-    }
-
-    return INVALID_HOST_ID;
+    return registry_->detach_document(fid, id_);
 }
 
 void NativeQtDockingHost::move_document(DocumentId id, HostId target_host)
 {
     FigureId fid = static_cast<FigureId>(id);
-    if (!window_ || fid == INVALID_FIGURE_ID)
+    if (!window_ || !registry_ || fid == INVALID_FIGURE_ID)
         return;
 
-    // Remove from this window
-    window_->close_figure_tab(fid);
-
-    // Add to target host
-    if (registry_)
-    {
-        auto* target = registry_->native_host(target_host);
-        if (target)
-            target->add_figure_tab(fid);
-    }
+    registry_->move_document(fid, id_, target_host);
 }
 
 // ── Layout persistence ────────────────────────────────────────────────────
@@ -180,17 +144,17 @@ static QByteArray from_base64(const std::string& s)
 DockLayoutState NativeQtDockingHost::save_layout() const
 {
     DockLayoutState state;
-    state.provider        = "native";
+    state.provider         = "native";
     state.provider_version = "1.0";
 
     if (!window_)
         return state;
 
     DockLayoutState::DockWindowState ws;
-    ws.host_id          = id_;
-    ws.state_base64     = to_base64(window_->saveState());
-    ws.geometry_base64  = to_base64(window_->saveGeometry());
-    ws.title            = title();
+    ws.host_id         = id_;
+    ws.state_base64    = to_base64(window_->saveState());
+    ws.geometry_base64 = to_base64(window_->saveGeometry());
+    ws.title           = title();
     state.windows.push_back(ws);
 
     return state;
@@ -232,20 +196,14 @@ void NativeQtDockingHost::set_title(const std::string& title)
 
 // ── Native-specific ───────────────────────────────────────────────────────
 
-void NativeQtDockingHost::add_figure_tab(FigureId fid)
+bool NativeQtDockingHost::add_figure_tab(FigureId fid)
 {
-    if (window_)
-        window_->add_figure_tab(fid);
+    return window_ && !window_->canvas_for(fid) && window_->add_figure_tab(fid) >= 0;
 }
 
-FigureId NativeQtDockingHost::remove_figure_tab(FigureId fid)
+bool NativeQtDockingHost::release_figure_tab(FigureId fid)
 {
-    if (window_)
-    {
-        window_->close_figure_tab(fid);
-        return fid;
-    }
-    return INVALID_FIGURE_ID;
+    return window_ && window_->release_figure_tab(fid);
 }
 
 }   // namespace spectra::adapters::qt

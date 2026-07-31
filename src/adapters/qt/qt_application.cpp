@@ -19,6 +19,7 @@
 #include "ui/workspace/workspace_autosave.hpp"
 #include "ui/workspace/figure_serializer.hpp"
 #include "ui/automation/automation_json.hpp"
+#include "ui/app/perf_metrics.hpp"
 #include "ui/plot/plot_annotations.hpp"
 #include "ui/data/clipboard_export.hpp"
 #include "ui/data/html_table_export.hpp"
@@ -32,9 +33,11 @@
 
 #include <QObject>
 #include <QCoreApplication>
+#include <QBuffer>
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QPixmap>
+#include <QScreen>
 #include <QTimer>
 #include <QClipboard>
 #include <QApplication>
@@ -60,11 +63,104 @@
 #include <thread>
 
 #ifdef __unix__
-#include <unistd.h>
+    #include <unistd.h>
 #endif
 
 namespace spectra::adapters::qt
 {
+
+namespace
+{
+
+bool belongs_to_window(const QWidget* widget, const QWidget* root)
+{
+    if (!widget || !root)
+        return false;
+    if (widget == root)
+        return true;
+
+    for (const QWidget* parent = widget->parentWidget(); parent; parent = parent->parentWidget())
+    {
+        if (parent == root)
+            return true;
+    }
+
+    const QWindow* root_window = root->windowHandle();
+    for (const QWindow* transient = widget->windowHandle(); transient;
+         transient                = transient->transientParent())
+    {
+        if (transient == root_window)
+            return true;
+    }
+    return false;
+}
+
+QRect widget_screen_rect(const QWidget* widget)
+{
+    return widget ? QRect(widget->mapToGlobal(QPoint(0, 0)), widget->size()) : QRect{};
+}
+
+QtCaptureResult capture_screen_surface(QWidget*           root,
+                                       QWindow*           canvas,
+                                       QtCaptureScope     scope,
+                                       const std::string& path)
+{
+    QRect    bounds;
+    QScreen* screen = nullptr;
+    if (scope == QtCaptureScope::Canvas)
+    {
+        if (!canvas || !canvas->isVisible() || !canvas->isExposed())
+            return {};
+        bounds = QRect(canvas->mapToGlobal(QPoint(0, 0)), canvas->size());
+        screen = canvas->screen();
+    }
+    else
+    {
+        if (!root || !root->isVisible())
+            return {};
+        bounds = widget_screen_rect(root);
+        screen = root->screen();
+
+        // Dialogs and popups are separate top-level windows. Include the visible
+        // surfaces owned by this application window in the captured region.
+        for (QWidget* top_level : QApplication::topLevelWidgets())
+        {
+            if (!top_level || !top_level->isVisible() || !belongs_to_window(top_level, root))
+                continue;
+            bounds = bounds.united(widget_screen_rect(top_level));
+        }
+    }
+
+    if (!screen || bounds.isEmpty())
+        return {};
+
+    // QWindow-backed Vulkan canvases are native children and are absent from
+    // QWidget::grab(). Capture the composed screen pixels instead so the image
+    // matches what the user sees, including owned popup/dialog surfaces.
+    const QPixmap pixmap =
+        screen->grabWindow(0, bounds.x(), bounds.y(), bounds.width(), bounds.height());
+    if (pixmap.isNull())
+        return {};
+
+    QByteArray png;
+    QBuffer    buffer(&png);
+    if (!buffer.open(QIODevice::WriteOnly) || !pixmap.save(&buffer, "PNG"))
+        return {};
+
+    QtCaptureResult result;
+    result.width      = static_cast<uint32_t>(pixmap.width());
+    result.height     = static_cast<uint32_t>(pixmap.height());
+    result.png_base64 = png.toBase64().toStdString();
+    if (!path.empty())
+    {
+        if (!pixmap.save(QString::fromStdString(path), "PNG"))
+            return {};
+        result.path = path;
+    }
+    return result;
+}
+
+}   // namespace
 
 QtApplicationController::QtApplicationController() = default;
 
@@ -187,6 +283,15 @@ bool QtApplicationController::init()
                 main_window_->add_figure_tab(id);
             return id;
         });
+    automation_adapter_->set_switch_figure(
+        [this](FigureId id) -> bool
+        {
+            if (!main_window_)
+                return false;
+            if (!main_window_->canvas_for(id))
+                return main_window_->add_figure_tab(id) >= 0;
+            return main_window_->central_view()->activate_figure(id);
+        });
     automation_adapter_->set_get_state(
         [this]() -> std::string
         {
@@ -225,15 +330,19 @@ bool QtApplicationController::init()
             state << "]}";
             return state.str();
         });
-    automation_adapter_->set_capture_screenshot(
-        [this](const std::string& path) -> std::string
+    automation_adapter_->set_list_menus(
+        [this]() -> std::string {
+            return main_window_ ? main_window_->automation_menu_state()
+                                : std::string{R"({"menus":[]})"};
+        });
+    automation_adapter_->set_capture_surface(
+        [this](QtCaptureScope scope, const std::string& path) -> QtCaptureResult
         {
             if (!main_window_)
                 return {};
-            const QPixmap capture = main_window_->grab();
-            if (capture.isNull() || !capture.save(QString::fromStdString(path), "PNG"))
-                return {};
-            return path;
+            auto*    canvas        = main_window_->canvas_for(main_window_->active_figure_id());
+            QWindow* canvas_window = canvas ? canvas->vulkanWindow() : nullptr;
+            return capture_screen_surface(main_window_.get(), canvas_window, scope, path);
         });
     automation_adapter_->set_resize_window(
         [this](uint32_t width, uint32_t height)
@@ -249,6 +358,22 @@ bool QtApplicationController::init()
             return {static_cast<uint32_t>(main_window_->width()),
                     static_cast<uint32_t>(main_window_->height())};
         });
+    automation_adapter_->set_frame_callbacks(
+        [this](uint32_t count) -> uint32_t
+        {
+            if (!main_window_)
+                return 0;
+            auto* canvas = main_window_->canvas_for(main_window_->active_figure_id());
+            if (!canvas || !canvas->vulkanWindow())
+                return 0;
+
+            const uint64_t before = PerfMetrics::instance().frame_count();
+            for (uint32_t i = 0; i < count; ++i)
+                canvas->vulkanWindow()->renderFrame();
+            const uint64_t rendered = PerfMetrics::instance().frame_count() - before;
+            return static_cast<uint32_t>(std::min<uint64_t>(rendered, count));
+        },
+        []() -> uint64_t { return PerfMetrics::instance().frame_count(); });
     const char* env_auto = std::getenv("SPECTRA_AUTOMATION");
     if (env_auto && *env_auto)
     {
@@ -318,34 +443,42 @@ bool QtApplicationController::init()
 
             return Workspace::serialize_json(data);
         });
+    window_registry_->set_document_changed_callback(
+        [this]()
+        {
+            if (autosave_)
+                autosave_->mark_dirty();
+        });
 
     // 7. Create the main window
     main_window_ = std::make_unique<SpectraMainWindow>(runtime_.get(),
                                                        &figure_registry(),
                                                        action_bridge_.get(),
                                                        services_.get());
+    automation_adapter_->set_input_target(
+        main_window_.get(),
+        [this]() -> QWindow*
+        {
+            if (!main_window_)
+                return nullptr;
+            auto* canvas = main_window_->canvas_for(main_window_->active_figure_id());
+            return canvas ? canvas->vulkanWindow() : nullptr;
+        });
 
     // 8. Register the main window with the registry
     window_registry_->register_window(main_window_.get());
 
-    // 9. Wire up figure detach requests from the main window
-    //    Use main_window_ as context since QtApplicationController is not a QObject.
-    QObject::connect(main_window_.get(),
-                     &SpectraMainWindow::figure_detach_requested,
+    auto* autosave_timer = new QTimer(main_window_.get());
+    autosave_timer->setObjectName("workspace_autosave_timer");
+    QObject::connect(autosave_timer,
+                     &QTimer::timeout,
                      main_window_.get(),
-                     [this](FigureId fid)
+                     [this]()
                      {
-                         if (window_registry_)
-                         {
-                             HostId new_host = window_registry_->create_detached_window();
-                             if (new_host != INVALID_HOST_ID)
-                             {
-                                 auto* host = window_registry_->native_host(new_host);
-                                 if (host)
-                                     host->add_figure_tab(fid);
-                             }
-                         }
+                         if (autosave_)
+                             autosave_->tick();
                      });
+    autosave_timer->start(1000);
 
     initialized_ = true;
     SPECTRA_LOG_INFO("qt_app", "QtApplicationController initialized");
@@ -425,8 +558,13 @@ void QtApplicationController::register_qt_commands()
             const FigureId id = main_window_->active_figure_id();
             if (id == INVALID_FIGURE_ID)
                 return;
-            main_window_->close_figure_tab(id);
-            figure_registry().unregister_figure(id);
+            if (window_registry_)
+                window_registry_->close_document(id);
+            else
+            {
+                main_window_->close_figure_tab(id);
+                figure_registry().unregister_figure(id);
+            }
         });
 
     auto activate_relative = [this](int delta)
@@ -538,7 +676,7 @@ void QtApplicationController::register_qt_commands()
     auto set_tool = [this](ToolMode tool)
     {
         if (main_window_)
-            main_window_->central_view()->set_active_tool(tool);
+            main_window_->set_active_tool(tool);
     };
     add("tool.select", "Select Tool", "V", "Tools", [set_tool]() { set_tool(ToolMode::Select); });
     add("tool.pan", "Pan Tool", "H", "Tools", [set_tool]() { set_tool(ToolMode::Pan); });
@@ -607,16 +745,28 @@ void QtApplicationController::register_qt_commands()
         if (redraw_request_)
             redraw_request_->request_redraw();
     };
-    add("theme.night", "Switch to Night Theme", "", "Theme",
+    add("theme.night",
+        "Switch to Night Theme",
+        "",
+        "Theme",
         [apply_theme]() { apply_theme("night"); });
-    add("theme.dark", "Switch to Dark Theme", "", "Theme",
+    add("theme.dark",
+        "Switch to Dark Theme",
+        "",
+        "Theme",
         [apply_theme]() { apply_theme("dark"); });
-    add("theme.light", "Switch to Light Theme", "", "Theme",
+    add("theme.light",
+        "Switch to Light Theme",
+        "",
+        "Theme",
         [apply_theme]() { apply_theme("light"); });
-    add("theme.toggle", "Toggle Dark/Light Theme", "", "Theme",
+    add("theme.toggle",
+        "Toggle Dark/Light Theme",
+        "",
+        "Theme",
         [this]()
         {
-            auto& tm = services_->theme();
+            auto&       tm      = services_->theme();
             std::string current = tm.current_theme_name();
             std::string next    = (current == "dark") ? "light" : "dark";
             tm.set_theme(next);
@@ -633,7 +783,10 @@ void QtApplicationController::register_qt_commands()
         return fig->axes_mut()[0].get();
     };
 
-    add("view.home", "Home (Restore Original View)", "Home", "View",
+    add("view.home",
+        "Home (Restore Original View)",
+        "Home",
+        "View",
         [active_figure, request_redraw]()
         {
             Figure* fig = active_figure();
@@ -648,7 +801,10 @@ void QtApplicationController::register_qt_commands()
             request_redraw();
         });
 
-    add("view.zoom_in", "Zoom In", "", "View",
+    add("view.zoom_in",
+        "Zoom In",
+        "",
+        "View",
         [active_axes, request_redraw]()
         {
             Axes* ax = active_axes();
@@ -665,7 +821,10 @@ void QtApplicationController::register_qt_commands()
             request_redraw();
         });
 
-    add("view.zoom_out", "Zoom Out", "", "View",
+    add("view.zoom_out",
+        "Zoom Out",
+        "",
+        "View",
         [active_axes, request_redraw]()
         {
             Axes* ax = active_axes();
@@ -694,7 +853,10 @@ void QtApplicationController::register_qt_commands()
         request_redraw();
     };
 
-    add("view.pan_left", "Pan Left", "Left", "View",
+    add("view.pan_left",
+        "Pan Left",
+        "Left",
+        "View",
         [pan_axes, active_axes]()
         {
             Axes* ax = active_axes();
@@ -703,7 +865,10 @@ void QtApplicationController::register_qt_commands()
             auto xl = ax->x_limits();
             pan_axes(-(xl.max - xl.min) * 0.1f, 0.0f);
         });
-    add("view.pan_right", "Pan Right", "Right", "View",
+    add("view.pan_right",
+        "Pan Right",
+        "Right",
+        "View",
         [pan_axes, active_axes]()
         {
             Axes* ax = active_axes();
@@ -712,7 +877,10 @@ void QtApplicationController::register_qt_commands()
             auto xl = ax->x_limits();
             pan_axes((xl.max - xl.min) * 0.1f, 0.0f);
         });
-    add("view.pan_up", "Pan Up", "Up", "View",
+    add("view.pan_up",
+        "Pan Up",
+        "Up",
+        "View",
         [pan_axes, active_axes]()
         {
             Axes* ax = active_axes();
@@ -721,7 +889,10 @@ void QtApplicationController::register_qt_commands()
             auto yl = ax->y_limits();
             pan_axes(0.0f, (yl.max - yl.min) * 0.1f);
         });
-    add("view.pan_down", "Pan Down", "Down", "View",
+    add("view.pan_down",
+        "Pan Down",
+        "Down",
+        "View",
         [pan_axes, active_axes]()
         {
             Axes* ax = active_axes();
@@ -731,7 +902,10 @@ void QtApplicationController::register_qt_commands()
             pan_axes(0.0f, -(yl.max - yl.min) * 0.1f);
         });
 
-    add("view.toggle_grid", "Toggle Grid", "G", "View",
+    add("view.toggle_grid",
+        "Toggle Grid",
+        "G",
+        "View",
         [active_figure, request_redraw]()
         {
             Figure* fig = active_figure();
@@ -743,7 +917,10 @@ void QtApplicationController::register_qt_commands()
             request_redraw();
         });
 
-    add("view.toggle_crosshair", "Toggle Crosshair", "C", "View",
+    add("view.toggle_crosshair",
+        "Toggle Crosshair",
+        "C",
+        "View",
         [request_redraw]()
         {
             // Crosshair requires DataInteraction (ImGui-specific).
@@ -751,18 +928,24 @@ void QtApplicationController::register_qt_commands()
             (void)request_redraw;
         });
 
-    add("view.toggle_legend", "Toggle Legend", "L", "View",
+    add("view.toggle_legend",
+        "Toggle Legend",
+        "L",
+        "View",
         [active_figure, request_redraw]()
         {
             Figure* fig = active_figure();
             if (!fig)
                 return;
-            bool current = fig->legend().visible;
+            bool current          = fig->legend().visible;
             fig->legend().visible = !current;
             request_redraw();
         });
 
-    add("view.toggle_border", "Toggle Border", "B", "View",
+    add("view.toggle_border",
+        "Toggle Border",
+        "B",
+        "View",
         [active_figure, request_redraw]()
         {
             Figure* fig = active_figure();
@@ -774,7 +957,10 @@ void QtApplicationController::register_qt_commands()
             request_redraw();
         });
 
-    add("view.reset_splits", "Reset All Splits", "", "View",
+    add("view.reset_splits",
+        "Reset All Splits",
+        "",
+        "View",
         [this]()
         {
             if (main_window_)
@@ -782,32 +968,83 @@ void QtApplicationController::register_qt_commands()
         });
 
     // ── Animation commands ────────────────────────────────────────────────
-    add("anim.toggle_play", "Toggle Play/Pause", "Space", "Animation",
-        [this]() { if (timeline_editor_) timeline_editor_->toggle_play(); });
-    add("anim.step_back", "Step Frame Back", "[", "Animation",
-        [this]() { if (timeline_editor_) timeline_editor_->step_backward(); });
-    add("anim.step_forward", "Step Frame Forward", "]", "Animation",
-        [this]() { if (timeline_editor_) timeline_editor_->step_forward(); });
-    add("anim.stop", "Stop Playback", "", "Animation",
-        [this]() { if (timeline_editor_) timeline_editor_->stop(); });
-    add("anim.go_to_start", "Go to Start", "", "Animation",
-        [this]() { if (timeline_editor_) timeline_editor_->set_playhead(0.0f); });
-    add("anim.go_to_end", "Go to End", "", "Animation",
-        [this]() { if (timeline_editor_) timeline_editor_->set_playhead(timeline_editor_->duration()); });
+    add("anim.toggle_play",
+        "Toggle Play/Pause",
+        "Space",
+        "Animation",
+        [this]()
+        {
+            if (timeline_editor_)
+                timeline_editor_->toggle_play();
+        });
+    add("anim.step_back",
+        "Step Frame Back",
+        "[",
+        "Animation",
+        [this]()
+        {
+            if (timeline_editor_)
+                timeline_editor_->step_backward();
+        });
+    add("anim.step_forward",
+        "Step Frame Forward",
+        "]",
+        "Animation",
+        [this]()
+        {
+            if (timeline_editor_)
+                timeline_editor_->step_forward();
+        });
+    add("anim.stop",
+        "Stop Playback",
+        "",
+        "Animation",
+        [this]()
+        {
+            if (timeline_editor_)
+                timeline_editor_->stop();
+        });
+    add("anim.go_to_start",
+        "Go to Start",
+        "",
+        "Animation",
+        [this]()
+        {
+            if (timeline_editor_)
+                timeline_editor_->set_playhead(0.0f);
+        });
+    add("anim.go_to_end",
+        "Go to End",
+        "",
+        "Animation",
+        [this]()
+        {
+            if (timeline_editor_)
+                timeline_editor_->set_playhead(timeline_editor_->duration());
+        });
 
     // ── App commands ──────────────────────────────────────────────────────
-    add("app.command_palette", "Command Palette", "Ctrl+K", "App",
+    add("app.command_palette",
+        "Command Palette",
+        "Ctrl+K",
+        "App",
         [this]()
         {
             if (main_window_)
                 main_window_->open_command_palette();
         });
-    add("app.cancel", "Cancel / Close", "Escape", "App",
+    add("app.cancel",
+        "Cancel / Close",
+        "Escape",
+        "App",
         []()
         {
             // Command palette handles its own escape; this is a fallback.
         });
-    add("app.new_window", "New Window", "Ctrl+Shift+N", "App",
+    add("app.new_window",
+        "New Window",
+        "Ctrl+Shift+N",
+        "App",
         [this]()
         {
             if (window_registry_)
@@ -816,12 +1053,17 @@ void QtApplicationController::register_qt_commands()
                 (void)new_host;
             }
         });
-    add("help.show", "Help / Documentation", "F1", "App",
+    add("help.show",
+        "Help / Documentation",
+        "F1",
+        "App",
         []()
         {
             constexpr const char* url = "https://danlil240.github.io/Spectra/index.html";
 #if defined(_WIN32)
-            std::thread([url]() { std::system((std::string("start \"\" \"") + url + "\"").c_str()); }).detach();
+            std::thread([url]()
+                        { std::system((std::string("start \"\" \"") + url + "\"").c_str()); })
+                .detach();
 #elif defined(__APPLE__)
             std::thread([url]() { std::system((std::string("open \"") + url + "\"").c_str()); }).detach();
 #elif defined(__unix__)
@@ -836,35 +1078,46 @@ void QtApplicationController::register_qt_commands()
         });
 
     // ── File commands ─────────────────────────────────────────────────────
-    add("file.export_png", "Export PNG", "Ctrl+Shift+S", "File",
+    add("file.export_png",
+        "Export PNG",
+        "Ctrl+Shift+S",
+        "File",
         [this, active_figure]()
         {
             Figure* fig = active_figure();
             if (!fig)
                 return;
-            QString path = QFileDialog::getSaveFileName(
-                main_window_.get(), "Export PNG",
-                "spectra_export.png", "PNG Image (*.png)");
+            QString path = QFileDialog::getSaveFileName(main_window_.get(),
+                                                        "Export PNG",
+                                                        "spectra_export.png",
+                                                        "PNG Image (*.png)");
             if (path.isEmpty())
                 return;
             fig->save_png(path.toStdString());
         });
 
-    add("file.export_svg", "Export SVG", "Ctrl+Shift+Alt+S", "File",
+    add("file.export_svg",
+        "Export SVG",
+        "Ctrl+Shift+Alt+S",
+        "File",
         [this, active_figure]()
         {
             Figure* fig = active_figure();
             if (!fig)
                 return;
-            QString path = QFileDialog::getSaveFileName(
-                main_window_.get(), "Export SVG",
-                "spectra_export.svg", "SVG Image (*.svg)");
+            QString path = QFileDialog::getSaveFileName(main_window_.get(),
+                                                        "Export SVG",
+                                                        "spectra_export.svg",
+                                                        "SVG Image (*.svg)");
             if (path.isEmpty())
                 return;
             fig->save_svg(path.toStdString());
         });
 
-    add("file.copy_to_clipboard", "Copy Figure to Clipboard", "Ctrl+Shift+C", "File",
+    add("file.copy_to_clipboard",
+        "Copy Figure to Clipboard",
+        "Ctrl+Shift+C",
+        "File",
         [active_figure]()
         {
             Figure* fig = active_figure();
@@ -873,15 +1126,18 @@ void QtApplicationController::register_qt_commands()
             fig->copy_to_clipboard();
         });
 
-    add("file.save_workspace", "Save Workspace", "", "File",
+    add("file.save_workspace",
+        "Save Workspace",
+        "",
+        "File",
         [this]()
         {
             if (!workspace_bridge_)
                 return;
             WorkspaceData data;
-            data.version = WorkspaceData::FORMAT_VERSION;
-            auto& reg = figure_registry();
-            auto  ids = reg.all_ids();
+            data.version             = WorkspaceData::FORMAT_VERSION;
+            auto&                reg = figure_registry();
+            auto                 ids = reg.all_ids();
             std::vector<Figure*> figures;
             for (auto id : ids)
             {
@@ -894,26 +1150,37 @@ void QtApplicationController::register_qt_commands()
             {
                 FigureId active_id = main_window_->active_figure_id();
                 for (size_t i = 0; i < ids.size(); ++i)
-                    if (ids[i] == active_id) { active_index = i; break; }
+                    if (ids[i] == active_id)
+                    {
+                        active_index = i;
+                        break;
+                    }
             }
-            std::string theme_name = services_->theme().current_theme_name();
-            bool  inspector_visible = main_window_ && main_window_->is_inspector_open();
-            float inspector_width   = 300.0f;
-            bool  nav_rail_expanded = main_window_ && !main_window_->is_nav_rail_compact();
-            data = Workspace::capture(figures, active_index, theme_name,
-                                       inspector_visible, inspector_width, nav_rail_expanded);
+            std::string theme_name        = services_->theme().current_theme_name();
+            bool        inspector_visible = main_window_ && main_window_->is_inspector_open();
+            float       inspector_width   = 300.0f;
+            bool        nav_rail_expanded = main_window_ && !main_window_->is_nav_rail_compact();
+            data                          = Workspace::capture(figures,
+                                      active_index,
+                                      theme_name,
+                                      inspector_visible,
+                                      inspector_width,
+                                      nav_rail_expanded);
             workspace_bridge_->capture_layout(data);
             Workspace::save(Workspace::default_path(), data);
         });
 
-    add("file.load_workspace", "Load Workspace", "", "File",
+    add("file.load_workspace",
+        "Load Workspace",
+        "",
+        "File",
         [this]()
         {
             WorkspaceData data;
             if (!Workspace::load(Workspace::default_path(), data))
                 return;
-            auto& reg = figure_registry();
-            auto  ids = reg.all_ids();
+            auto&                reg = figure_registry();
+            auto                 ids = reg.all_ids();
             std::vector<Figure*> figures;
             for (auto id : ids)
             {
@@ -930,7 +1197,10 @@ void QtApplicationController::register_qt_commands()
                 redraw_request_->request_redraw();
         });
 
-    add("file.save_figure", "Save Figure", "", "File",
+    add("file.save_figure",
+        "Save Figure",
+        "",
+        "File",
         [active_figure]()
         {
             Figure* fig = active_figure();
@@ -939,7 +1209,10 @@ void QtApplicationController::register_qt_commands()
             FigureSerializer::save_with_dialog(*fig);
         });
 
-    add("file.load_figure", "Load Figure", "", "File",
+    add("file.load_figure",
+        "Load Figure",
+        "",
+        "File",
         [active_figure, request_redraw]()
         {
             Figure* fig = active_figure();
@@ -949,20 +1222,37 @@ void QtApplicationController::register_qt_commands()
             for (auto& ax : fig->all_axes_mut())
                 if (ax)
                     for (auto& s : ax->series_mut())
-                        if (s) s->mark_dirty();
+                        if (s)
+                            s->mark_dirty();
             request_redraw();
         });
 
     // ── Panel commands ────────────────────────────────────────────────────
-    add("panel.toggle_nav_rail", "Toggle Navigation Rail", "", "Panel",
-        []() { /* TODO: Add set_nav_rail_compact() to SpectraMainWindow */ });
-    add("panel.toggle_curve_editor", "Toggle Curve Editor", "", "Panel",
+    add("panel.toggle_nav_rail",
+        "Toggle Navigation Rail",
+        "",
+        "Panel",
+        [this]()
+        {
+            if (main_window_)
+                main_window_->set_nav_rail_visible(!main_window_->is_nav_rail_visible());
+        });
+    add("panel.toggle_curve_editor",
+        "Toggle Curve Editor",
+        "",
+        "Panel",
         []() { /* TODO: Implement curve editor panel in Qt */ });
-    add("panel.toggle_plugins", "Toggle Plugins Panel", "", "Panel",
+    add("panel.toggle_plugins",
+        "Toggle Plugins Panel",
+        "",
+        "Panel",
         [invoke_window_slot]() { invoke_window_slot("on_toggle_plugins"); });
 
     // ── Plot commands ─────────────────────────────────────────────────────
-    add("plot.hline_zero", "Add Y = 0 Line", "", "Plot",
+    add("plot.hline_zero",
+        "Add Y = 0 Line",
+        "",
+        "Plot",
         [active_axes, request_redraw]()
         {
             Axes* ax = active_axes();
@@ -972,7 +1262,10 @@ void QtApplicationController::register_qt_commands()
                 request_redraw();
             }
         });
-    add("plot.vline_zero", "Add X = 0 Line", "", "Plot",
+    add("plot.vline_zero",
+        "Add X = 0 Line",
+        "",
+        "Plot",
         [active_axes, request_redraw]()
         {
             Axes* ax = active_axes();
@@ -982,37 +1275,59 @@ void QtApplicationController::register_qt_commands()
                 request_redraw();
             }
         });
-    add("plot.hline", "Add Horizontal Line...", "", "Plot",
+    add("plot.hline",
+        "Add Horizontal Line...",
+        "",
+        "Plot",
         [this, active_axes]()
         {
             Axes* ax = active_axes();
             if (!ax)
                 return;
             bool   ok    = false;
-            double value = QInputDialog::getDouble(
-                main_window_.get(), "Add Horizontal Line",
-                "Y value:", 0.0, -2147483647.0, 2147483647.0, 3, &ok);
+            double value = QInputDialog::getDouble(main_window_.get(),
+                                                   "Add Horizontal Line",
+                                                   "Y value:",
+                                                   0.0,
+                                                   -2147483647.0,
+                                                   2147483647.0,
+                                                   3,
+                                                   &ok);
             if (ok)
                 ui::add_horizontal_reference_line(*ax, static_cast<float>(value));
         });
-    add("plot.vline", "Add Vertical Line...", "", "Plot",
+    add("plot.vline",
+        "Add Vertical Line...",
+        "",
+        "Plot",
         [this, active_axes]()
         {
             Axes* ax = active_axes();
             if (!ax)
                 return;
             bool   ok    = false;
-            double value = QInputDialog::getDouble(
-                main_window_.get(), "Add Vertical Line",
-                "X value:", 0.0, -2147483647.0, 2147483647.0, 3, &ok);
+            double value = QInputDialog::getDouble(main_window_.get(),
+                                                   "Add Vertical Line",
+                                                   "X value:",
+                                                   0.0,
+                                                   -2147483647.0,
+                                                   2147483647.0,
+                                                   3,
+                                                   &ok);
             if (ok)
                 ui::add_vertical_reference_line(*ax, static_cast<float>(value));
         });
-    add("plot.function", "Plot Function...", "", "Plot",
+    add("plot.function",
+        "Plot Function...",
+        "",
+        "Plot",
         []() { /* TODO: Implement function plot dialog in Qt */ });
 
     // ── Data / Accessibility commands ─────────────────────────────────────
-    add("data.copy_to_clipboard", "Copy Data to Clipboard (TSV)", "Ctrl+Shift+D", "Data",
+    add("data.copy_to_clipboard",
+        "Copy Data to Clipboard (TSV)",
+        "Ctrl+Shift+D",
+        "Data",
         [active_figure]()
         {
             Figure* fig = active_figure();
@@ -1035,7 +1350,10 @@ void QtApplicationController::register_qt_commands()
             }
         });
 
-    add("data.export_html_table", "Export Accessible HTML Table", "", "Data",
+    add("data.export_html_table",
+        "Export Accessible HTML Table",
+        "",
+        "Data",
         [active_figure]()
         {
             Figure* fig = active_figure();
@@ -1048,7 +1366,10 @@ void QtApplicationController::register_qt_commands()
                 SPECTRA_LOG_WARN("accessibility", "Failed to write HTML table to '{}'", path);
         });
 
-    add("accessibility.sonify_series", "Sonify Active Series (Export WAV)", "", "Accessibility",
+    add("accessibility.sonify_series",
+        "Sonify Active Series (Export WAV)",
+        "",
+        "Accessibility",
         [active_figure]()
         {
             Figure* fig = active_figure();
@@ -1062,27 +1383,50 @@ void QtApplicationController::register_qt_commands()
                 if (sonify_axes_to_wav(*ax_ptr, path))
                     SPECTRA_LOG_INFO("accessibility", "Sonification WAV exported to '{}'", path);
                 else
-                    SPECTRA_LOG_WARN("accessibility", "Failed to sonify axes or write WAV to '{}'", path);
+                    SPECTRA_LOG_WARN("accessibility",
+                                     "Failed to sonify axes or write WAV to '{}'",
+                                     path);
                 break;
             }
         });
 
     // ── Series commands ───────────────────────────────────────────────────
-    add("series.cycle_selection", "Cycle Series Selection", "Tab", "Series",
+    add("series.cycle_selection",
+        "Cycle Series Selection",
+        "Tab",
+        "Series",
         []() { /* TODO: Implement series selection in Qt canvas */ });
-    add("series.copy", "Copy Series", "Ctrl+C", "Series",
+    add("series.copy",
+        "Copy Series",
+        "Ctrl+C",
+        "Series",
         []() { /* TODO: Implement series clipboard in Qt */ });
-    add("series.cut", "Cut Series", "Ctrl+X", "Series",
+    add("series.cut",
+        "Cut Series",
+        "Ctrl+X",
+        "Series",
         []() { /* TODO: Implement series clipboard in Qt */ });
-    add("series.paste", "Paste Series", "Ctrl+V", "Series",
+    add("series.paste",
+        "Paste Series",
+        "Ctrl+V",
+        "Series",
         []() { /* TODO: Implement series clipboard in Qt */ });
-    add("series.delete", "Delete Series", "Delete", "Series",
+    add("series.delete",
+        "Delete Series",
+        "Delete",
+        "Series",
         []() { /* TODO: Implement series selection in Qt canvas */ });
-    add("series.deselect", "Deselect Series", "Escape", "Series",
+    add("series.deselect",
+        "Deselect Series",
+        "Escape",
+        "Series",
         []() { /* TODO: Implement series selection in Qt canvas */ });
 
     // ── Figure move to window ─────────────────────────────────────────────
-    add("figure.move_to_window", "Move Figure to Window", "Ctrl+Shift+M", "App",
+    add("figure.move_to_window",
+        "Move Figure to Window",
+        "Ctrl+Shift+M",
+        "App",
         [this]()
         {
             if (!main_window_ || !window_registry_)
@@ -1090,13 +1434,9 @@ void QtApplicationController::register_qt_commands()
             FigureId fid = main_window_->active_figure_id();
             if (fid == INVALID_FIGURE_ID)
                 return;
-            HostId new_host = window_registry_->create_detached_window();
-            if (new_host != INVALID_HOST_ID)
-            {
-                auto* host = window_registry_->native_host(new_host);
-                if (host)
-                    host->add_figure_tab(fid);
-            }
+            const HostId source = window_registry_->find_host_for_figure(fid);
+            if (source != INVALID_HOST_ID)
+                window_registry_->detach_document(fid, source);
         });
 
     services_->shortcuts().register_defaults();
@@ -1107,6 +1447,11 @@ void QtApplicationController::shutdown()
 {
     if (!initialized_)
         return;
+
+    // Persist while the live windows and docking registry still describe the
+    // session. Saving after destroying them drops document/window topology.
+    if (autosave_ && autosave_->has_unsaved_changes())
+        autosave_->save_now();
 
     // Destroy main window first (it holds canvas widgets with Vulkan surfaces)
     main_window_.reset();
@@ -1120,9 +1465,6 @@ void QtApplicationController::shutdown()
         automation_adapter_->stop();
     automation_adapter_.reset();
 
-    // Save workspace on shutdown if autosave is configured
-    if (autosave_ && autosave_->has_unsaved_changes())
-        autosave_->save_now();
     autosave_.reset();
 
     // Shut down services

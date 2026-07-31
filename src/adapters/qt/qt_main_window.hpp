@@ -12,6 +12,7 @@
 
 #include <QMainWindow>
 
+#include <string>
 #include <vector>
 
 #include <spectra/fwd.hpp>
@@ -28,6 +29,7 @@ class FigureRegistry;
 class InputHandler;
 class CommandRegistry;
 class ApplicationServices;
+enum class ToolMode;
 }   // namespace spectra
 
 namespace spectra::adapters::qt
@@ -86,8 +88,13 @@ class SpectraMainWindow : public QMainWindow
     // Add a figure as a new tab.  Returns the tab index.
     int add_figure_tab(FigureId id);
 
-    // Close the tab containing the given figure.
-    void close_figure_tab(FigureId id);
+    // Close the tab containing the given figure and notify the application
+    // document lifecycle. Returns false when the figure is not open.
+    bool close_figure_tab(FigureId id);
+
+    // Remove a tab without closing its figure model. Used only for a
+    // validated cross-window transfer.
+    bool release_figure_tab(FigureId id);
 
     // Get the FigureId of the currently active tab.
     FigureId active_figure_id() const;
@@ -101,6 +108,9 @@ class SpectraMainWindow : public QMainWindow
     // Get all FigureIds currently open as tabs in this window.
     std::vector<FigureId> open_figure_ids() const;
 
+    // Snapshot the visible Qt menu hierarchy for automation.
+    std::string automation_menu_state() const;
+
     // Workspace state accessors (for autosave)
     bool is_inspector_open() const;
     bool is_nav_rail_compact() const;
@@ -109,11 +119,11 @@ class SpectraMainWindow : public QMainWindow
 
     QtSplitViewContainer* central_view() { return central_view_; }
 
-    bool split_right();
-    bool split_down();
-    bool close_split();
-    void reset_splits();
-    bool is_split() const;
+    bool   split_right();
+    bool   split_down();
+    bool   close_split();
+    void   reset_splits();
+    bool   is_split() const;
     size_t pane_count() const;
 
     // ── Welcome page ───────────────────────────────────────────────────────
@@ -124,20 +134,23 @@ class SpectraMainWindow : public QMainWindow
     // ── Status bar ─────────────────────────────────────────────────────────
 
     void set_status(const std::string& message);
+    void set_active_tool(ToolMode tool);
+    void set_nav_rail_visible(bool visible);
+    bool is_nav_rail_visible() const;
 
     // ── Panels ─────────────────────────────────────────────────────────────
 
-    QtInspectorWidget*      inspector_panel()  { return inspector_panel_; }
-    QtTopicsWidget*         topics_panel()     { return topics_panel_; }
-    QtSettingsWidget*       settings_panel()   { return settings_panel_; }
-    QtTimelineWidget*       timeline_panel()   { return timeline_panel_; }
-    QtExportWidget*         export_panel()     { return export_panel_; }
-    QtShortcutWidget*       shortcut_panel()   { return shortcut_panel_; }
-    QtTransformWidget*      transform_panel()  { return transform_panel_; }
-    QtDataEditorWidget*     data_editor_panel() { return data_editor_panel_; }
-    QtAccessibilityWidget*  accessibility_panel() { return accessibility_panel_; }
-    QtPluginPanelWidget*    plugin_panel()     { return plugin_panel_; }
-    QtPluginsWidget*        plugins_panel()    { return plugins_panel_; }
+    QtInspectorWidget*     inspector_panel() { return inspector_panel_; }
+    QtTopicsWidget*        topics_panel() { return topics_panel_; }
+    QtSettingsWidget*      settings_panel() { return settings_panel_; }
+    QtTimelineWidget*      timeline_panel() { return timeline_panel_; }
+    QtExportWidget*        export_panel() { return export_panel_; }
+    QtShortcutWidget*      shortcut_panel() { return shortcut_panel_; }
+    QtTransformWidget*     transform_panel() { return transform_panel_; }
+    QtDataEditorWidget*    data_editor_panel() { return data_editor_panel_; }
+    QtAccessibilityWidget* accessibility_panel() { return accessibility_panel_; }
+    QtPluginPanelWidget*   plugin_panel() { return plugin_panel_; }
+    QtPluginsWidget*       plugins_panel() { return plugins_panel_; }
 
     // ── Command palette ────────────────────────────────────────────────────
 
@@ -189,6 +202,8 @@ class SpectraMainWindow : public QMainWindow
     void load_fonts();
     void build_spectra_ui();
     void update_compact_mode();
+    void sync_active_tool_ui();
+    void set_timeline_visible(bool visible);
 
    protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -205,44 +220,50 @@ class SpectraMainWindow : public QMainWindow
     QLabel*               status_label_ = nullptr;
 
     // New Spectra custom UI components
-    SpectraTitleBar*          title_bar_       = nullptr;
-    SpectraAppHeader*         app_header_      = nullptr;
-    SpectraNavRail*           nav_rail_        = nullptr;
-    SpectraDocumentTabBar*    doc_tab_bar_     = nullptr;
-    SpectraStatusBar*         spectra_status_  = nullptr;
-    SpectraInspectorDrawer*   spectra_inspector_ = nullptr;
-    SpectraCanvasFrame*       canvas_frame_    = nullptr;
-    QWidget*                  central_container_ = nullptr;
+    SpectraTitleBar*        title_bar_         = nullptr;
+    SpectraAppHeader*       app_header_        = nullptr;
+    SpectraNavRail*         nav_rail_          = nullptr;
+    SpectraDocumentTabBar*  doc_tab_bar_       = nullptr;
+    SpectraStatusBar*       spectra_status_    = nullptr;
+    SpectraInspectorDrawer* spectra_inspector_ = nullptr;
+    SpectraCanvasFrame*     canvas_frame_      = nullptr;
+    QWidget*                central_container_ = nullptr;
 
     // Menu bar
-    QMenu*   menu_file_   = nullptr;
-    QMenu*   menu_edit_   = nullptr;
-    QMenu*   menu_view_   = nullptr;
-    QMenu*   menu_figure_ = nullptr;
-    QMenu*   menu_tools_  = nullptr;
-    QMenu*   menu_data_   = nullptr;
-    QMenu*   menu_axes_   = nullptr;
-    QMenu*   menu_transforms_ = nullptr;
-    QMenu*   menu_help_   = nullptr;
-    QToolBar* toolbar_    = nullptr;
-    QAction* inspector_toggle_action_ = nullptr;
+    QMenu*    menu_file_               = nullptr;
+    QMenu*    menu_edit_               = nullptr;
+    QMenu*    menu_view_               = nullptr;
+    QMenu*    menu_figure_             = nullptr;
+    QMenu*    menu_tools_              = nullptr;
+    QMenu*    menu_data_               = nullptr;
+    QMenu*    menu_axes_               = nullptr;
+    QMenu*    menu_transforms_         = nullptr;
+    QMenu*    menu_help_               = nullptr;
+    QToolBar* toolbar_                 = nullptr;
+    QAction*  inspector_toggle_action_ = nullptr;
+
+    // Submenus
+    QMenu* menu_view_panels_ = nullptr;
+    QMenu* menu_view_splits_ = nullptr;
+    QMenu* menu_tools_theme_ = nullptr;
+    QMenu* menu_tools_anim_  = nullptr;
 
     // Dockable panels
-    QtInspectorWidget*      inspector_panel_      = nullptr;
-    QtTopicsWidget*         topics_panel_         = nullptr;
-    QtSettingsWidget*       settings_panel_       = nullptr;
-    QtTimelineWidget*       timeline_panel_       = nullptr;
-    QtExportWidget*         export_panel_         = nullptr;
-    QtShortcutWidget*       shortcut_panel_       = nullptr;
-    QtTransformWidget*      transform_panel_      = nullptr;
-    QtDataEditorWidget*     data_editor_panel_    = nullptr;
-    QtAccessibilityWidget*  accessibility_panel_  = nullptr;
-    QtPluginPanelWidget*    plugin_panel_         = nullptr;
-    QtPluginsWidget*        plugins_panel_        = nullptr;
+    QtInspectorWidget*     inspector_panel_     = nullptr;
+    QtTopicsWidget*        topics_panel_        = nullptr;
+    QtSettingsWidget*      settings_panel_      = nullptr;
+    QtTimelineWidget*      timeline_panel_      = nullptr;
+    QtExportWidget*        export_panel_        = nullptr;
+    QtShortcutWidget*      shortcut_panel_      = nullptr;
+    QtTransformWidget*     transform_panel_     = nullptr;
+    QtDataEditorWidget*    data_editor_panel_   = nullptr;
+    QtAccessibilityWidget* accessibility_panel_ = nullptr;
+    QtPluginPanelWidget*   plugin_panel_        = nullptr;
+    QtPluginsWidget*       plugins_panel_       = nullptr;
 
     // Command palette
-    QtCommandPaletteDialog* command_palette_      = nullptr;
-    QShortcut*              palette_shortcut_     = nullptr;
+    QtCommandPaletteDialog* command_palette_  = nullptr;
+    QShortcut*              palette_shortcut_ = nullptr;
 };
 
 }   // namespace spectra::adapters::qt

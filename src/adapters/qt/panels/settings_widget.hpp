@@ -43,8 +43,15 @@ class QtSettingsWidget : public QDockWidget
     QtSettingsWidget(const QtSettingsWidget&)            = delete;
     QtSettingsWidget& operator=(const QtSettingsWidget&) = delete;
 
+    void set_inspector_visible(bool visible);
+    void set_nav_rail_visible(bool visible);
+    void set_timeline_visible(bool visible);
+
    signals:
     void settings_changed();
+    void inspector_visibility_changed(bool visible);
+    void nav_rail_visibility_changed(bool visible);
+    void timeline_visibility_changed(bool visible);
 
    private slots:
     void on_theme_changed(int index);

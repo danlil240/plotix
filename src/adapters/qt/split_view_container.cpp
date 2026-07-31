@@ -30,13 +30,13 @@ namespace spectra::adapters::qt
 
 struct QtSplitViewContainer::PaneWidget
 {
-    QTabWidget*          tab_widget = nullptr;
-    FigureId             active_id  = INVALID_FIGURE_ID;
+    QTabWidget* tab_widget = nullptr;
+    FigureId    active_id  = INVALID_FIGURE_ID;
 
     struct FigureTab
     {
-        FigureId              id = INVALID_FIGURE_ID;
-        FigureCanvasWidget*   canvas  = nullptr;
+        FigureId                      id     = INVALID_FIGURE_ID;
+        FigureCanvasWidget*           canvas = nullptr;
         std::unique_ptr<InputHandler> input;
     };
     std::unordered_map<FigureId, FigureTab> figure_tabs;
@@ -47,9 +47,7 @@ struct QtSplitViewContainer::PaneWidget
 QtSplitViewContainer::QtSplitViewContainer(QtRuntime*      runtime,
                                            FigureRegistry* registry,
                                            QWidget*        parent)
-    : QWidget(parent),
-      runtime_(runtime),
-      registry_(registry),
+    : QWidget(parent), runtime_(runtime), registry_(registry),
       split_view_(std::make_unique<SplitViewManager>())
 {
     auto* layout = new QVBoxLayout(this);
@@ -126,6 +124,7 @@ int QtSplitViewContainer::add_figure_tab(FigureId id)
 
     auto* canvas = new FigureCanvasWidget(runtime_, figure, input.get(), pane->tab_widget);
     canvas->setObjectName(QString("canvas_%1").arg(id));
+    emit canvas_created(id, canvas);
 
     std::string title = figure->tab_title();
     if (title.empty())
@@ -134,11 +133,11 @@ int QtSplitViewContainer::add_figure_tab(FigureId id)
     int idx = pane->tab_widget->addTab(canvas, QString::fromStdString(title));
 
     PaneWidget::FigureTab tab;
-    tab.id     = id;
-    tab.canvas = canvas;
-    tab.input  = std::move(input);
+    tab.id                = id;
+    tab.canvas            = canvas;
+    tab.input             = std::move(input);
     pane->figure_tabs[id] = std::move(tab);
-    pane->active_id = id;
+    pane->active_id       = id;
 
     canvas->startAnimationTimer();
 
@@ -150,7 +149,17 @@ int QtSplitViewContainer::add_figure_tab(FigureId id)
     return idx;
 }
 
-void QtSplitViewContainer::close_figure_tab(FigureId id)
+bool QtSplitViewContainer::close_figure_tab(FigureId id)
+{
+    return remove_figure_tab(id, true);
+}
+
+bool QtSplitViewContainer::release_figure_tab(FigureId id)
+{
+    return remove_figure_tab(id, false);
+}
+
+bool QtSplitViewContainer::remove_figure_tab(FigureId id, bool notify_closed)
 {
     for (auto* pane : panes_)
     {
@@ -192,7 +201,8 @@ void QtSplitViewContainer::close_figure_tab(FigureId id)
             pane->active_id = INVALID_FIGURE_ID;
         }
 
-        emit figure_closed(id);
+        if (notify_closed)
+            emit figure_closed(id);
 
         // If all panes are empty, show welcome
         bool any_tabs = false;
@@ -208,8 +218,10 @@ void QtSplitViewContainer::close_figure_tab(FigureId id)
             show_welcome_page();
 
         SPECTRA_LOG_INFO("qt_split_view", "Closed figure tab: id={}", id);
-        return;
+        return true;
     }
+
+    return false;
 }
 
 FigureId QtSplitViewContainer::active_figure_id() const
@@ -290,7 +302,7 @@ void QtSplitViewContainer::set_active_tool(ToolMode tool)
         return;
 
     const FigureId id = active_figure_id();
-    auto it = pane->figure_tabs.find(id);
+    auto           it = pane->figure_tabs.find(id);
     if (it != pane->figure_tabs.end() && it->second.input)
         it->second.input->set_tool_mode(tool);
 }
@@ -302,7 +314,7 @@ ToolMode QtSplitViewContainer::active_tool() const
         return ToolMode::Pan;
 
     const FigureId id = active_figure_id();
-    auto it = pane->figure_tabs.find(id);
+    auto           it = pane->figure_tabs.find(id);
     if (it == pane->figure_tabs.end() || !it->second.input)
         return ToolMode::Pan;
     return it->second.input->tool_mode();
@@ -320,7 +332,7 @@ void QtSplitViewContainer::show_welcome_page()
         auto* layout = new QVBoxLayout(welcome_page_);
         layout->setAlignment(Qt::AlignCenter);
 
-        auto* title = new QLabel("Spectra", welcome_page_);
+        auto* title      = new QLabel("Spectra", welcome_page_);
         QFont title_font = title->font();
         title_font.setPointSize(32);
         title_font.setBold(true);
@@ -334,8 +346,7 @@ void QtSplitViewContainer::show_welcome_page()
         subtitle->setAlignment(Qt::AlignCenter);
         subtitle->setStyleSheet("color: gray;");
 
-        auto* hint = new QLabel("Create a new figure or open a file to begin.",
-                                welcome_page_);
+        auto* hint = new QLabel("Create a new figure or open a file to begin.", welcome_page_);
         hint->setAlignment(Qt::AlignCenter);
         hint->setStyleSheet("color: gray; padding-top: 20px;");
 
@@ -348,7 +359,7 @@ void QtSplitViewContainer::show_welcome_page()
     if (figure_tab_count() == 0 && !panes_.empty())
     {
         auto* pane = panes_[0];
-        int idx = pane->tab_widget->indexOf(welcome_page_);
+        int   idx  = pane->tab_widget->indexOf(welcome_page_);
         if (idx < 0)
         {
             pane->tab_widget->addTab(welcome_page_, "");
@@ -381,7 +392,7 @@ bool QtSplitViewContainer::split_right()
     // Prefer moving another already-open document from this pane. Falling
     // back to an unopened registry figure keeps the operation useful for
     // publisher-created documents that have not been surfaced as tabs yet.
-    auto all_ids = registry_->all_ids();
+    auto     all_ids = registry_->all_ids();
     FigureId new_fig = INVALID_FIGURE_ID;
     for (FigureId id : open_figure_ids())
     {
@@ -421,7 +432,7 @@ bool QtSplitViewContainer::split_down()
     if (active == INVALID_FIGURE_ID)
         return false;
 
-    auto all_ids = registry_->all_ids();
+    auto     all_ids = registry_->all_ids();
     FigureId new_fig = INVALID_FIGURE_ID;
     for (FigureId id : open_figure_ids())
     {
@@ -460,7 +471,7 @@ bool QtSplitViewContainer::close_split()
         return false;
 
     const auto open_ids = open_figure_ids();
-    bool result = split_view_->close_pane(active);
+    bool       result   = split_view_->close_pane(active);
     if (result)
     {
         // Closing a pane changes layout, not document ownership. Merge every
@@ -472,7 +483,7 @@ bool QtSplitViewContainer::close_split()
             for (FigureId id : open_ids)
                 remaining.front()->add_figure(id);
             const auto& merged_ids = remaining.front()->figure_indices();
-            const auto active_it = std::find(merged_ids.begin(), merged_ids.end(), active);
+            const auto  active_it  = std::find(merged_ids.begin(), merged_ids.end(), active);
             if (active_it != merged_ids.end())
                 remaining.front()->set_active_local_index(
                     static_cast<size_t>(active_it - merged_ids.begin()));
@@ -496,7 +507,7 @@ void QtSplitViewContainer::reset_splits()
         if (active != INVALID_FIGURE_ID)
         {
             const auto& ids = root->figure_indices();
-            auto it = std::find(ids.begin(), ids.end(), active);
+            auto        it  = std::find(ids.begin(), ids.end(), active);
             if (it != ids.end())
                 root->set_active_local_index(static_cast<size_t>(it - ids.begin()));
             split_view_->set_active_figure_index(active);
@@ -565,20 +576,26 @@ void QtSplitViewContainer::rebuild_splitter()
     if (all_panes.empty())
     {
         // Create a single default pane
-        auto* pane = new PaneWidget();
+        auto* pane       = new PaneWidget();
         pane->tab_widget = new QTabWidget(splitter_);
         pane->tab_widget->setTabsClosable(true);
         pane->tab_widget->setMovable(true);
         pane->tab_widget->setObjectName("split_pane_0");
         pane->tab_widget->tabBar()->setVisible(is_split());
 
-        connect(pane->tab_widget, &QTabWidget::currentChanged,
-                this, &QtSplitViewContainer::on_tab_changed);
-        connect(pane->tab_widget, &QTabWidget::tabCloseRequested,
-                this, &QtSplitViewContainer::on_tab_close_requested);
+        connect(pane->tab_widget,
+                &QTabWidget::currentChanged,
+                this,
+                &QtSplitViewContainer::on_tab_changed);
+        connect(pane->tab_widget,
+                &QTabWidget::tabCloseRequested,
+                this,
+                &QtSplitViewContainer::on_tab_close_requested);
         pane->tab_widget->setContextMenuPolicy(Qt::CustomContextMenu);
-        connect(pane->tab_widget, &QWidget::customContextMenuRequested,
-                this, &QtSplitViewContainer::on_tab_context_menu);
+        connect(pane->tab_widget,
+                &QWidget::customContextMenuRequested,
+                this,
+                &QtSplitViewContainer::on_tab_context_menu);
 
         splitter_->addWidget(pane->tab_widget);
         panes_.push_back(pane);
@@ -587,27 +604,33 @@ void QtSplitViewContainer::rebuild_splitter()
     {
         // Determine orientation from the root split
         auto* root = split_view_->root();
-        bool horizontal = root && !root->is_leaf()
-                          && root->split_direction() == SplitDirection::Horizontal;
+        bool  horizontal =
+            root && !root->is_leaf() && root->split_direction() == SplitDirection::Horizontal;
 
         splitter_->setOrientation(horizontal ? Qt::Horizontal : Qt::Vertical);
 
         for (size_t i = 0; i < all_panes.size(); ++i)
         {
-            auto* pane = new PaneWidget();
+            auto* pane       = new PaneWidget();
             pane->tab_widget = new QTabWidget(splitter_);
             pane->tab_widget->setTabsClosable(true);
             pane->tab_widget->setMovable(true);
             pane->tab_widget->setObjectName(QString("split_pane_%1").arg(i));
             pane->tab_widget->tabBar()->setVisible(is_split());
 
-            connect(pane->tab_widget, &QTabWidget::currentChanged,
-                    this, &QtSplitViewContainer::on_tab_changed);
-            connect(pane->tab_widget, &QTabWidget::tabCloseRequested,
-                    this, &QtSplitViewContainer::on_tab_close_requested);
+            connect(pane->tab_widget,
+                    &QTabWidget::currentChanged,
+                    this,
+                    &QtSplitViewContainer::on_tab_changed);
+            connect(pane->tab_widget,
+                    &QTabWidget::tabCloseRequested,
+                    this,
+                    &QtSplitViewContainer::on_tab_close_requested);
             pane->tab_widget->setContextMenuPolicy(Qt::CustomContextMenu);
-            connect(pane->tab_widget, &QWidget::customContextMenuRequested,
-                    this, &QtSplitViewContainer::on_tab_context_menu);
+            connect(pane->tab_widget,
+                    &QWidget::customContextMenuRequested,
+                    this,
+                    &QtSplitViewContainer::on_tab_context_menu);
 
             splitter_->addWidget(pane->tab_widget);
             panes_.push_back(pane);
@@ -615,8 +638,8 @@ void QtSplitViewContainer::rebuild_splitter()
 
         // Set equal sizes
         QList<int> sizes;
-        int total = splitter_->orientation() == Qt::Horizontal
-                        ? splitter_->width() : splitter_->height();
+        int        total =
+            splitter_->orientation() == Qt::Horizontal ? splitter_->width() : splitter_->height();
         if (total <= 0)
             total = 800;
         int per = total / static_cast<int>(all_panes.size());
@@ -625,12 +648,12 @@ void QtSplitViewContainer::rebuild_splitter()
         splitter_->setSizes(sizes);
     }
 
-    const auto model_panes = split_view_->all_panes();
-    const size_t pane_total = std::min(model_panes.size(), panes_.size());
+    const auto   model_panes = split_view_->all_panes();
+    const size_t pane_total  = std::min(model_panes.size(), panes_.size());
     for (size_t pane_index = 0; pane_index < pane_total; ++pane_index)
     {
-        SplitPane* model_pane = model_panes[pane_index];
-        PaneWidget* pane = panes_[pane_index];
+        SplitPane*  model_pane = model_panes[pane_index];
+        PaneWidget* pane       = panes_[pane_index];
         if (!model_pane || !pane)
             continue;
 
@@ -644,7 +667,7 @@ void QtSplitViewContainer::rebuild_splitter()
                 continue;
 
             PaneWidget::FigureTab tab;
-            auto preserved = preserved_tabs.find(id);
+            auto                  preserved = preserved_tabs.find(id);
             if (preserved != preserved_tabs.end())
             {
                 tab = std::move(preserved->second);
@@ -653,14 +676,15 @@ void QtSplitViewContainer::rebuild_splitter()
             }
             else
             {
-                tab.id = id;
+                tab.id    = id;
                 tab.input = std::make_unique<InputHandler>();
                 tab.input->set_figure(figure);
                 if (!figure->axes().empty() && figure->axes()[0])
                     tab.input->set_active_axes_base(figure->axes()[0].get());
-                tab.canvas = new FigureCanvasWidget(
-                    runtime_, figure, tab.input.get(), pane->tab_widget);
+                tab.canvas =
+                    new FigureCanvasWidget(runtime_, figure, tab.input.get(), pane->tab_widget);
                 tab.canvas->setObjectName(QString("canvas_%1").arg(id));
+                emit canvas_created(id, tab.canvas);
                 tab.canvas->startAnimationTimer();
             }
 
@@ -671,8 +695,8 @@ void QtSplitViewContainer::rebuild_splitter()
             pane->figure_tabs.emplace(id, std::move(tab));
         }
 
-        const FigureId active = model_pane->figure_index();
-        auto active_it = pane->figure_tabs.find(active);
+        const FigureId active    = model_pane->figure_index();
+        auto           active_it = pane->figure_tabs.find(active);
         if (active_it != pane->figure_tabs.end())
         {
             pane->active_id = active;
@@ -715,12 +739,12 @@ void QtSplitViewContainer::sync_from_split_view()
     if (!registry_)
         return;
 
-    const auto model_panes = split_view_->all_panes();
-    const size_t count = std::min(model_panes.size(), panes_.size());
+    const auto   model_panes = split_view_->all_panes();
+    const size_t count       = std::min(model_panes.size(), panes_.size());
     for (size_t pane_index = 0; pane_index < count; ++pane_index)
     {
-        SplitPane* model_pane = model_panes[pane_index];
-        PaneWidget* pane      = panes_[pane_index];
+        SplitPane*  model_pane = model_panes[pane_index];
+        PaneWidget* pane       = panes_[pane_index];
         if (!model_pane || !pane)
             continue;
 
@@ -740,6 +764,7 @@ void QtSplitViewContainer::sync_from_split_view()
 
             auto* canvas = new FigureCanvasWidget(runtime_, figure, input.get(), pane->tab_widget);
             canvas->setObjectName(QString("canvas_%1").arg(id));
+            emit canvas_created(id, canvas);
 
             std::string title = figure->tab_title();
             if (title.empty())
@@ -754,8 +779,8 @@ void QtSplitViewContainer::sync_from_split_view()
             canvas->startAnimationTimer();
         }
 
-        const FigureId active = model_pane->figure_index();
-        auto active_it = pane->figure_tabs.find(active);
+        const FigureId active    = model_pane->figure_index();
+        auto           active_it = pane->figure_tabs.find(active);
         if (active_it != pane->figure_tabs.end())
         {
             pane->active_id = active;
@@ -908,7 +933,7 @@ void QtSplitViewContainer::on_tab_context_menu(const QPoint& pos)
         return;
 
     QWidget* widget = tw->widget(index);
-    FigureId fid = INVALID_FIGURE_ID;
+    FigureId fid    = INVALID_FIGURE_ID;
     for (auto* pane : panes_)
     {
         if (pane->tab_widget != tw)
@@ -933,9 +958,10 @@ void QtSplitViewContainer::on_tab_context_menu(const QPoint& pos)
 
     auto* detach_action = menu.addAction("Detach to New Window");
     detach_action->setObjectName("split_tab_detach");
-    connect(detach_action, &QAction::triggered, this, [this, fid]() {
-        emit figure_detach_requested(fid);
-    });
+    connect(detach_action,
+            &QAction::triggered,
+            this,
+            [this, fid]() { emit figure_detach_requested(fid); });
 
     menu.addSeparator();
 
@@ -943,17 +969,19 @@ void QtSplitViewContainer::on_tab_context_menu(const QPoint& pos)
     {
         auto* close_split_action = menu.addAction("Close Split Pane");
         close_split_action->setObjectName("split_tab_close_split");
-        connect(close_split_action, &QAction::triggered, this, [this, fid]() {
-            close_figure_tab(fid);
-            close_split();
-        });
+        connect(close_split_action,
+                &QAction::triggered,
+                this,
+                [this, fid]()
+                {
+                    close_figure_tab(fid);
+                    close_split();
+                });
     }
 
     auto* close_action = menu.addAction("Close");
     close_action->setObjectName("split_tab_close");
-    connect(close_action, &QAction::triggered, this, [this, fid]() {
-        close_figure_tab(fid);
-    });
+    connect(close_action, &QAction::triggered, this, [this, fid]() { close_figure_tab(fid); });
 
     menu.exec(tw->mapToGlobal(pos));
 }

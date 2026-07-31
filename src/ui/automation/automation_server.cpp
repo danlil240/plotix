@@ -92,6 +92,11 @@ std::string AutomationServer::default_socket_path()
 #endif
 }
 
+std::string AutomationServer::handler_catalog_json() const
+{
+    return serialize_handler_catalog(handler_catalog_);
+}
+
 bool AutomationServer::start(const std::string& socket_path)
 {
 #ifdef _WIN32
@@ -110,7 +115,9 @@ bool AutomationServer::start(const std::string& socket_path)
         return false;
     }
 
-    struct sockaddr_un addr{};
+    struct sockaddr_un addr
+    {
+    };
     addr.sun_family = AF_UNIX;
     if (socket_path_.size() >= sizeof(addr.sun_path))
     {
@@ -243,16 +250,20 @@ void AutomationServer::listener_thread_fn()
 #ifndef _WIN32
     while (running_.load(std::memory_order_relaxed))
     {
-        struct pollfd pfd{};
+        struct pollfd pfd
+        {
+        };
         pfd.fd     = listen_fd_;
         pfd.events = POLLIN;
         int ret    = ::poll(&pfd, 1, 200);
         if (ret <= 0 || !(pfd.revents & POLLIN))
             continue;
 
-        struct sockaddr_un ca{};
-        socklen_t          cl  = sizeof(ca);
-        int                cfd = ::accept(listen_fd_, reinterpret_cast<struct sockaddr*>(&ca), &cl);
+        struct sockaddr_un ca
+        {
+        };
+        socklen_t cl  = sizeof(ca);
+        int       cfd = ::accept(listen_fd_, reinterpret_cast<struct sockaddr*>(&ca), &cl);
         if (cfd < 0)
             continue;
 
@@ -374,16 +385,17 @@ void AutomationServer::send_response(int fd, const std::string& json)
 void AutomationServer::poll(App& app, WindowUIContext* ui_ctx)
 {
     poll_pending([this, &app, ui_ctx](AutomationRequest& request)
-                 { execute(request, app, ui_ctx); });
+                 { execute(request, app, ui_ctx); },
+                 1);
 }
 
-void AutomationServer::poll(const RequestDispatcher& dispatcher)
+void AutomationServer::poll(const RequestDispatcher& dispatcher, uint32_t frames_elapsed)
 {
     if (dispatcher)
-        poll_pending(dispatcher);
+        poll_pending(dispatcher, frames_elapsed);
 }
 
-void AutomationServer::poll_pending(const RequestDispatcher& dispatcher)
+void AutomationServer::poll_pending(const RequestDispatcher& dispatcher, uint32_t frames_elapsed)
 {
     {
         std::lock_guard lock(pending_mutex_);
@@ -393,7 +405,9 @@ void AutomationServer::poll_pending(const RequestDispatcher& dispatcher)
         {
             if (pr.wait_frames > 0 && !pr.responded)
             {
-                --pr.wait_frames;
+                const uint32_t remaining = static_cast<uint32_t>(pr.wait_frames);
+                pr.wait_frames =
+                    frames_elapsed >= remaining ? 0 : static_cast<int>(remaining - frames_elapsed);
                 if (pr.wait_frames <= 0)
                 {
                     pr.response_json = json_ok(pr.id, "{\"waited\":true}");

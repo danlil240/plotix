@@ -102,8 +102,9 @@ class QtRuntime
     void set_input_handler(InputHandler* input);
 
     // Keep the exact legacy-rendered inspector chevron while delegating its
-    // state and action to the Qt-owned inspector drawer.
-    void set_inspector_toggle_callbacks(std::function<void()> toggle,
+    // state and action to the Qt-owned inspector drawer for this canvas.
+    void set_inspector_toggle_callbacks(QWindow*              window,
+                                        std::function<void()> toggle,
                                         std::function<bool()> is_open);
 
     // ── Surface generation API ─────────────────────────────────────────────
@@ -127,10 +128,17 @@ class QtRuntime
     WindowContext*    window_context() const;
 
    private:
+    struct InspectorCallbacks
+    {
+        std::function<void()> toggle;
+        std::function<bool()> is_open;
+    };
+
     struct WindowState
     {
         std::unique_ptr<WindowContext>        window_ctx;
         InputHandler*                         input_handler = nullptr;
+        InspectorCallbacks                    inspector_callbacks;
         std::chrono::steady_clock::time_point last_resize_request;
         bool                                  resize_pending           = false;
         uint32_t                              swapchain_recreate_count = 0;
@@ -139,6 +147,13 @@ class QtRuntime
         // Surface generation: 0 = invalid, >0 = valid surface.
         // Incremented on attach, invalidated on detach.
         uint32_t surface_generation = 0;
+
+#ifdef SPECTRA_USE_IMGUI
+        std::unique_ptr<ImGuiIntegration>     imgui_ui;
+        std::unique_ptr<DataInteraction>      data_interaction;
+        std::chrono::steady_clock::time_point ui_last_frame_time{};
+        bool                                  ui_has_last_frame_time = false;
+#endif
     };
 
     WindowState*       find_window_state(QWindow* window);
@@ -153,18 +168,10 @@ class QtRuntime
     std::unique_ptr<Renderer>                                  renderer_;
     std::unordered_map<QWindow*, std::unique_ptr<WindowState>> window_states_;
     std::unordered_map<QWindow*, InputHandler*>                pending_input_handlers_;
+    std::unordered_map<QWindow*, InspectorCallbacks>           pending_inspector_callbacks_;
     QWindow*                                                   primary_window_       = nullptr;
     QWindow*                                                   current_frame_window_ = nullptr;
     uint32_t                                                   next_window_id_       = 1;
-    std::function<void()>                                      inspector_toggle_cb_;
-    std::function<bool()>                                      inspector_open_cb_;
-
-#ifdef SPECTRA_USE_IMGUI
-    std::unique_ptr<ImGuiIntegration>     imgui_ui_;
-    std::unique_ptr<DataInteraction>      data_interaction_;
-    std::chrono::steady_clock::time_point ui_last_frame_time_{};
-    bool                                  ui_has_last_frame_time_ = false;
-#endif
 
     // Debounce: track last resize request time to coalesce rapid resizes.
     static constexpr std::chrono::milliseconds k_resize_debounce{50};

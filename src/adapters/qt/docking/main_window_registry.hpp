@@ -9,6 +9,9 @@
 
 #include "docking_host.hpp"
 
+#include <QMetaObject>
+
+#include <functional>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -17,7 +20,7 @@ namespace spectra
 {
 class FigureRegistry;
 class ApplicationServices;
-}
+}   // namespace spectra
 
 namespace spectra::adapters::qt
 {
@@ -30,9 +33,9 @@ class NativeQtDockingHost;
 class MainWindowRegistry
 {
    public:
-    MainWindowRegistry(QtRuntime*         runtime,
-                       FigureRegistry*    registry,
-                       QtActionBridge*    action_bridge,
+    MainWindowRegistry(QtRuntime*           runtime,
+                       FigureRegistry*      registry,
+                       QtActionBridge*      action_bridge,
                        ApplicationServices* services);
     ~MainWindowRegistry();
 
@@ -60,6 +63,22 @@ class MainWindowRegistry
     // Find the host that contains a given figure document.
     HostId find_host_for_figure(FigureId fid) const;
 
+    // Close a document everywhere and unregister its figure model.
+    bool close_document(FigureId fid);
+
+    // Move a document between existing hosts. The destination is populated
+    // before the source is released, and a failed release rolls back.
+    bool move_document(FigureId fid, HostId source_host, HostId target_host);
+
+    // Create a detached host and transactionally move the document into it.
+    HostId detach_document(FigureId fid, HostId source_host);
+
+    // Notify persistence after a successful document lifecycle mutation.
+    void set_document_changed_callback(std::function<void()> callback)
+    {
+        document_changed_callback_ = std::move(callback);
+    }
+
     // Get all registered hosts.
     std::vector<HostId> all_hosts() const;
 
@@ -70,6 +89,8 @@ class MainWindowRegistry
     void close_all_detached();
 
    private:
+    void wire_window(HostId id, SpectraMainWindow* window);
+
     QtRuntime*           runtime_       = nullptr;
     FigureRegistry*      registry_      = nullptr;
     QtActionBridge*      action_bridge_ = nullptr;
@@ -79,12 +100,14 @@ class MainWindowRegistry
 
     struct HostEntry
     {
-        HostId                                       id = INVALID_HOST_ID;
-        std::unique_ptr<NativeQtDockingHost>         host;
-        std::unique_ptr<SpectraMainWindow>           window;  // non-null for detached windows
-        bool                                         owned = false;  // true for detached windows
+        HostId                               id = INVALID_HOST_ID;
+        std::unique_ptr<NativeQtDockingHost> host;
+        std::unique_ptr<SpectraMainWindow>   window;          // non-null for detached windows
+        bool                                 owned = false;   // true for detached windows
     };
     std::unordered_map<HostId, HostEntry> hosts_;
+    std::vector<QMetaObject::Connection>  window_connections_;
+    std::function<void()>                 document_changed_callback_;
 };
 
 }   // namespace spectra::adapters::qt

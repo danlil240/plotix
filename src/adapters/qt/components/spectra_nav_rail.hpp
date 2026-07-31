@@ -35,6 +35,7 @@ class SpectraNavRail : public QWidget
     SpectraNavRail& operator=(const SpectraNavRail&) = delete;
 
     void set_active_tool(int tool_index);
+    int  active_tool_index() const { return active_; }
     void set_compact_mode(bool compact);
     bool is_compact() const { return compact_; }
 

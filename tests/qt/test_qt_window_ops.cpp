@@ -39,22 +39,22 @@
 #include <memory>
 #include <atomic>
 
-namespace {
+namespace
+{
 
 struct QtWindowOpsEnv
 {
-    std::unique_ptr<spectra::FigureRegistry> registry;
-    std::unique_ptr<spectra::CommandRegistry> cmd_registry;
+    std::unique_ptr<spectra::FigureRegistry>               registry;
+    std::unique_ptr<spectra::CommandRegistry>              cmd_registry;
     std::unique_ptr<spectra::adapters::qt::QtActionBridge> action_bridge;
 
     QtWindowOpsEnv()
     {
-        registry = std::make_unique<spectra::FigureRegistry>();
-        cmd_registry = std::make_unique<spectra::CommandRegistry>();
+        registry      = std::make_unique<spectra::FigureRegistry>();
+        cmd_registry  = std::make_unique<spectra::CommandRegistry>();
         action_bridge = std::make_unique<spectra::adapters::qt::QtActionBridge>(*cmd_registry);
         action_bridge->rebuild();
     }
-
 };
 
 QtWindowOpsEnv& env()
@@ -63,7 +63,7 @@ QtWindowOpsEnv& env()
     return e;
 }
 
-} // namespace
+}   // namespace
 
 // ── MainWindowRegistry with no runtime ───────────────────────────────────────
 
@@ -71,8 +71,10 @@ TEST(QtWindowOps, RegistryCreateDetachedWithoutRuntime)
 {
     auto& e = env();
 
-    spectra::adapters::qt::MainWindowRegistry registry(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::MainWindowRegistry registry(nullptr,
+                                                       e.registry.get(),
+                                                       e.action_bridge.get(),
+                                                       nullptr);
 
     auto id = registry.create_detached_window();
     EXPECT_EQ(id, spectra::adapters::qt::INVALID_HOST_ID);
@@ -83,8 +85,10 @@ TEST(QtWindowOps, RegistryCloseInvalidHost)
 {
     auto& e = env();
 
-    spectra::adapters::qt::MainWindowRegistry registry(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::MainWindowRegistry registry(nullptr,
+                                                       e.registry.get(),
+                                                       e.action_bridge.get(),
+                                                       nullptr);
 
     // Closing a non-existent host should return false, not crash
     EXPECT_FALSE(registry.close_detached_window(spectra::adapters::qt::HostId{999}));
@@ -94,8 +98,10 @@ TEST(QtWindowOps, RegistryHostLookupInvalid)
 {
     auto& e = env();
 
-    spectra::adapters::qt::MainWindowRegistry registry(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::MainWindowRegistry registry(nullptr,
+                                                       e.registry.get(),
+                                                       e.action_bridge.get(),
+                                                       nullptr);
 
     EXPECT_EQ(registry.host(spectra::adapters::qt::HostId{42}), nullptr);
     EXPECT_EQ(registry.native_host(spectra::adapters::qt::HostId{42}), nullptr);
@@ -105,8 +111,10 @@ TEST(QtWindowOps, RegistryFindHostForFigure)
 {
     auto& e = env();
 
-    spectra::adapters::qt::MainWindowRegistry registry(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::MainWindowRegistry registry(nullptr,
+                                                       e.registry.get(),
+                                                       e.action_bridge.get(),
+                                                       nullptr);
 
     // No hosts registered, so any figure lookup should return invalid
     EXPECT_EQ(registry.find_host_for_figure(spectra::FigureId{1}),
@@ -117,8 +125,10 @@ TEST(QtWindowOps, RegistryAllHostsEmpty)
 {
     auto& e = env();
 
-    spectra::adapters::qt::MainWindowRegistry registry(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::MainWindowRegistry registry(nullptr,
+                                                       e.registry.get(),
+                                                       e.action_bridge.get(),
+                                                       nullptr);
 
     EXPECT_TRUE(registry.all_hosts().empty());
 }
@@ -127,8 +137,10 @@ TEST(QtWindowOps, RegistryCloseAllDetached)
 {
     auto& e = env();
 
-    spectra::adapters::qt::MainWindowRegistry registry(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::MainWindowRegistry registry(nullptr,
+                                                       e.registry.get(),
+                                                       e.action_bridge.get(),
+                                                       nullptr);
 
     // Should be safe with no windows
     registry.close_all_detached();
@@ -141,18 +153,21 @@ TEST(QtWindowOps, ShortcutScopeOnMainWindow)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     // The command palette shortcut (Ctrl+K) is created in build_command_palette()
     // which returns early when services_ is null. Verify no Ctrl+K shortcut exists.
-    auto shortcuts = mw.findChildren<QShortcut*>();
+    auto shortcuts  = mw.findChildren<QShortcut*>();
     bool has_ctrl_k = false;
     for (auto* s : shortcuts)
     {
         if (s->key() == QKeySequence("Ctrl+K"))
             has_ctrl_k = true;
     }
-    EXPECT_FALSE(has_ctrl_k); // No shortcut without services
+    EXPECT_FALSE(has_ctrl_k);   // No shortcut without services
 }
 
 TEST(QtWindowOps, ShortcutScopeChildWindow)
@@ -181,7 +196,10 @@ TEST(QtWindowOps, AddFigureTabNoRuntimeSkipped)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     // Adding a figure tab without runtime requires Vulkan surface creation
     // which is not available in offscreen mode. Skip this test.
@@ -192,7 +210,10 @@ TEST(QtWindowOps, CloseFigureTabSafe)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     // Closing a non-existent tab should be safe
     mw.close_figure_tab(spectra::FigureId{99});
@@ -203,7 +224,10 @@ TEST(QtWindowOps, CanvasForNonExistentFigure)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     EXPECT_EQ(mw.canvas_for(spectra::FigureId{42}), nullptr);
 }
@@ -214,13 +238,14 @@ TEST(QtWindowOps, DetachWithoutRuntime)
 {
     auto& e = env();
 
-    spectra::adapters::qt::MainWindowRegistry registry(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::MainWindowRegistry registry(nullptr,
+                                                       e.registry.get(),
+                                                       e.action_bridge.get(),
+                                                       nullptr);
 
     // Detaching without runtime should return invalid host ID
     // This tests the safety of the detach path when no runtime is available
-    EXPECT_EQ(registry.create_detached_window(),
-              spectra::adapters::qt::INVALID_HOST_ID);
+    EXPECT_EQ(registry.create_detached_window(), spectra::adapters::qt::INVALID_HOST_ID);
 }
 
 // ── Close order: closing main window shouldn't crash registry ────────────────
@@ -231,8 +256,10 @@ TEST(QtWindowOps, CloseOrderSafety)
 
     // Create a registry, then destroy it — should not crash
     {
-        spectra::adapters::qt::MainWindowRegistry registry(
-            nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+        spectra::adapters::qt::MainWindowRegistry registry(nullptr,
+                                                           e.registry.get(),
+                                                           e.action_bridge.get(),
+                                                           nullptr);
         // Registry goes out of scope here
     }
     // If we reach here, the destructor was safe
@@ -245,7 +272,10 @@ TEST(QtWindowOps, ActiveFigureIdNoneInitially)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     EXPECT_EQ(mw.active_figure_id(), spectra::INVALID_FIGURE_ID);
 }
@@ -254,31 +284,132 @@ TEST(QtWindowOps, OpenFigureIdsEmptyInitially)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     EXPECT_TRUE(mw.open_figure_ids().empty());
+}
+
+TEST(QtWindowOps, ClosingTabAlsoClosesRegisteredFigure)
+{
+    spectra::FigureRegistry               registry;
+    spectra::CommandRegistry              commands;
+    spectra::adapters::qt::QtActionBridge action_bridge(commands);
+    action_bridge.rebuild();
+    spectra::adapters::qt::MainWindowRegistry windows(nullptr, &registry, &action_bridge, nullptr);
+    spectra::adapters::qt::SpectraMainWindow  window(nullptr, &registry, &action_bridge, nullptr);
+    windows.register_window(&window);
+    int dirty_notifications = 0;
+    windows.set_document_changed_callback([&dirty_notifications]() { ++dirty_notifications; });
+
+    const auto fid = registry.register_figure(std::make_unique<spectra::Figure>());
+    ASSERT_GE(window.add_figure_tab(fid), 0);
+    ASSERT_NE(registry.get(fid), nullptr);
+    int close_notifications = 0;
+    QObject::connect(&window,
+                     &spectra::adapters::qt::SpectraMainWindow::figure_closed,
+                     &window,
+                     [&close_notifications](spectra::FigureId) { ++close_notifications; });
+
+    EXPECT_TRUE(window.close_figure_tab(fid));
+    EXPECT_EQ(close_notifications, 1);
+    EXPECT_EQ(dirty_notifications, 1);
+    EXPECT_EQ(registry.get(fid), nullptr);
+    EXPECT_EQ(window.canvas_for(fid), nullptr);
+}
+
+TEST(QtWindowOps, InvalidMovePreservesSourceDocument)
+{
+    spectra::FigureRegistry               registry;
+    spectra::CommandRegistry              commands;
+    spectra::adapters::qt::QtActionBridge action_bridge(commands);
+    action_bridge.rebuild();
+    spectra::adapters::qt::MainWindowRegistry windows(nullptr, &registry, &action_bridge, nullptr);
+    spectra::adapters::qt::SpectraMainWindow  source(nullptr, &registry, &action_bridge, nullptr);
+    const auto                                source_host = windows.register_window(&source);
+    int                                       dirty_notifications = 0;
+    windows.set_document_changed_callback([&dirty_notifications]() { ++dirty_notifications; });
+
+    const auto fid = registry.register_figure(std::make_unique<spectra::Figure>());
+    ASSERT_GE(source.add_figure_tab(fid), 0);
+
+    EXPECT_FALSE(windows.move_document(fid, source_host, spectra::adapters::qt::HostId{999}));
+    EXPECT_NE(source.canvas_for(fid), nullptr);
+    EXPECT_NE(registry.get(fid), nullptr);
+    EXPECT_EQ(windows.find_host_for_figure(fid), source_host);
+    EXPECT_EQ(dirty_notifications, 0);
+}
+
+TEST(QtWindowOps, FailedDetachPreservesSourceDocument)
+{
+    spectra::FigureRegistry               registry;
+    spectra::CommandRegistry              commands;
+    spectra::adapters::qt::QtActionBridge action_bridge(commands);
+    action_bridge.rebuild();
+    spectra::adapters::qt::MainWindowRegistry windows(nullptr, &registry, &action_bridge, nullptr);
+    spectra::adapters::qt::SpectraMainWindow  source(nullptr, &registry, &action_bridge, nullptr);
+    const auto                                source_host = windows.register_window(&source);
+    int                                       dirty_notifications = 0;
+    windows.set_document_changed_callback([&dirty_notifications]() { ++dirty_notifications; });
+
+    const auto fid = registry.register_figure(std::make_unique<spectra::Figure>());
+    ASSERT_GE(source.add_figure_tab(fid), 0);
+
+    EXPECT_EQ(windows.detach_document(fid, source_host), spectra::adapters::qt::INVALID_HOST_ID);
+    EXPECT_NE(source.canvas_for(fid), nullptr);
+    EXPECT_NE(registry.get(fid), nullptr);
+    EXPECT_EQ(windows.find_host_for_figure(fid), source_host);
+    EXPECT_EQ(dirty_notifications, 0);
+}
+
+TEST(QtWindowOps, MoveTransfersDocumentWithoutClosingModel)
+{
+    spectra::FigureRegistry               registry;
+    spectra::CommandRegistry              commands;
+    spectra::adapters::qt::QtActionBridge action_bridge(commands);
+    action_bridge.rebuild();
+    spectra::adapters::qt::MainWindowRegistry windows(nullptr, &registry, &action_bridge, nullptr);
+    spectra::adapters::qt::SpectraMainWindow  source(nullptr, &registry, &action_bridge, nullptr);
+    spectra::adapters::qt::SpectraMainWindow  target(nullptr, &registry, &action_bridge, nullptr);
+    const auto                                source_host = windows.register_window(&source);
+    const auto                                target_host = windows.register_window(&target);
+    int                                       dirty_notifications = 0;
+    windows.set_document_changed_callback([&dirty_notifications]() { ++dirty_notifications; });
+
+    const auto fid = registry.register_figure(std::make_unique<spectra::Figure>());
+    ASSERT_GE(source.add_figure_tab(fid), 0);
+
+    ASSERT_TRUE(windows.move_document(fid, source_host, target_host));
+    EXPECT_EQ(source.canvas_for(fid), nullptr);
+    EXPECT_NE(target.canvas_for(fid), nullptr);
+    EXPECT_NE(registry.get(fid), nullptr);
+    EXPECT_EQ(windows.find_host_for_figure(fid), target_host);
+    EXPECT_EQ(dirty_notifications, 1);
 }
 
 TEST(QtWindowOps, DocumentAddControlExecutesNewFigureCommand)
 {
     spectra::CommandRegistry commands;
     bool                     executed = false;
-    commands.register_command("figure.new", "New Figure",
-                              [&executed]() { executed = true; },
-                              "Ctrl+T", "Figure");
+    commands.register_command(
+        "figure.new",
+        "New Figure",
+        [&executed]() { executed = true; },
+        "Ctrl+T",
+        "Figure");
 
     spectra::adapters::qt::QtActionBridge bridge(commands);
     bridge.rebuild();
-    spectra::FigureRegistry registry;
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, &registry, &bridge, nullptr);
+    spectra::FigureRegistry                  registry;
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr, &registry, &bridge, nullptr);
 
-    auto* tab_bar = mw.findChild<spectra::adapters::qt::SpectraDocumentTabBar*>(
-        "spectra_doc_tab_bar");
+    auto* tab_bar =
+        mw.findChild<spectra::adapters::qt::SpectraDocumentTabBar*>("spectra_doc_tab_bar");
     ASSERT_NE(tab_bar, nullptr);
 
-    ASSERT_TRUE(QMetaObject::invokeMethod(tab_bar, "tab_add_requested",
-                                          Qt::DirectConnection));
+    ASSERT_TRUE(QMetaObject::invokeMethod(tab_bar, "tab_add_requested", Qt::DirectConnection));
     EXPECT_TRUE(executed);
 }
 
@@ -350,28 +481,32 @@ TEST(QtWindowOps, MenuBarHasStandardMenus)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
-    auto* header = mw.findChild<spectra::adapters::qt::SpectraAppHeader*>(
-        "spectra_app_header");
+    auto* header = mw.findChild<spectra::adapters::qt::SpectraAppHeader*>("spectra_app_header");
     ASSERT_NE(header, nullptr);
 
-    QStringList expected_menus = {
-        "File", "Edit", "View", "Tools", "Plot", "Data", "Axes", "Transforms"};
+    QStringList expected_menus =
+        {"File", "Edit", "View", "Tools", "Plot", "Data", "Axes", "Transforms"};
     QStringList actual_menus;
     for (auto* button : header->findChildren<spectra::adapters::qt::SpectraMenuButton*>())
         actual_menus << button->text();
 
     for (const auto& expected : expected_menus)
-        EXPECT_TRUE(actual_menus.contains(expected))
-            << "Missing menu: " << expected.toStdString();
+        EXPECT_TRUE(actual_menus.contains(expected)) << "Missing menu: " << expected.toStdString();
 }
 
 TEST(QtWindowOps, ViewMenuHasSplitActions)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     QMenu* view_menu = mw.findChild<QMenu*>("menu_view");
     ASSERT_NE(view_menu, nullptr);
@@ -389,7 +524,10 @@ TEST(QtWindowOps, CustomHeaderReplacesToolbar)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     EXPECT_EQ(mw.findChild<QToolBar*>("main_toolbar"), nullptr);
     EXPECT_NE(mw.findChild<QWidget*>("spectra_app_header"), nullptr);
@@ -401,8 +539,14 @@ TEST(QtWindowOps, MultipleMainWindowInstances)
 {
     auto& e = env();
 
-    spectra::adapters::qt::SpectraMainWindow mw1(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
-    spectra::adapters::qt::SpectraMainWindow mw2(nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw1(nullptr,
+                                                 e.registry.get(),
+                                                 e.action_bridge.get(),
+                                                 nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw2(nullptr,
+                                                 e.registry.get(),
+                                                 e.action_bridge.get(),
+                                                 nullptr);
 
     // Both should have independent central views
     EXPECT_NE(mw1.central_view(), mw2.central_view());
@@ -410,10 +554,8 @@ TEST(QtWindowOps, MultipleMainWindowInstances)
     // Both should have independent custom status bars
     mw1.set_status("Window 1");
     mw2.set_status("Window 2");
-    auto* status1 = mw1.findChild<spectra::adapters::qt::SpectraStatusBar*>(
-        "spectra_status_bar");
-    auto* status2 = mw2.findChild<spectra::adapters::qt::SpectraStatusBar*>(
-        "spectra_status_bar");
+    auto* status1 = mw1.findChild<spectra::adapters::qt::SpectraStatusBar*>("spectra_status_bar");
+    auto* status2 = mw2.findChild<spectra::adapters::qt::SpectraStatusBar*>("spectra_status_bar");
     ASSERT_NE(status1, nullptr);
     ASSERT_NE(status2, nullptr);
     EXPECT_EQ(status1->message().toStdString(), "Window 1");
@@ -425,8 +567,13 @@ TEST(QtWindowOps, MultipleMainWindowInstances)
 TEST(QtWindowOps, CommandExecutionViaAction)
 {
     spectra::CommandRegistry reg;
-    std::atomic<bool> executed{false};
-    reg.register_command("test.window_cmd", "Test Cmd", [&] { executed = true; }, "Ctrl+W", "Window");
+    std::atomic<bool>        executed{false};
+    reg.register_command(
+        "test.window_cmd",
+        "Test Cmd",
+        [&] { executed = true; },
+        "Ctrl+W",
+        "Window");
 
     spectra::adapters::qt::QtActionBridge bridge(reg);
     bridge.rebuild();

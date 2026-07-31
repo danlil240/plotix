@@ -9,10 +9,18 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QEventLoop>
+#include <QLineEdit>
+#include <QMenu>
+#include <QMouseEvent>
 #include <QThread>
 #include <QTimer>
+#include <QWheelEvent>
+#include <QWidget>
+#include <QWindow>
 
 #include "adapters/qt/qt_automation_adapter.hpp"
+#include "adapters/qt/qt_input_router.hpp"
+#include "adapters/qt/components/spectra_menu_strip.hpp"
 
 #include "ui/commands/command_registry.hpp"
 #include "ui/automation/mcp_server.hpp"
@@ -30,6 +38,7 @@
 #include <memory>
 #include <thread>
 #include <chrono>
+#include <vector>
 
 #ifndef _WIN32
     #include <arpa/inet.h>
@@ -107,6 +116,73 @@ class TestBackend final : public spectra::Backend
     uint32_t height_ = 720;
 };
 
+class InputProbe final : public QWidget
+{
+   public:
+    explicit InputProbe(QWidget* parent = nullptr) : QWidget(parent)
+    {
+        setFocusPolicy(Qt::StrongFocus);
+        setMouseTracking(true);
+    }
+
+    int move_count         = 0;
+    int press_count        = 0;
+    int release_count      = 0;
+    int double_click_count = 0;
+    int wheel_count        = 0;
+
+   protected:
+    void mouseMoveEvent(QMouseEvent* event) override
+    {
+        ++move_count;
+        event->accept();
+    }
+
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        ++press_count;
+        event->accept();
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        ++release_count;
+        event->accept();
+    }
+
+    void mouseDoubleClickEvent(QMouseEvent* event) override
+    {
+        ++double_click_count;
+        event->accept();
+    }
+
+    void wheelEvent(QWheelEvent* event) override
+    {
+        ++wheel_count;
+        event->accept();
+    }
+};
+
+class NativeInputProbe final : public QWindow
+{
+   public:
+    int press_count   = 0;
+    int release_count = 0;
+
+   protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        ++press_count;
+        event->accept();
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override
+    {
+        ++release_count;
+        event->accept();
+    }
+};
+
 #ifndef _WIN32
 uint16_t find_available_port()
 {
@@ -180,10 +256,12 @@ std::string post_mcp_request(uint16_t port, const std::string& body)
     return response;
 }
 
-std::string invoke_with_qt_events(uint16_t port, const std::string& tool_name)
+std::string invoke_with_qt_events(uint16_t           port,
+                                  const std::string& tool_name,
+                                  const std::string& arguments_json = "{}")
 {
     const std::string body = R"({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":")"
-                             + tool_name + R"(","arguments":{}}})";
+                             + tool_name + R"(","arguments":)" + arguments_json + "}}";
     auto       response = std::async(std::launch::async, post_mcp_request, port, body);
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (response.wait_for(std::chrono::milliseconds(1)) != std::future_status::ready
@@ -241,7 +319,17 @@ TEST(QtAutomation, SetCallbacks)
 
     adapter.set_get_state([]() -> std::string { return R"({"status":"ok"})"; });
 
-    adapter.set_capture_screenshot([](const std::string& path) -> std::string { return path; });
+    adapter.set_capture_surface(
+        [](spectra::adapters::qt::QtCaptureScope scope,
+           const std::string&                    path) -> spectra::adapters::qt::QtCaptureResult
+        {
+            return {
+                .path       = path,
+                .png_base64 = scope == spectra::adapters::qt::QtCaptureScope::Window ? "cG5n" : "",
+                .width      = 1280,
+                .height     = 720,
+            };
+        });
 
     adapter.set_resize_window([](uint32_t, uint32_t) {});
     adapter.set_get_window_size([]() -> std::pair<uint32_t, uint32_t> { return {1280, 720}; });
@@ -292,6 +380,17 @@ TEST(QtAutomation, MultipleStartStopCycles)
     EXPECT_FALSE(adapter.is_running());
 }
 
+TEST(QtAutomation, InputRouterPreservesSharedKeyCodes)
+{
+    using spectra::adapters::qt::QtInputRouter;
+
+    EXPECT_EQ(QtInputRouter::qtKeyToSpectra(Qt::Key_A), 65);
+    EXPECT_EQ(QtInputRouter::qtKeyToSpectra(Qt::Key_Semicolon), 59);
+    EXPECT_EQ(QtInputRouter::qtKeyToSpectra(Qt::Key_PageDown), 267);
+    EXPECT_EQ(QtInputRouter::qtKeyToSpectra(Qt::Key_F12), 301);
+    EXPECT_EQ(QtInputRouter::qtKeyToSpectra(Qt::Key_Shift), 340);
+}
+
 TEST(QtAutomation, LiveMcpUsesSingleServiceEndpointAndQtDispatch)
 {
 #ifdef _WIN32
@@ -308,8 +407,34 @@ TEST(QtAutomation, LiveMcpUsesSingleServiceEndpointAndQtDispatch)
     const uint16_t port = find_available_port();
     ASSERT_NE(port, 0);
 
-    spectra::adapters::qt::QtAutomationAdapter adapter;
-    std::atomic<bool>                          state_dispatched_on_qt_thread{false};
+    spectra::adapters::qt::QtAutomationAdapter         adapter;
+    std::atomic<bool>                                  state_dispatched_on_qt_thread{false};
+    std::atomic<uint64_t>                              rendered_frames{0};
+    std::vector<spectra::adapters::qt::QtCaptureScope> capture_scopes;
+    const auto        first_figure  = registry.register_figure(std::make_unique<spectra::Figure>());
+    const auto        second_figure = registry.register_figure(std::make_unique<spectra::Figure>());
+    spectra::FigureId switched_figure = spectra::INVALID_FIGURE_ID;
+
+    QWidget input_root;
+    input_root.resize(360, 180);
+    InputProbe input_probe(&input_root);
+    input_probe.setGeometry(10, 10, 120, 120);
+    QLineEdit text_input(&input_root);
+    text_input.setGeometry(160, 20, 160, 36);
+    QMenu automation_menu(&input_root);
+    automation_menu.addAction(QStringLiteral("Dismiss me"));
+    spectra::adapters::qt::SpectraMenuButton menu_button(QStringLiteral("Menu"),
+                                                         &automation_menu,
+                                                         &input_root);
+    menu_button.setGeometry(160, 70, 100, 34);
+    input_root.show();
+    QCoreApplication::processEvents();
+    NativeInputProbe native_input_probe;
+    native_input_probe.setParent(input_root.windowHandle());
+    native_input_probe.setGeometry(10, 140, 120, 30);
+    native_input_probe.show();
+    adapter.set_input_target(&input_root, [&native_input_probe]() { return &native_input_probe; });
+
     adapter.set_get_state(
         [&state_dispatched_on_qt_thread]()
         {
@@ -318,6 +443,36 @@ TEST(QtAutomation, LiveMcpUsesSingleServiceEndpointAndQtDispatch)
                 std::memory_order_release);
             return R"({"status":"qt-ready"})";
         });
+    adapter.set_switch_figure(
+        [&switched_figure](spectra::FigureId id)
+        {
+            switched_figure = id;
+            return true;
+        });
+    adapter.set_list_menus(
+        []()
+        {
+            return R"({"menus":[{"name":"File","items":[{"label":"New Figure","enabled":true,"checkable":false}]}]})";
+        });
+    adapter.set_capture_surface(
+        [&capture_scopes](spectra::adapters::qt::QtCaptureScope scope, const std::string& path)
+        {
+            capture_scopes.push_back(scope);
+            return spectra::adapters::qt::QtCaptureResult{
+                .path       = path,
+                .png_base64 = "iVBORw0KGgo=",
+                .width      = scope == spectra::adapters::qt::QtCaptureScope::Canvas ? 640u : 1280u,
+                .height     = scope == spectra::adapters::qt::QtCaptureScope::Canvas ? 480u : 720u,
+            };
+        });
+    adapter.set_frame_callbacks(
+        [&rendered_frames](uint32_t count)
+        {
+            const uint32_t rendered = count == 5 ? 2 : count;
+            rendered_frames.fetch_add(rendered, std::memory_order_release);
+            return rendered;
+        },
+        [&rendered_frames]() { return rendered_frames.load(std::memory_order_acquire); });
 
     ASSERT_TRUE(adapter.start(&services, port));
     ASSERT_TRUE(adapter.is_running());
@@ -336,21 +491,160 @@ TEST(QtAutomation, LiveMcpUsesSingleServiceEndpointAndQtDispatch)
     EXPECT_NE(state_response.find("qt-ready"), std::string::npos);
     EXPECT_TRUE(state_dispatched_on_qt_thread.load(std::memory_order_acquire));
 
-    static constexpr std::array<const char*, 26> kRemainingTools = {
-        "list_commands",      "list_menus",         "execute_command", "mouse_move",
-        "mouse_click",        "mouse_drag",         "scroll",          "key_press",
-        "create_figure",      "switch_figure",      "add_series",      "pump_frames",
-        "capture_screenshot", "capture_window",     "resize_window",   "get_screenshot_base64",
-        "wait_frames",        "text_input",         "double_click",    "get_figure_info",
-        "get_window_size",    "fuzz_step",          "fuzz_reset",      "list_fuzz_actions",
-        "list_methods",       "dismiss_ui_capture",
+    const std::string menus_response = invoke_with_qt_events(port, "list_menus");
+    EXPECT_EQ(menus_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(menus_response.find("New Figure"), std::string::npos);
+    EXPECT_EQ(menus_response.find("not implemented"), std::string::npos);
+
+    const std::string methods_response = invoke_with_qt_events(port, "list_methods");
+    EXPECT_EQ(methods_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(methods_response.find("add_series"), std::string::npos);
+    EXPECT_EQ(methods_response.find("not implemented"), std::string::npos);
+
+    const std::string switch_response =
+        invoke_with_qt_events(port,
+                              "switch_figure",
+                              "{\"figure_id\":" + std::to_string(second_figure) + "}");
+    EXPECT_EQ(switch_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(switched_figure, second_figure);
+
+    const std::string add_response = invoke_with_qt_events(
+        port,
+        "add_series",
+        "{\"figure_id\":" + std::to_string(first_figure)
+            + R"(,"type":"scatter","x":[1,2,3],"y":[4,5,6],"label":"samples"})");
+    EXPECT_EQ(add_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(add_response.find(R"("series_count":1)"), std::string::npos);
+
+    const std::string invalid_add_response = invoke_with_qt_events(
+        port,
+        "add_series",
+        "{\"figure_id\":" + std::to_string(first_figure) + R"(,"x":[1,2,3]})");
+    EXPECT_NE(invalid_add_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(invalid_add_response.find("x and y must be provided together"), std::string::npos);
+
+    const std::string info_response =
+        invoke_with_qt_events(port,
+                              "get_figure_info",
+                              "{\"figure_id\":" + std::to_string(first_figure) + "}");
+    EXPECT_EQ(info_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(info_response.find(R"("type":"scatter")"), std::string::npos);
+    EXPECT_NE(info_response.find(R"("label":"samples")"), std::string::npos);
+    EXPECT_NE(info_response.find(R"("point_count":3)"), std::string::npos);
+
+    const std::string move_response =
+        invoke_with_qt_events(port, "mouse_move", R"({"x":20,"y":20})");
+    EXPECT_EQ(move_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_GE(input_probe.move_count, 1);
+
+    const std::string click_response =
+        invoke_with_qt_events(port, "mouse_click", R"({"x":20,"y":20})");
+    EXPECT_EQ(click_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(input_probe.press_count, 1);
+    EXPECT_EQ(input_probe.release_count, 1);
+
+    const std::string drag_response =
+        invoke_with_qt_events(port, "mouse_drag", R"({"x1":20,"y1":20,"x2":80,"y2":80,"steps":4})");
+    EXPECT_EQ(drag_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(input_probe.press_count, 2);
+    EXPECT_EQ(input_probe.release_count, 2);
+    EXPECT_GE(input_probe.move_count, 6);
+
+    const std::string scroll_response =
+        invoke_with_qt_events(port, "scroll", R"({"x":20,"y":20,"dy":-2})");
+    EXPECT_EQ(scroll_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(input_probe.wheel_count, 1);
+
+    const std::string double_click_response =
+        invoke_with_qt_events(port, "double_click", R"({"x":20,"y":20})");
+    EXPECT_EQ(double_click_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(input_probe.double_click_count, 1);
+
+    const std::string native_click_response =
+        invoke_with_qt_events(port, "mouse_click", R"({"x":20,"y":150})");
+    EXPECT_EQ(native_click_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(native_input_probe.press_count, 1);
+    EXPECT_EQ(native_input_probe.release_count, 1);
+
+    text_input.setFocus(Qt::OtherFocusReason);
+    QCoreApplication::processEvents();
+    const std::string text_response =
+        invoke_with_qt_events(port, "text_input", R"({"text":"spectra"})");
+    EXPECT_EQ(text_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(text_input.text(), QStringLiteral("spectra"));
+
+    const std::string key_response = invoke_with_qt_events(port, "key_press", R"({"key":65})");
+    EXPECT_EQ(key_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(text_input.text(), QStringLiteral("spectraa"));
+
+    const std::string canvas_capture =
+        invoke_with_qt_events(port, "capture_screenshot", R"({"path":"/tmp/canvas.png"})");
+    EXPECT_EQ(canvas_capture.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(canvas_capture.find(R"("scope":"canvas")"), std::string::npos);
+    EXPECT_NE(canvas_capture.find(R"("width":640)"), std::string::npos);
+
+    const std::string window_capture =
+        invoke_with_qt_events(port, "capture_window", R"({"path":"/tmp/window.png"})");
+    EXPECT_EQ(window_capture.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(window_capture.find(R"("scope":"window")"), std::string::npos);
+    EXPECT_NE(window_capture.find(R"("width":1280)"), std::string::npos);
+
+    const std::string base64_capture = invoke_with_qt_events(port, "get_screenshot_base64");
+    EXPECT_EQ(base64_capture.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(base64_capture.find(R"("format":"png")"), std::string::npos);
+    EXPECT_NE(base64_capture.find(R"("scope":"window")"), std::string::npos);
+    EXPECT_NE(base64_capture.find("iVBORw0KGgo="), std::string::npos);
+
+    const std::string pump_response = invoke_with_qt_events(port, "pump_frames", R"({"count":3})");
+    EXPECT_EQ(pump_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(pump_response.find(R"("pumped":3)"), std::string::npos);
+    EXPECT_EQ(rendered_frames.load(std::memory_order_acquire), 3u);
+
+    QTimer frame_timer;
+    QObject::connect(&frame_timer,
+                     &QTimer::timeout,
+                     [&rendered_frames]()
+                     { rendered_frames.fetch_add(1, std::memory_order_release); });
+    frame_timer.start(1);
+    const std::string wait_response = invoke_with_qt_events(port, "wait_frames", R"({"count":4})");
+    frame_timer.stop();
+    EXPECT_EQ(wait_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(wait_response.find(R"("waited":true)"), std::string::npos);
+    EXPECT_GE(rendered_frames.load(std::memory_order_acquire), 7u);
+
+    const std::string partial_pump_response =
+        invoke_with_qt_events(port, "pump_frames", R"({"count":5})");
+    EXPECT_NE(partial_pump_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(partial_pump_response.find("rendered 2 of 5 requested frames"), std::string::npos);
+
+    ASSERT_EQ(capture_scopes.size(), 3u);
+    EXPECT_EQ(capture_scopes[0], spectra::adapters::qt::QtCaptureScope::Canvas);
+    EXPECT_EQ(capture_scopes[1], spectra::adapters::qt::QtCaptureScope::Window);
+    EXPECT_EQ(capture_scopes[2], spectra::adapters::qt::QtCaptureScope::Window);
+
+    const std::string menu_click_response =
+        invoke_with_qt_events(port, "mouse_click", R"({"x":180,"y":85})");
+    EXPECT_EQ(menu_click_response.find(R"("isError":true)"), std::string::npos);
+    ASSERT_EQ(QApplication::activePopupWidget(), &automation_menu);
+
+    const std::string dismiss_response = invoke_with_qt_events(port, "dismiss_ui_capture");
+    EXPECT_EQ(dismiss_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(dismiss_response.find(R"("popup":true)"), std::string::npos);
+    EXPECT_EQ(QApplication::activePopupWidget(), nullptr);
+
+    static constexpr std::array<const char*, 3> kUnsupportedTools = {
+        "fuzz_step",
+        "fuzz_reset",
+        "list_fuzz_actions",
     };
-    for (const char* tool_name : kRemainingTools)
+    for (const char* tool_name : kUnsupportedTools)
     {
         const std::string response = invoke_with_qt_events(port, tool_name);
         EXPECT_FALSE(response.empty()) << tool_name;
         EXPECT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos) << tool_name;
-        EXPECT_EQ(response.find("Timeout"), std::string::npos) << tool_name;
+        EXPECT_NE(response.find(R"("isError":true)"), std::string::npos) << tool_name;
+        EXPECT_NE(response.find("Qt automation method is not implemented"), std::string::npos)
+            << tool_name;
     }
 
     adapter.stop();

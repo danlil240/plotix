@@ -28,12 +28,12 @@
 
     #include <spectra/logger.hpp>
 
+    #include <cstdlib>
     #include <cstring>
     #include <iostream>
     #include <string>
 
     #ifndef _WIN32
-        #include <cstdlib>
         #include <filesystem>
         #include <algorithm>
         #include <vector>
@@ -192,6 +192,12 @@ int main(int argc, char* argv[])
         controller.start_topic_server();
         auto* main_window = controller.main_window();
         main_window->show();
+
+        // Native recovery prompts are intentionally disabled under automation;
+        // interactive startup should offer the persisted session.
+        const char* automation = std::getenv("SPECTRA_AUTOMATION");
+        if (!automation || !*automation)
+            controller.check_crash_recovery();
     }
 
     // Enter the Qt event loop

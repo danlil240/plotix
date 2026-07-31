@@ -10,6 +10,7 @@
 
 struct ImVec4;   // Forward declaration for ImGui
 struct ImFont;   // Forward declaration for ImGui
+struct ImGuiContext;
 
 namespace spectra::ui
 {
@@ -188,6 +189,7 @@ class IconFont
     // Initialize the icon font (call once during app startup)
     bool initialize();
     bool is_initialized() const { return initialized_; }
+    void release_context(ImGuiContext* context);
 
     // Get ImGui font for icons
     ImFont* get_font(float size = tokens::ICON_MD) const;
@@ -211,11 +213,16 @@ class IconFont
    private:
     IconFont() = default;
 
-    bool    initialized_ = false;
-    ImFont* font_16_     = nullptr;
-    ImFont* font_20_     = nullptr;
-    ImFont* font_24_     = nullptr;
-    ImFont* font_32_     = nullptr;
+    struct ContextFonts
+    {
+        ImFont* font_16 = nullptr;
+        ImFont* font_20 = nullptr;
+        ImFont* font_24 = nullptr;
+        ImFont* font_32 = nullptr;
+    };
+
+    bool                                            initialized_ = false;
+    std::unordered_map<ImGuiContext*, ContextFonts> fonts_by_context_;
 
     // Icon to Unicode codepoint mapping
     std::unordered_map<Icon, uint32_t> icon_map_;

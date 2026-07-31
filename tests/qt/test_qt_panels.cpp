@@ -28,19 +28,25 @@
 
 #include "adapters/qt/qt_main_window.hpp"
 #include "adapters/qt/qt_action_bridge.hpp"
+#include "adapters/qt/figure_canvas_widget.hpp"
 #include "adapters/qt/split_view_container.hpp"
 #include "adapters/qt/components/spectra_app_header.hpp"
 #include "adapters/qt/components/spectra_inspector_drawer.hpp"
 #include "adapters/qt/components/spectra_menu_strip.hpp"
+#include "adapters/qt/components/spectra_nav_button.hpp"
+#include "adapters/qt/components/spectra_nav_rail.hpp"
 #include "adapters/qt/components/spectra_status_bar.hpp"
 #include "adapters/qt/panels/inspector_widget.hpp"
 #include "adapters/qt/panels/data_editor_widget.hpp"
+#include "adapters/qt/panels/settings_widget.hpp"
 #include "adapters/qt/panels/transform_widget.hpp"
 
 #include "app/frontend_services.hpp"
 #include "ui/commands/command_registry.hpp"
 #include "ui/commands/undo_manager.hpp"
 #include "ui/input/input.hpp"
+#include "ui/settings/settings_store.hpp"
+#include "ui/theme/theme.hpp"
 
 #include <spectra/figure.hpp>
 #include <spectra/figure_registry.hpp>
@@ -168,18 +174,25 @@ TEST(QtPanels, MainWindowWithoutServicesHasNoPanels)
 
 TEST(QtPanels, MainWindowWithoutServicesHasMenus)
 {
-    auto& e = env();
+    spectra::FigureRegistry  registry;
+    spectra::CommandRegistry commands;
+    commands.register_command("file.test", "Test File Action", []() {}, "", "File");
+    spectra::adapters::qt::QtActionBridge action_bridge(commands);
+    action_bridge.rebuild();
 
-    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
-                                                e.registry.get(),
-                                                e.action_bridge.get(),
-                                                nullptr);
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr, &registry, &action_bridge, nullptr);
 
     // The native menu bar is intentionally hidden; the Spectra header owns
     // the legacy menu buttons and their QMenu popups.
     auto* header = mw.findChild<spectra::adapters::qt::SpectraAppHeader*>("spectra_app_header");
     ASSERT_NE(header, nullptr);
     EXPECT_EQ(header->findChildren<spectra::adapters::qt::SpectraMenuButton*>().size(), 9);
+
+    const std::string menu_state = mw.automation_menu_state();
+    EXPECT_NE(menu_state.find(R"("name":"File")"), std::string::npos);
+    EXPECT_NE(menu_state.find(R"("name":"Help")"), std::string::npos);
+    EXPECT_NE(menu_state.find(R"("label":"Test File Action")"), std::string::npos);
+    EXPECT_NE(menu_state.find(R"("enabled":true)"), std::string::npos);
 }
 
 TEST(QtPanels, MainWindowHasStatusBar)
@@ -224,6 +237,66 @@ TEST(QtPanels, MainWindowHasCentralView)
     auto* central = mw.central_view();
     ASSERT_NE(central, nullptr);
     EXPECT_EQ(central->objectName().toStdString(), "central_view");
+}
+
+TEST(QtPanels, MainWindowNavRailVisibilityUsesLiveShellState)
+{
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
+
+    auto* rail = mw.findChild<spectra::adapters::qt::SpectraNavRail*>("spectra_nav_rail");
+    ASSERT_NE(rail, nullptr);
+    EXPECT_TRUE(mw.is_nav_rail_visible());
+
+    mw.set_nav_rail_visible(false);
+    EXPECT_TRUE(rail->isHidden());
+    EXPECT_FALSE(mw.is_nav_rail_visible());
+
+    mw.set_nav_rail_visible(true);
+    EXPECT_FALSE(rail->isHidden());
+    EXPECT_TRUE(mw.is_nav_rail_visible());
+}
+
+TEST(QtPanels, SettingsVisibilityControlsPersistAndEmitSemanticState)
+{
+    spectra::ui::settings::SettingsStore store;
+    spectra::ui::ThemeManager            theme;
+    theme.ensure_initialized();
+    spectra::adapters::qt::QtSettingsWidget settings(&store, &theme);
+
+    bool inspector_visible = true;
+    bool nav_rail_visible  = true;
+    bool timeline_visible  = false;
+    QObject::connect(&settings,
+                     &spectra::adapters::qt::QtSettingsWidget::inspector_visibility_changed,
+                     [&](bool visible) { inspector_visible = visible; });
+    QObject::connect(&settings,
+                     &spectra::adapters::qt::QtSettingsWidget::nav_rail_visibility_changed,
+                     [&](bool visible) { nav_rail_visible = visible; });
+    QObject::connect(&settings,
+                     &spectra::adapters::qt::QtSettingsWidget::timeline_visibility_changed,
+                     [&](bool visible) { timeline_visible = visible; });
+
+    auto* inspector = settings.findChild<QCheckBox*>("inspector_visible_check");
+    auto* nav_rail  = settings.findChild<QCheckBox*>("nav_rail_visible_check");
+    auto* timeline  = settings.findChild<QCheckBox*>("timeline_visible_check");
+    ASSERT_NE(inspector, nullptr);
+    ASSERT_NE(nav_rail, nullptr);
+    ASSERT_NE(timeline, nullptr);
+
+    inspector->setChecked(false);
+    nav_rail->setChecked(false);
+    timeline->setChecked(true);
+
+    EXPECT_FALSE(store.data().inspector_visible);
+    EXPECT_FALSE(store.data().nav_rail_visible);
+    EXPECT_TRUE(store.data().timeline_visible);
+    EXPECT_FALSE(inspector_visible);
+    EXPECT_FALSE(nav_rail_visible);
+    EXPECT_TRUE(timeline_visible);
 }
 
 // ── Split view operations (no Vulkan needed for logic) ───────────────────────
@@ -286,6 +359,90 @@ TEST(QtPanels, SplitPreservesOpenCanvasesAndToolState)
     EXPECT_EQ(mw.canvas_for(first), first_canvas);
     EXPECT_EQ(mw.canvas_for(second), second_canvas);
     EXPECT_EQ(mw.central_view()->active_tool(), spectra::ToolMode::Select);
+}
+
+TEST(QtPanels, NavRailUsesCommandsAndReflectsPerDocumentToolState)
+{
+    spectra::FigureRegistry                   registry;
+    spectra::CommandRegistry                  commands;
+    spectra::adapters::qt::SpectraMainWindow* window        = nullptr;
+    int                                       command_count = 0;
+
+    auto register_tool = [&](const char* id, const char* label, spectra::ToolMode tool)
+    {
+        commands.register_command(id,
+                                  label,
+                                  [&, tool]()
+                                  {
+                                      ++command_count;
+                                      if (window)
+                                          window->set_active_tool(tool);
+                                  });
+    };
+    register_tool("tool.select", "Select Tool", spectra::ToolMode::Select);
+    register_tool("tool.pan", "Pan Tool", spectra::ToolMode::Pan);
+    register_tool("tool.box_zoom", "Box Zoom Tool", spectra::ToolMode::BoxZoom);
+    register_tool("tool.measure", "Measure Tool", spectra::ToolMode::Measure);
+    register_tool("tool.annotate", "Annotate Tool", spectra::ToolMode::Annotate);
+    register_tool("tool.roi", "ROI Tool", spectra::ToolMode::ROI);
+
+    spectra::adapters::qt::QtActionBridge action_bridge(commands);
+    action_bridge.rebuild();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr, &registry, &action_bridge, nullptr);
+    window = &mw;
+
+    const auto first  = registry.register_figure(std::make_unique<spectra::Figure>());
+    const auto second = registry.register_figure(std::make_unique<spectra::Figure>());
+    ASSERT_GE(mw.add_figure_tab(first), 0);
+
+    auto* rail   = mw.findChild<spectra::adapters::qt::SpectraNavRail*>("spectra_nav_rail");
+    auto* status = mw.findChild<spectra::adapters::qt::SpectraStatusBar*>("spectra_status_bar");
+    ASSERT_NE(rail, nullptr);
+    ASSERT_NE(status, nullptr);
+    EXPECT_EQ(rail->active_tool_index(), 1);
+    EXPECT_EQ(status->active_tool(), "Pan");
+
+    spectra::adapters::qt::SpectraNavButton* select_button    = nullptr;
+    spectra::adapters::qt::SpectraNavButton* transform_button = nullptr;
+    for (auto* button : rail->findChildren<spectra::adapters::qt::SpectraNavButton*>())
+    {
+        if (button->toolTip() == "Select (V)")
+            select_button = button;
+        else if (button->toolTip() == "Transform (T)")
+            transform_button = button;
+    }
+    ASSERT_NE(select_button, nullptr);
+    ASSERT_NE(transform_button, nullptr);
+
+    select_button->click();
+    EXPECT_EQ(command_count, 1);
+    EXPECT_EQ(mw.central_view()->active_tool(), spectra::ToolMode::Select);
+    EXPECT_EQ(rail->active_tool_index(), 0);
+    EXPECT_EQ(status->active_tool(), "Select");
+
+    // Panel navigation must not impersonate an interaction-tool selection.
+    transform_button->click();
+    EXPECT_EQ(command_count, 1);
+    EXPECT_EQ(mw.central_view()->active_tool(), spectra::ToolMode::Select);
+    EXPECT_EQ(rail->active_tool_index(), 0);
+    EXPECT_EQ(status->active_tool(), "Select");
+
+    // Each canvas owns its InputHandler. Switching documents must restore
+    // the active document's tool in the rail.
+    ASSERT_GE(mw.add_figure_tab(second), 0);
+    EXPECT_EQ(mw.central_view()->active_tool(), spectra::ToolMode::Pan);
+    EXPECT_EQ(rail->active_tool_index(), 1);
+    EXPECT_EQ(status->active_tool(), "Pan");
+    ASSERT_TRUE(mw.central_view()->activate_figure(first));
+    EXPECT_EQ(mw.central_view()->active_tool(), spectra::ToolMode::Select);
+    EXPECT_EQ(rail->active_tool_index(), 0);
+    EXPECT_EQ(status->active_tool(), "Select");
+
+    ASSERT_TRUE(commands.execute("tool.pan"));
+    EXPECT_EQ(command_count, 2);
+    EXPECT_EQ(mw.central_view()->active_tool(), spectra::ToolMode::Pan);
+    EXPECT_EQ(rail->active_tool_index(), 1);
+    EXPECT_EQ(status->active_tool(), "Pan");
 }
 
 // ── View menu toggle actions (when services is null, no toggle actions) ──────
@@ -451,6 +608,48 @@ TEST(QtPanels, InspectorSemanticCommandTogglesDrawer)
     EXPECT_TRUE(drawer->is_open());
     mw.toggle_inspector();
     EXPECT_FALSE(drawer->is_open());
+}
+
+TEST(QtPanels, InspectorCallbacksAreScopedToOwningCanvas)
+{
+    auto&                   e = env();
+    spectra::FigureRegistry registry;
+    const auto              first  = registry.register_figure(std::make_unique<spectra::Figure>());
+    const auto              second = registry.register_figure(std::make_unique<spectra::Figure>());
+
+    spectra::adapters::qt::SpectraMainWindow first_window(nullptr,
+                                                          &registry,
+                                                          e.action_bridge.get(),
+                                                          nullptr);
+    spectra::adapters::qt::SpectraMainWindow second_window(nullptr,
+                                                           &registry,
+                                                           e.action_bridge.get(),
+                                                           nullptr);
+    ASSERT_GE(first_window.add_figure_tab(first), 0);
+    ASSERT_GE(second_window.add_figure_tab(second), 0);
+
+    auto* first_drawer =
+        first_window.findChild<spectra::adapters::qt::SpectraInspectorDrawer*>("spectra_inspector");
+    auto* second_drawer = second_window.findChild<spectra::adapters::qt::SpectraInspectorDrawer*>(
+        "spectra_inspector");
+    auto* first_canvas  = first_window.canvas_for(first);
+    auto* second_canvas = second_window.canvas_for(second);
+    ASSERT_NE(first_drawer, nullptr);
+    ASSERT_NE(second_drawer, nullptr);
+    ASSERT_NE(first_canvas, nullptr);
+    ASSERT_NE(second_canvas, nullptr);
+
+    first_canvas->vulkanWindow()->toggleInspector();
+    EXPECT_TRUE(first_drawer->is_open());
+    EXPECT_FALSE(second_drawer->is_open());
+
+    second_canvas->vulkanWindow()->toggleInspector();
+    EXPECT_TRUE(first_drawer->is_open());
+    EXPECT_TRUE(second_drawer->is_open());
+
+    first_canvas->vulkanWindow()->toggleInspector();
+    EXPECT_FALSE(first_drawer->is_open());
+    EXPECT_TRUE(second_drawer->is_open());
 }
 
 TEST(QtPanels, DataEditorEditsAreUndoableAndRequestRedraw)

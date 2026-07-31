@@ -33,7 +33,7 @@ SpectraMenuButton::SpectraMenuButton(const QString& label, QMenu* menu, QWidget*
                           "  border: none;"
                           "  border-radius: %1px;"
                           "  color: #C7D6EB;"
-        "  padding: 0 15px;"
+                          "  padding: 0 15px;"
                           "  text-align: left;"
                           "}"
                           "QPushButton:hover {"
@@ -54,7 +54,7 @@ void SpectraMenuButton::show_menu()
     if (menu_)
     {
         QPoint pos(0, height());
-        menu_->exec(mapToGlobal(pos));
+        menu_->popup(mapToGlobal(pos));
     }
 }
 

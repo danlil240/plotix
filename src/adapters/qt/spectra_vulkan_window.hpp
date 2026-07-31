@@ -33,6 +33,7 @@ class QtRuntime;
 
 class SpectraVulkanWindow : public QWindow
 {
+    Q_OBJECT
    public:
     using AnimationTickCallback = std::function<void(float)>;
 
@@ -43,7 +44,13 @@ class SpectraVulkanWindow : public QWindow
     void setRuntime(QtRuntime* rt);
     void setFigure(Figure* fig);
     void setInputHandler(InputHandler* ih);
+    void setInspectorToggleCallbacks(std::function<void()> toggle, std::function<bool()> is_open);
     void setAnimationTick(AnimationTickCallback cb);
+
+    // Canvas-scoped inspector actions. These are also used by the retained
+    // overlay chevron through QtRuntime.
+    void toggleInspector();
+    bool isInspectorOpen() const;
 
     // ── Surface lifecycle ──────────────────────────────────────────────────
 
@@ -81,7 +88,14 @@ class SpectraVulkanWindow : public QWindow
     bool hasAnimationTimer() const { return timer_ != nullptr; }
 
     // ── DPR tracking ───────────────────────────────────────────────────────
+
     qreal lastDpr() const { return last_dpr_; }
+
+   signals:
+    // Emitted on mouseMoveEvent with canvas-local coordinates.
+    void cursorMoved(double x, double y);
+    // Emitted after each rendered frame with FPS and GPU frame time (ms).
+    void frameStats(int fps, double gpu_ms);
 
    protected:
     // QWindow overrides
@@ -91,6 +105,7 @@ class SpectraVulkanWindow : public QWindow
     void mouseMoveEvent(QMouseEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
@@ -99,20 +114,22 @@ class SpectraVulkanWindow : public QWindow
     void handleSurfaceCreated();
     void handleSurfaceAboutToBeDestroyed();
 
-    QtRuntime*           runtime_  = nullptr;
-    Figure*              figure_   = nullptr;
-    InputHandler*        input_    = nullptr;
+    QtRuntime*            runtime_ = nullptr;
+    Figure*               figure_  = nullptr;
+    InputHandler*         input_   = nullptr;
+    std::function<void()> inspector_toggle_;
+    std::function<bool()> inspector_is_open_;
     AnimationTickCallback animation_tick_;
-    QTimer*              timer_    = nullptr;
-    bool                 attached_ = false;
-    qreal                last_dpr_ = 1.0;
+    QTimer*               timer_    = nullptr;
+    bool                  attached_ = false;
+    qreal                 last_dpr_ = 1.0;
 
     // Surface generation: 0 = invalid, >0 = valid surface.
     // Incremented each time a new platform surface is created.
     uint32_t surface_generation_ = 0;
 
     // Frame timing
-    using Clock                   = std::chrono::steady_clock;
+    using Clock = std::chrono::steady_clock;
     Clock::time_point last_frame_time_;
     bool              has_last_frame_time_ = false;
 };

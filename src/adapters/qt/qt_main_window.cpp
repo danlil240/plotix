@@ -30,7 +30,9 @@
 #include "spectra_icon_embedded.hpp"
 
 #include "app/application_services.hpp"
+#include "ui/automation/automation_json.hpp"
 #include "ui/input/input.hpp"
+#include "ui/settings/settings_store.hpp"
 
 #include <spectra/figure.hpp>
 #include <spectra/figure_registry.hpp>
@@ -55,8 +57,110 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <array>
+#include <sstream>
+#include <utility>
+
 namespace spectra::adapters::qt
 {
+namespace
+{
+
+QString automation_menu_label(QString label)
+{
+    label.remove('&');
+    return label;
+}
+
+void append_automation_menu_actions(std::ostringstream&    result,
+                                    const QList<QAction*>& actions,
+                                    bool&                  first_item)
+{
+    for (const QAction* action : actions)
+    {
+        if (!action || !action->isVisible())
+            continue;
+        if (action->isSeparator())
+        {
+            if (!first_item)
+                result << ',';
+            first_item = false;
+            result << R"({"separator":true})";
+            continue;
+        }
+        if (action->menu())
+        {
+            append_automation_menu_actions(result, action->menu()->actions(), first_item);
+            continue;
+        }
+
+        const QString label = automation_menu_label(action->text());
+        if (label.isEmpty())
+            continue;
+        if (!first_item)
+            result << ',';
+        first_item = false;
+        result << R"({"label":")" << json_escape(label.toStdString()) << R"(","enabled":)"
+               << (action->isEnabled() ? "true" : "false") << R"(,"checkable":)"
+               << (action->isCheckable() ? "true" : "false") << '}';
+    }
+}
+
+struct ToolUiState
+{
+    int         nav_index;
+    const char* name;
+    const char* command_id;
+};
+
+ToolUiState tool_ui_state(ToolMode tool)
+{
+    switch (tool)
+    {
+        case ToolMode::Select:
+            return {0, "Select", "tool.select"};
+        case ToolMode::Pan:
+            return {1, "Pan", "tool.pan"};
+        case ToolMode::BoxZoom:
+            return {2, "Zoom", "tool.box_zoom"};
+        case ToolMode::Measure:
+            return {3, "Measure", "tool.measure"};
+        case ToolMode::Annotate:
+            return {4, "Annotate", "tool.annotate"};
+        case ToolMode::ROI:
+            return {5, "ROI", "tool.roi"};
+    }
+    return {1, "Pan", "tool.pan"};
+}
+
+bool tool_mode_for_nav_index(int nav_index, ToolMode& tool)
+{
+    switch (nav_index)
+    {
+        case 0:
+            tool = ToolMode::Select;
+            return true;
+        case 1:
+            tool = ToolMode::Pan;
+            return true;
+        case 2:
+            tool = ToolMode::BoxZoom;
+            return true;
+        case 3:
+            tool = ToolMode::Measure;
+            return true;
+        case 4:
+            tool = ToolMode::Annotate;
+            return true;
+        case 5:
+            tool = ToolMode::ROI;
+            return true;
+        default:
+            return false;
+    }
+}
+
+}   // namespace
 
 SpectraMainWindow::~SpectraMainWindow() = default;
 
@@ -88,7 +192,12 @@ SpectraMainWindow::SpectraMainWindow(QtRuntime*           runtime,
     connect(central_view_,
             &QtSplitViewContainer::figure_closed,
             this,
-            &SpectraMainWindow::figure_closed);
+            [this](FigureId id)
+            {
+                if (doc_tab_bar_)
+                    doc_tab_bar_->remove_tab(static_cast<int>(id));
+                emit figure_closed(id);
+            });
     connect(central_view_,
             &QtSplitViewContainer::figure_activated,
             this,
@@ -107,11 +216,45 @@ SpectraMainWindow::SpectraMainWindow(QtRuntime*           runtime,
                     data_editor_panel_->set_active_figure(id);
                 if (accessibility_panel_)
                     accessibility_panel_->set_active_figure(id);
+                sync_active_tool_ui();
             });
     connect(central_view_,
             &QtSplitViewContainer::figure_detach_requested,
             this,
             &SpectraMainWindow::figure_detach_requested);
+    connect(central_view_,
+            &QtSplitViewContainer::canvas_created,
+            this,
+            [this](FigureId, FigureCanvasWidget* canvas)
+            {
+                if (!canvas || !canvas->vulkanWindow())
+                    return;
+                auto* vw = canvas->vulkanWindow();
+                vw->setInspectorToggleCallbacks(
+                    [this]()
+                    {
+                        if (spectra_inspector_)
+                            spectra_inspector_->toggle();
+                    },
+                    [this]() { return spectra_inspector_ && spectra_inspector_->is_open(); });
+
+                // Wire cursor and frame stats to the status bar
+                if (spectra_status_)
+                {
+                    connect(vw,
+                            &SpectraVulkanWindow::cursorMoved,
+                            spectra_status_,
+                            &SpectraStatusBar::set_cursor_coords);
+                    connect(vw,
+                            &SpectraVulkanWindow::frameStats,
+                            spectra_status_,
+                            [this](int fps, double gpu_ms)
+                            {
+                                spectra_status_->set_fps(fps);
+                                spectra_status_->set_gpu_frame_time(gpu_ms);
+                            });
+                }
+            });
 
     // Build menus (still needed for QMenu popups used by custom menu strip)
     build_menus();
@@ -152,22 +295,36 @@ int SpectraMainWindow::add_figure_tab(FigureId id)
                 doc_tab_bar_->set_active_tab(static_cast<int>(id));
             }
         }
+        sync_active_tool_ui();
         SPECTRA_LOG_INFO("qt_main_window", "Added figure tab: id=" + std::to_string(id));
     }
     return idx;
 }
 
-void SpectraMainWindow::close_figure_tab(FigureId id)
+bool SpectraMainWindow::close_figure_tab(FigureId id)
 {
     if (!central_view_)
-        return;
-    central_view_->close_figure_tab(id);
-    if (doc_tab_bar_)
-        doc_tab_bar_->remove_tab(static_cast<int>(id));
-    emit figure_closed(id);
+        return false;
+    if (!central_view_->close_figure_tab(id))
+        return false;
+
     if (central_view_->figure_tab_count() == 0)
         show_welcome_page();
     SPECTRA_LOG_INFO("qt_main_window", "Closed figure tab: id=" + std::to_string(id));
+    return true;
+}
+
+bool SpectraMainWindow::release_figure_tab(FigureId id)
+{
+    if (!central_view_ || !central_view_->release_figure_tab(id))
+        return false;
+
+    if (doc_tab_bar_)
+        doc_tab_bar_->remove_tab(static_cast<int>(id));
+    if (central_view_->figure_tab_count() == 0)
+        show_welcome_page();
+    SPECTRA_LOG_INFO("qt_main_window", "Released figure tab: id=" + std::to_string(id));
+    return true;
 }
 
 FigureId SpectraMainWindow::active_figure_id() const
@@ -188,6 +345,39 @@ int SpectraMainWindow::figure_tab_count() const
 std::vector<FigureId> SpectraMainWindow::open_figure_ids() const
 {
     return central_view_ ? central_view_->open_figure_ids() : std::vector<FigureId>{};
+}
+
+std::string SpectraMainWindow::automation_menu_state() const
+{
+    const std::array<std::pair<const char*, QMenu*>, 9> menus = {{
+        {"File", menu_file_},
+        {"Edit", menu_edit_},
+        {"View", menu_view_},
+        {"Tools", menu_tools_},
+        {"Plot", menu_figure_},
+        {"Data", menu_data_},
+        {"Axes", menu_axes_},
+        {"Transforms", menu_transforms_},
+        {"Help", menu_help_},
+    }};
+
+    std::ostringstream result;
+    result << R"({"menus":[)";
+    bool first_menu = true;
+    for (const auto& [name, menu] : menus)
+    {
+        if (!menu)
+            continue;
+        if (!first_menu)
+            result << ',';
+        first_menu = false;
+        result << R"({"name":")" << name << R"(","items":[)";
+        bool first_item = true;
+        append_automation_menu_actions(result, menu->actions(), first_item);
+        result << "]}";
+    }
+    result << "]}";
+    return result.str();
 }
 
 bool SpectraMainWindow::is_inspector_open() const
@@ -222,6 +412,49 @@ void SpectraMainWindow::set_status(const std::string& message)
         status_label_->setText(QString::fromStdString(message));
     if (spectra_status_)
         spectra_status_->set_message(QString::fromStdString(message));
+}
+
+void SpectraMainWindow::set_active_tool(ToolMode tool)
+{
+    if (central_view_)
+        central_view_->set_active_tool(tool);
+    sync_active_tool_ui();
+}
+
+void SpectraMainWindow::set_nav_rail_visible(bool visible)
+{
+    if (nav_rail_)
+        nav_rail_->setVisible(visible);
+    if (settings_panel_)
+        settings_panel_->set_nav_rail_visible(visible);
+}
+
+bool SpectraMainWindow::is_nav_rail_visible() const
+{
+    return nav_rail_ && !nav_rail_->isHidden();
+}
+
+void SpectraMainWindow::sync_active_tool_ui()
+{
+    const ToolUiState state =
+        tool_ui_state(central_view_ ? central_view_->active_tool() : ToolMode::Pan);
+    if (nav_rail_)
+        nav_rail_->set_active_tool(state.nav_index);
+    if (spectra_status_)
+        spectra_status_->set_active_tool(QString::fromUtf8(state.name));
+}
+
+void SpectraMainWindow::set_timeline_visible(bool visible)
+{
+    if (timeline_panel_)
+        timeline_panel_->setHidden(!visible);
+    if (auto* action = findChild<QAction*>("view_toggle_timeline"))
+    {
+        const QSignalBlocker blocker(action);
+        action->setChecked(visible);
+    }
+    if (settings_panel_)
+        settings_panel_->set_timeline_visible(visible);
 }
 
 // ── Private slots ─────────────────────────────────────────────────────────────
@@ -265,48 +498,93 @@ void SpectraMainWindow::build_menus()
     menu_transforms_->setObjectName("menu_transforms");
     menu_help_->setObjectName("menu_help");
 
-    // Populate menus from CommandRegistry categories
+    // Submenus
+    menu_view_panels_ = new QMenu("Panels", menu_view_);
+    menu_view_panels_->setObjectName("menu_view_panels");
+    menu_view_splits_ = new QMenu("Splits", menu_view_);
+    menu_view_splits_->setObjectName("menu_view_splits");
+    menu_tools_theme_ = new QMenu("Theme", menu_tools_);
+    menu_tools_theme_->setObjectName("menu_tools_theme");
+    menu_tools_anim_ = new QMenu("Animation", menu_tools_);
+    menu_tools_anim_->setObjectName("menu_tools_anim");
+
+    // Route each action by command ID prefix, not just category.
+    // This fixes the gap where Figure lifecycle commands appeared under Plot,
+    // Help was empty, and View was oversized with duplicated panel toggles.
     auto categorized = action_bridge_->actions_by_category();
     for (const auto& [category, actions] : categorized)
     {
-        QMenu* target_menu = nullptr;
-        if (category == "File")
-            target_menu = menu_file_;
-        else if (category == "Edit")
-            target_menu = menu_edit_;
-        else if (category == "View")
-            target_menu = menu_view_;
-        else if (category == "Figure")
-            target_menu = menu_figure_;
-        else if (category == "Tools")
-            target_menu = menu_tools_;
-        else if (category == "Plot")
-            target_menu = menu_figure_;
-        else if (category == "Data")
-            target_menu = menu_data_;
-        else if (category == "Axes")
-            target_menu = menu_axes_;
-        else if (category == "Transforms")
-            target_menu = menu_transforms_;
-        else if (category == "Help" || category == "About")
-            target_menu = menu_help_;
-        else
-        {
-            // Create a custom menu for unknown categories
-            target_menu = get_or_create_menu(category);
-        }
-
-        if (!target_menu)
-            continue;
-
         for (auto* action : actions)
         {
-            target_menu->addAction(action);
-            // QMenus are shown through the custom header rather than a native
-            // QMenuBar. Associate each QAction with the window as well so its
-            // WindowShortcut remains active while the popup is closed.
+            // Extract command ID from objectName ("action_" prefix).
+            const QString objName = action->objectName();
+            const QString cmdId   = objName.mid(7);
+
+            QMenu* target = nullptr;
+
+            // ── Route by command ID prefix ───────────────────────────
+            if (cmdId.startsWith("figure.new") || cmdId.startsWith("figure.close")
+                || cmdId.startsWith("figure.next_tab") || cmdId.startsWith("figure.prev_tab")
+                || cmdId.startsWith("figure.tab_") || cmdId.startsWith("figure.move_to_window"))
+                target = menu_file_;
+            else if (cmdId.startsWith("file."))
+                target = menu_file_;
+            else if (cmdId == "app.quit" || cmdId == "app.new_window"
+                     || cmdId == "app.command_palette")
+                target = menu_file_;
+            else if (cmdId == "help.show")
+                target = menu_help_;
+            else if (cmdId.startsWith("edit."))
+                target = menu_edit_;
+            else if (cmdId.startsWith("series."))
+                target = menu_edit_;
+            else if (cmdId.startsWith("view.split_") || cmdId.startsWith("view.close_split")
+                     || cmdId.startsWith("view.reset_splits")
+                     || cmdId.startsWith("view.reset_layout"))
+                target = menu_view_splits_;
+            else if (cmdId.startsWith("view."))
+                target = menu_view_;
+            else if (cmdId.startsWith("panel."))
+                target = menu_view_panels_;
+            else if (cmdId.startsWith("tool."))
+                target = menu_tools_;
+            else if (cmdId.startsWith("theme."))
+                target = menu_tools_theme_;
+            else if (cmdId.startsWith("anim."))
+                target = menu_tools_anim_;
+            else if (cmdId.startsWith("accessibility."))
+                target = menu_tools_;
+            else if (cmdId.startsWith("plot."))
+                target = menu_figure_;
+            else if (cmdId.startsWith("data."))
+                target = menu_data_;
+            else if (category == "Axes")
+                target = menu_axes_;
+            else if (category == "Transforms")
+                target = menu_transforms_;
+            else
+            {
+                target = get_or_create_menu(category);
+            }
+
+            if (!target)
+                continue;
+
+            target->addAction(action);
             addAction(action);
         }
+    }
+
+    // Add submenus to their parents (only if non-empty).
+    if (!menu_tools_theme_->actions().isEmpty())
+    {
+        menu_tools_->addSeparator();
+        menu_tools_->addMenu(menu_tools_theme_);
+    }
+    if (!menu_tools_anim_->actions().isEmpty())
+    {
+        menu_tools_->addSeparator();
+        menu_tools_->addMenu(menu_tools_anim_);
     }
 }
 
@@ -379,6 +657,18 @@ void SpectraMainWindow::build_panels()
     settings_panel_->setObjectName("settings_dock");
     addDockWidget(Qt::LeftDockWidgetArea, settings_panel_);
     settings_panel_->hide();
+    connect(settings_panel_,
+            &QtSettingsWidget::inspector_visibility_changed,
+            this,
+            &SpectraMainWindow::on_toggle_inspector);
+    connect(settings_panel_,
+            &QtSettingsWidget::nav_rail_visibility_changed,
+            this,
+            &SpectraMainWindow::set_nav_rail_visible);
+    connect(settings_panel_,
+            &QtSettingsWidget::timeline_visibility_changed,
+            this,
+            &SpectraMainWindow::set_timeline_visible);
 
     // Timeline panel (hidden by default)
     timeline_panel_ = new QtTimelineWidget(nullptr, this);
@@ -433,12 +723,10 @@ void SpectraMainWindow::build_panels()
     addDockWidget(Qt::LeftDockWidgetArea, plugins_panel_);
     plugins_panel_->hide();
 
-    // Add View menu actions for panel toggles
-    if (menu_view_)
+    // Add panel toggle actions to the Panels submenu (not directly to View)
+    if (menu_view_panels_)
     {
-        menu_view_->addSeparator();
-
-        inspector_toggle_action_ = menu_view_->addAction("Inspector");
+        inspector_toggle_action_ = menu_view_panels_->addAction("Inspector");
         inspector_toggle_action_->setObjectName("view_toggle_inspector");
         inspector_toggle_action_->setCheckable(true);
         inspector_toggle_action_->setChecked(false);
@@ -447,43 +735,43 @@ void SpectraMainWindow::build_panels()
                 this,
                 &SpectraMainWindow::on_toggle_inspector);
 
-        auto* toggle_topics = menu_view_->addAction("Data Sources");
+        auto* toggle_topics = menu_view_panels_->addAction("Data Sources");
         toggle_topics->setObjectName("view_toggle_topics");
         toggle_topics->setCheckable(true);
         toggle_topics->setChecked(false);
         connect(toggle_topics, &QAction::toggled, this, &SpectraMainWindow::on_toggle_topics);
 
-        auto* toggle_settings = menu_view_->addAction("Settings");
+        auto* toggle_settings = menu_view_panels_->addAction("Settings");
         toggle_settings->setObjectName("view_toggle_settings");
         toggle_settings->setCheckable(true);
         toggle_settings->setChecked(false);
         connect(toggle_settings, &QAction::toggled, this, &SpectraMainWindow::on_toggle_settings);
 
-        auto* toggle_timeline = menu_view_->addAction("Timeline");
+        auto* toggle_timeline = menu_view_panels_->addAction("Timeline");
         toggle_timeline->setObjectName("view_toggle_timeline");
         toggle_timeline->setCheckable(true);
         toggle_timeline->setChecked(false);
         connect(toggle_timeline, &QAction::toggled, this, &SpectraMainWindow::on_toggle_timeline);
 
-        auto* toggle_export = menu_view_->addAction("Export");
+        auto* toggle_export = menu_view_panels_->addAction("Export");
         toggle_export->setObjectName("view_toggle_export");
         toggle_export->setCheckable(true);
         toggle_export->setChecked(false);
         connect(toggle_export, &QAction::toggled, this, &SpectraMainWindow::on_toggle_export);
 
-        auto* toggle_shortcuts = menu_view_->addAction("Shortcuts");
+        auto* toggle_shortcuts = menu_view_panels_->addAction("Shortcuts");
         toggle_shortcuts->setObjectName("view_toggle_shortcuts");
         toggle_shortcuts->setCheckable(true);
         toggle_shortcuts->setChecked(false);
         connect(toggle_shortcuts, &QAction::toggled, this, &SpectraMainWindow::on_toggle_shortcuts);
 
-        auto* toggle_transform = menu_view_->addAction("Transforms");
+        auto* toggle_transform = menu_view_panels_->addAction("Transforms");
         toggle_transform->setObjectName("view_toggle_transform");
         toggle_transform->setCheckable(true);
         toggle_transform->setChecked(false);
         connect(toggle_transform, &QAction::toggled, this, &SpectraMainWindow::on_toggle_transform);
 
-        auto* toggle_data_editor = menu_view_->addAction("Data Editor");
+        auto* toggle_data_editor = menu_view_panels_->addAction("Data Editor");
         toggle_data_editor->setObjectName("view_toggle_data_editor");
         toggle_data_editor->setCheckable(true);
         toggle_data_editor->setChecked(false);
@@ -492,7 +780,7 @@ void SpectraMainWindow::build_panels()
                 this,
                 &SpectraMainWindow::on_toggle_data_editor);
 
-        auto* toggle_accessibility = menu_view_->addAction("Accessibility");
+        auto* toggle_accessibility = menu_view_panels_->addAction("Accessibility");
         toggle_accessibility->setObjectName("view_toggle_accessibility");
         toggle_accessibility->setCheckable(true);
         toggle_accessibility->setChecked(false);
@@ -501,7 +789,7 @@ void SpectraMainWindow::build_panels()
                 this,
                 &SpectraMainWindow::on_toggle_accessibility);
 
-        auto* toggle_plugin_panel = menu_view_->addAction("Plugin Panels");
+        auto* toggle_plugin_panel = menu_view_panels_->addAction("Plugin Panels");
         toggle_plugin_panel->setObjectName("view_toggle_plugin_panel");
         toggle_plugin_panel->setCheckable(true);
         toggle_plugin_panel->setChecked(false);
@@ -510,44 +798,60 @@ void SpectraMainWindow::build_panels()
                 this,
                 &SpectraMainWindow::on_toggle_plugin_panel);
 
-        auto* toggle_plugins = menu_view_->addAction("Plugins");
+        auto* toggle_plugins = menu_view_panels_->addAction("Plugins");
         toggle_plugins->setObjectName("view_toggle_plugins");
         toggle_plugins->setCheckable(true);
         toggle_plugins->setChecked(false);
         connect(toggle_plugins, &QAction::toggled, this, &SpectraMainWindow::on_toggle_plugins);
+    }
 
-        // Split view actions
-        menu_view_->addSeparator();
-
-        auto* split_right_action = menu_view_->addAction("Split Right");
+    // Add split actions to the Splits submenu
+    if (menu_view_splits_)
+    {
+        auto* split_right_action = menu_view_splits_->addAction("Split Right");
         split_right_action->setObjectName("view_split_right");
         split_right_action->setShortcut(QKeySequence("Ctrl+\\"));
         connect(split_right_action, &QAction::triggered, this, &SpectraMainWindow::on_split_right);
 
-        auto* split_down_action = menu_view_->addAction("Split Down");
+        auto* split_down_action = menu_view_splits_->addAction("Split Down");
         split_down_action->setObjectName("view_split_down");
         split_down_action->setShortcut(QKeySequence("Ctrl+Shift+\\"));
         connect(split_down_action, &QAction::triggered, this, &SpectraMainWindow::on_split_down);
 
-        auto* close_split_action = menu_view_->addAction("Close Split Pane");
+        auto* close_split_action = menu_view_splits_->addAction("Close Split Pane");
         close_split_action->setObjectName("view_close_split");
         connect(close_split_action, &QAction::triggered, this, &SpectraMainWindow::on_close_split);
 
-        auto* reset_splits_action = menu_view_->addAction("Reset Splits");
+        auto* reset_splits_action = menu_view_splits_->addAction("Reset Splits");
         reset_splits_action->setObjectName("view_reset_splits");
         connect(reset_splits_action,
                 &QAction::triggered,
                 this,
                 &SpectraMainWindow::on_reset_splits);
 
-        menu_view_->addSeparator();
+        menu_view_splits_->addSeparator();
 
-        auto* reset_layout_action = menu_view_->addAction("Reset Layout");
+        auto* reset_layout_action = menu_view_splits_->addAction("Reset Layout");
         reset_layout_action->setObjectName("view_reset_layout");
         connect(reset_layout_action,
                 &QAction::triggered,
                 this,
                 &SpectraMainWindow::on_reset_layout);
+    }
+
+    // Add submenus to the View menu
+    if (menu_view_)
+    {
+        if (menu_view_panels_ && !menu_view_panels_->actions().isEmpty())
+        {
+            menu_view_->addSeparator();
+            menu_view_->addMenu(menu_view_panels_);
+        }
+        if (menu_view_splits_ && !menu_view_splits_->actions().isEmpty())
+        {
+            menu_view_->addSeparator();
+            menu_view_->addMenu(menu_view_splits_);
+        }
     }
 }
 
@@ -606,6 +910,13 @@ void SpectraMainWindow::on_toggle_inspector(bool checked)
         else
             spectra_inspector_->close();
     }
+    if (inspector_toggle_action_)
+    {
+        const QSignalBlocker blocker(inspector_toggle_action_);
+        inspector_toggle_action_->setChecked(checked);
+    }
+    if (settings_panel_)
+        settings_panel_->set_inspector_visible(checked);
 }
 
 void SpectraMainWindow::on_toggle_topics()
@@ -623,7 +934,7 @@ void SpectraMainWindow::on_toggle_settings()
 void SpectraMainWindow::on_toggle_timeline()
 {
     if (timeline_panel_)
-        timeline_panel_->setHidden(!timeline_panel_->isHidden());
+        set_timeline_visible(timeline_panel_->isHidden());
 }
 
 void SpectraMainWindow::on_toggle_export()
@@ -772,6 +1083,24 @@ void SpectraMainWindow::reset_layout()
     // Reset splits to single pane
     reset_splits();
 
+    // Reset all panel toggle check states to match the hidden state
+    if (menu_view_panels_)
+    {
+        for (auto* action : menu_view_panels_->actions())
+        {
+            if (action->isCheckable() && action != inspector_toggle_action_)
+            {
+                QSignalBlocker blocker(action);
+                action->setChecked(false);
+            }
+        }
+    }
+    if (inspector_toggle_action_)
+    {
+        QSignalBlocker blocker(inspector_toggle_action_);
+        inspector_toggle_action_->setChecked(false);
+    }
+
     // Restore the legacy desktop client size.
     resize(1280, 720);
 }
@@ -813,6 +1142,25 @@ void SpectraMainWindow::build_spectra_ui()
     if (menu_help_)
         app_header_->add_menu("Help", menu_help_);
 
+    // Wire Home button to view.home command
+    connect(app_header_,
+            &SpectraAppHeader::home_clicked,
+            this,
+            [this]()
+            {
+                if (action_bridge_)
+                {
+                    if (auto* action = action_bridge_->action_for("view.home"))
+                    {
+                        action->trigger();
+                        return;
+                    }
+                }
+                // Fallback: auto-fit active figure
+                if (central_view_)
+                    central_view_->activate_figure(central_view_->active_figure_id());
+            });
+
     // Create navigation rail
     nav_rail_ = new SpectraNavRail(this);
     nav_rail_->setObjectName("spectra_nav_rail");
@@ -825,44 +1173,25 @@ void SpectraMainWindow::build_spectra_ui()
             this,
             [this](int tool)
             {
-                static const QStringList tool_names = {"Select",
-                                                       "Pan",
-                                                       "Zoom",
-                                                       "Measure",
-                                                       "Annotate",
-                                                       "ROI",
-                                                       "Markers",
-                                                       "Transform",
-                                                       "Inspector",
-                                                       "Timeline",
-                                                       "Curve Editor",
-                                                       "Plugins",
-                                                       "Topics",
-                                                       "Settings",
-                                                       "Help"};
-                if (spectra_status_ && tool >= 0 && tool < tool_names.size())
-                    spectra_status_->set_active_tool(tool_names[tool]);
+                ToolMode requested_tool = ToolMode::Pan;
+                if (tool_mode_for_nav_index(tool, requested_tool))
+                {
+                    const ToolUiState requested_state = tool_ui_state(requested_tool);
+                    if (action_bridge_)
+                    {
+                        if (auto* action = action_bridge_->action_for(requested_state.command_id))
+                        {
+                            action->trigger();
+                            sync_active_tool_ui();
+                            return;
+                        }
+                    }
+                    set_active_tool(requested_tool);
+                    return;
+                }
 
                 switch (tool)
                 {
-                    case 0:
-                        central_view_->set_active_tool(ToolMode::Select);
-                        break;
-                    case 1:
-                        central_view_->set_active_tool(ToolMode::Pan);
-                        break;
-                    case 2:
-                        central_view_->set_active_tool(ToolMode::BoxZoom);
-                        break;
-                    case 3:
-                        central_view_->set_active_tool(ToolMode::Measure);
-                        break;
-                    case 4:
-                        central_view_->set_active_tool(ToolMode::Annotate);
-                        break;
-                    case 5:
-                        central_view_->set_active_tool(ToolMode::ROI);
-                        break;
                     case 7:
                         if (transform_panel_)
                             transform_panel_->show();
@@ -954,6 +1283,8 @@ void SpectraMainWindow::build_spectra_ui()
                     const QSignalBlocker blocker(inspector_toggle_action_);
                     inspector_toggle_action_->setChecked(true);
                 }
+                if (settings_panel_)
+                    settings_panel_->set_inspector_visible(true);
             });
     connect(spectra_inspector_,
             &SpectraInspectorDrawer::closed,
@@ -965,14 +1296,9 @@ void SpectraMainWindow::build_spectra_ui()
                     const QSignalBlocker blocker(inspector_toggle_action_);
                     inspector_toggle_action_->setChecked(false);
                 }
+                if (settings_panel_)
+                    settings_panel_->set_inspector_visible(false);
             });
-    if (runtime_)
-    {
-        runtime_->set_inspector_toggle_callbacks([this]() { spectra_inspector_->toggle(); },
-                                                 [this]()
-                                                 { return spectra_inspector_->is_open(); });
-    }
-
     // Match the legacy shell hierarchy: header, then a full-height rail beside
     // the document tabs and canvas, then the status strip.
     central_container_ = new QWidget(this);
@@ -1016,6 +1342,15 @@ void SpectraMainWindow::build_spectra_ui()
 
     // Inspector is hidden by default
     spectra_inspector_->setVisible(false);
+
+    // Apply persisted shell visibility after all custom surfaces exist.
+    if (services_)
+    {
+        const auto& settings = services_->settings().data();
+        set_nav_rail_visible(settings.nav_rail_visible);
+        on_toggle_inspector(settings.inspector_visible);
+        set_timeline_visible(settings.timeline_visible);
+    }
 }
 
 void SpectraMainWindow::update_compact_mode()
@@ -1276,6 +1611,243 @@ void SpectraMainWindow::apply_spectra_style()
         }
         QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
             width: 0;
+        }
+
+        /* ── QListWidget ──────────────────────────────────────────── */
+        QListWidget {
+            background-color: #15171C;
+            color: #C8CDD6;
+            border: 1px solid #23262E;
+            border-radius: 6px;
+            padding: 4px;
+            font-family: "Inter";
+            font-size: 12px;
+            outline: none;
+        }
+        QListWidget::item {
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        QListWidget::item:selected {
+            background-color: #1F2229;
+            color: #E8ECF1;
+        }
+        QListWidget::item:hover:!selected {
+            background-color: #1A1C22;
+        }
+
+        /* ── QTableWidget ─────────────────────────────────────────── */
+        QTableWidget {
+            background-color: #15171C;
+            color: #C8CDD6;
+            border: 1px solid #23262E;
+            border-radius: 6px;
+            gridline-color: #23262E;
+            font-family: "Inter";
+            font-size: 12px;
+            outline: none;
+        }
+        QTableWidget::item {
+            padding: 4px 8px;
+        }
+        QTableWidget::item:selected {
+            background-color: #1F2229;
+            color: #E8ECF1;
+        }
+        QTableCornerButton::section {
+            background-color: #15171C;
+            border: none;
+            border-bottom: 1px solid #23262E;
+            border-right: 1px solid #23262E;
+        }
+
+        /* ── Disabled states ──────────────────────────────────────── */
+        QPushButton:disabled, QLineEdit:disabled, QSpinBox:disabled,
+        QDoubleSpinBox:disabled, QComboBox:disabled, QCheckBox:disabled,
+        QRadioButton:disabled, QGroupBox:disabled {
+            color: #4A4D56;
+            background-color: #111316;
+            border-color: #1A1C22;
+        }
+        QCheckBox::indicator:disabled {
+            background-color: #111316;
+            border-color: #1A1C22;
+        }
+
+        /* ── QComboBox down-arrow ─────────────────────────────────── */
+        QComboBox::down-arrow {
+            image: none;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid #8A909C;
+            width: 0;
+            height: 0;
+        }
+        QComboBox::down-arrow:on {
+            border-top: none;
+            border-bottom: 5px solid #8A909C;
+        }
+        QComboBox::down-arrow:disabled {
+            border-top-color: #4A4D56;
+        }
+
+        /* ── QSpinBox / QDoubleSpinBox buttons ────────────────────── */
+        QSpinBox::up-button, QDoubleSpinBox::up-button,
+        QSpinBox::down-button, QDoubleSpinBox::down-button {
+            background-color: #1A1C22;
+            border: none;
+            width: 18px;
+        }
+        QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+        QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+            background-color: #23262E;
+        }
+        QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+            image: none;
+            border-left: 3px solid transparent;
+            border-right: 3px solid transparent;
+            border-bottom: 4px solid #8A909C;
+            width: 0;
+            height: 0;
+        }
+        QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+            image: none;
+            border-left: 3px solid transparent;
+            border-right: 3px solid transparent;
+            border-top: 4px solid #8A909C;
+            width: 0;
+            height: 0;
+        }
+
+        /* ── QCheckBox checkmark ──────────────────────────────────── */
+        QCheckBox::indicator:checked {
+            background-color: #7C5CFC;
+            border-color: #7C5CFC;
+            image: none;
+        }
+
+        /* ── QRadioButton ─────────────────────────────────────────── */
+        QRadioButton {
+            color: #C8CDD6;
+            font-family: "Inter";
+            font-size: 13px;
+            spacing: 8px;
+        }
+        QRadioButton::indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 8px;
+            border: 1px solid #23262E;
+            background-color: #15171C;
+        }
+        QRadioButton::indicator:checked {
+            background-color: #7C5CFC;
+            border-color: #7C5CFC;
+        }
+
+        /* ── QMenu checkable indicators ───────────────────────────── */
+        QMenu::indicator {
+            width: 16px;
+            height: 16px;
+        }
+        QMenu::indicator:checked {
+            background-color: #7C5CFC;
+            border-radius: 3px;
+        }
+
+        /* ── QDockWidget close/float buttons ──────────────────────── */
+        QDockWidget::close-button, QDockWidget::float-button {
+            background-color: transparent;
+            border: none;
+            padding: 2px;
+        }
+        QDockWidget::close-button:hover, QDockWidget::float-button:hover {
+            background-color: #23262E;
+            border-radius: 3px;
+        }
+        QDockWidget::close-button:pressed, QDockWidget::float-button:pressed {
+            background-color: #2A2D36;
+        }
+
+        /* ── QPlainTextEdit / QTextEdit ───────────────────────────── */
+        QPlainTextEdit, QTextEdit {
+            background-color: #15171C;
+            color: #C8CDD6;
+            border: 1px solid #23262E;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-family: "Inter";
+            font-size: 12px;
+        }
+        QPlainTextEdit:focus, QTextEdit:focus {
+            border-color: #7C5CFC;
+        }
+
+        /* ── QProgressBar ─────────────────────────────────────────── */
+        QProgressBar {
+            background-color: #15171C;
+            border: 1px solid #23262E;
+            border-radius: 4px;
+            text-align: center;
+            color: #C8CDD6;
+            font-family: "Inter";
+            font-size: 11px;
+        }
+        QProgressBar::chunk {
+            background-color: #7C5CFC;
+            border-radius: 3px;
+        }
+
+        /* ── QSlider ──────────────────────────────────────────────── */
+        QSlider::groove:horizontal {
+            background-color: #23262E;
+            height: 4px;
+            border-radius: 2px;
+        }
+        QSlider::handle:horizontal {
+            background-color: #7C5CFC;
+            width: 14px;
+            height: 14px;
+            margin: -5px 0;
+            border-radius: 7px;
+        }
+        QSlider::handle:horizontal:hover {
+            background-color: #8C6CFF;
+        }
+        QSlider::groove:vertical {
+            background-color: #23262E;
+            width: 4px;
+            border-radius: 2px;
+        }
+        QSlider::handle:vertical {
+            background-color: #7C5CFC;
+            width: 14px;
+            height: 14px;
+            margin: 0 -5px;
+            border-radius: 7px;
+        }
+        QSlider::handle:vertical:hover {
+            background-color: #8C6CFF;
+        }
+
+        /* ── QToolTip ─────────────────────────────────────────────── */
+        QToolTip {
+            background-color: #111827;
+            color: #C7D6EB;
+            border: 1px solid #2E3D57;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-family: "Inter";
+            font-size: 12px;
+        }
+
+        /* ── QFrame ───────────────────────────────────────────────── */
+        QFrame#spectra_canvas_frame {
+            background-color: #0D0E11;
+            border: none;
+        }
+        QWidget#spectra_central_container {
+            background-color: #0A0F18;
         }
     )");
 }

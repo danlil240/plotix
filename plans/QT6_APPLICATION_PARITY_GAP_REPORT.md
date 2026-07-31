@@ -1,468 +1,678 @@
 # Spectra Legacy vs Qt 6 Application Parity Gap Report
 
-**Audit date:** 2026-07-22  
-**Audited revision:** `43cb2bb39e876b854feb2442c1a1546272909b95` on `plan/qt6-application-migration`  
-**Decision:** **Qt is not eligible to become the default frontend.** Keep `SPECTRA_DEFAULT_FRONTEND=legacy`.  
+**Audit date:** 2026-07-26
+
+**Audited revision:** `09a6c6ae02b2ffe3f59e9e092d0b151445282590` on
+`plan/qt6-application-migration`, plus the pre-existing uncommitted working-tree changes listed by
+`git status` at audit time
+
+**Decision:** **Qt is not eligible to become the default frontend.** Keep
+`SPECTRA_DEFAULT_FRONTEND=legacy`.
+
 **Companion plan:** [QT6_APPLICATION_MIGRATION_PLAN.md](QT6_APPLICATION_MIGRATION_PLAN.md)
+
+**Implementation update (2026-07-26):** `QT-GAP-001`, `QT-GAP-002`, `QT-GAP-003`, and
+`QT-GAP-016` are partially reduced. Qt now implements `list_menus`, `switch_figure`, `add_series`,
+`get_figure_info`, `get_screenshot_base64`, and `list_methods`; the figure mutation and
+serialization paths are shared with legacy. `capture_screenshot` now has explicit canvas scope,
+while `capture_window` and base64 capture use the composed screen surface and include owned
+top-level popups/dialogs. A launched X11/lavapipe check produced distinct 1208×612 canvas and
+1280×720 window PNGs, included the native Vulkan axes and the separate command-palette dialog, and
+matched a simultaneous X11 root capture pixel-for-pixel. The custom menu strip now opens
+non-blocking popups, allowing MCP menu clicks to return while capture and dismissal operate on the
+open menu. Qt also dispatches the seven pointer,
+wheel, keyboard, text, and double-click automation methods to real Qt widgets or the embedded
+native canvas. Three advertised fuzz tools remain explicit not-implemented responses. Document
+close, move, and detach now route through
+`MainWindowRegistry`: tab close unregisters the figure exactly once, cross-window transfer validates
+both hosts before releasing the source, failed destination/release operations preserve or roll back
+the document, and docking hosts enumerate their documents. The Qt tests cover semantic automation,
+close notification/model removal, successful move, and failure preservation. Persistence dirty
+tracking now covers successful document close/move, a production timer ticks the autosave manager,
+shutdown saves before destroying window topology, and interactive startup invokes crash recovery.
+Dirty coverage for other workspace mutations, complete restore, nested redock topology, and
+process-restart coverage remain open.
+
+**Implementation update (2026-07-31):** `QT-GAP-007` is further reduced. Navigation-rail
+interaction tools now invoke the same registered commands as menus, shortcuts, the command palette,
+and automation. The rail highlight and status tool chip are synchronized from the active canvas's
+`InputHandler`, including per-document tool restoration on tab switches. Panel navigation no longer
+impersonates an interaction-tool selection. A focused Qt regression covers command dispatch,
+panel-selection isolation, direct command execution, and per-document state. `QT-GAP-005` and
+`QT-GAP-010` are also reduced: `panel.toggle_nav_rail` now has a semantic result, and the persisted
+Inspector, Navigation Rail, and Timeline settings are applied to the live shell. Shell/menu changes
+are reflected back into the settings controls and persistence path. `QT-GAP-001` is further reduced:
+successful native-canvas renders now advance the shared frame counter, `pump_frames` synchronously
+renders the requested count and errors on partial/zero progress, and deferred `wait_frames` requests
+consume actual rendered-frame deltas instead of Qt timer polls. The live MCP regression covers exact
+pump and wait progress; a launched X11/lavapipe application returned `pumped: 3` and then completed a
+two-frame wait against its visible Vulkan canvas.
 
 ## 1. Executive summary
 
-This audit compared the current legacy GLFW/ImGui application with `spectra-qt-app` using the
-repository's `spectra-mcp` workflow, live 1280x720 launches on X11/lavapipe, screenshots, command
-catalogues, direct control activation, the Qt test suite, and source inspection where Qt automation
-could not reach a workflow.
+This audit compared fresh builds of the legacy GLFW/ImGui application and `spectra-qt-app` through
+the repository's [spectra-mcp](../.cursor/skills/spectra-mcp/) workflow, live X11/lavapipe sessions,
+command and state transcripts, direct control activation, compositor screenshots, the Qt test suite,
+and source inspection. It covers visible buttons and menus, their results, application state,
+panels, graphics, automation, persistence, windows, input, plugins, and adapters.
 
-The Qt shell is a useful prototype around the shared Vulkan renderer, but it is not an application
-parity implementation yet:
+The Qt frontend has made real infrastructure progress, but **command registration is far ahead of
+feature implementation**:
 
-- Legacy registers **83 commands**. Qt registers **35**. Only **32 command IDs are shared**;
-  **51 legacy command IDs are absent** from Qt, while Qt adds three replacement-only IDs.
-- Qt now reuses the single MCP endpoint owned by `ApplicationServices` and pumps its pending queue
-  from the Qt event loop. The adapter-level live socket test covers `ping`, Qt-thread dispatch, and
-  non-timeout responses, but a launched `spectra-qt-app` process test and semantic implementations
-  for the remaining MCP tools are still required.
-- Unimplemented **Markers**, **Curve Editor**, and **Help** navigation buttons are now hidden; the
-  Help menu is in the custom header and the inspector semantic action is wired. The underlying marker,
-  curve-editor, and several Data/Axes/Transforms workflows are still incomplete.
-- The timeline is constructed with a null model and is disabled. Settings switches do not control
-  the shell. Shortcut rebinding is a TODO. Workspace/autosave saves window chrome but not user
-  figures. Export is PNG-oriented and does not provide the legacy artifact set.
-- Inspector axis-limit callbacks now capture stable controls and resolve live figures/axes before
-  mutation. Regression coverage edits every limit and destroys the inspector without leaving a
-  dangling callback.
-- Inspector, data-editor, and transform mutations now use shared undo transactions and request
-  redraw on apply, undo, and redo. Data cells reject invalid/non-finite numeric input without adding
-  history. Broader persistence provenance, row operations, and transform target/preview workflows
-  remain incomplete.
-- Production overlays are still ImGui/`ImDrawList` based. The renderer-neutral Qt overlay adapter is
-  not in the production frame path, while a single runtime-wide ImGui integration and interaction
-  object is rebound across canvases.
-- The nine Qt-labelled tests pass, but they mostly prove construction, dimensions, JSON helper
-  behavior, and callback-level adapters. They do not compare approved images, operate most controls,
-  verify persisted figures, or reach the live Qt MCP endpoint.
+- Legacy registers **83 command descriptors**. Qt registers all 83 legacy IDs plus three Qt-only
+  IDs, for **86 descriptors**. This is descriptor parity, not behavior parity: at least **10 Qt
+  commands are explicit stubs/no-ops**, and several other handlers operate disconnected models,
+  bypass deterministic services, or produce materially different results.
+- The Qt MCP endpoint now answers without timing out, but **3 of the 28 advertised MCP tools
+  explicitly return “Qt automation method is not implemented.”** `pump_frames` now renders the
+  active native canvas and verifies exact progress, `wait_frames` advances only from successful
+  render completions, and `dismiss_ui_capture` closes active Qt popups and releases widget/native
+  grabs. Identical fuzz fixtures
+  therefore cannot be executed against both frontends.
+- Qt's automation capture path now defines canvas-only versus whole-window scope and captures
+  composed screen pixels, including the embedded native Vulkan `QWindow` and owned top-level
+  popups/dialogs. The adapter returns dimensions and real PNG base64 data. In a launched
+  X11/lavapipe session, the 1280×720 whole-window output matched a simultaneous X11 root dump with
+  zero differing pixels, while the 1208×612 canvas-only output contained the rendered axes.
+  Wayland validation and multi-screen/DPR coverage are still required.
+- The blank renderer-owned 2D plot is the strongest parity result: after normalizing theme, grid,
+  and border, its crop differed in **0.092%** of pixels by more than two channel values, just inside
+  the migration plan's 0.1% threshold. The complete blank shell differed by **11.750%**, the welcome
+  windows by **91.553%**, and no populated series, overlays, 3D scene, or high-DPI/platform matrix
+  could be compared through the common automation path.
+- The visible Qt panels are not graphics-parity implementations. Native-white controls occupy
+  **16.336%** of the Topics window, **6.452%** of Timeline, **5.293%** of Data Editor, and **3.626%**
+  of Transforms. The command-palette dialog is **77.727%** near-white inside a dark application.
+  Several combo arrows, checkbox marks, disabled states, and dock controls are missing or illegible.
+- Timeline is visibly present but connected to `nullptr`; Curve Editor and Markers are hidden or
+  absent; Light theme still does not apply to the shell; zoom status remains static; Topics is a
+  generic data-source list rather than the legacy ROS/PX4 workflow; and export, plugins, transforms,
+  splits, workspace recovery, and input remain partial or unsafe.
+- Document close/move/detach now has a central rollback-safe path and direct Qt test coverage.
+  Successful document close/move now marks autosave dirty, periodic autosave runs in the Qt event
+  loop, and interactive startup invokes recovery. Workspace load still does not recreate documents,
+  most non-document mutations do not mark autosave dirty, and nested topology recovery remains
+  incomplete.
+- All **9/9 Qt-labelled tests pass**, but the visual test does not include a Vulkan canvas or opened
+  panels. The automation test now verifies the capture scopes/base64 payload, the five earlier
+  semantic methods, and seven input methods, and distinguishes the three explicit unsupported
+  responses, but it still is not a launched-process parity fixture.
 
-One narrow result is encouraging: after forcing both frontends to the Night theme, the blank
-renderer-owned plot crop differed in only **0.092%** of pixels by more than two channel values, just
-inside the plan's 0.1% threshold. That result covers only a blank 2D plot. The full shell differed by
-**11.456%**, and no claim can yet be made for plotted series, labels, overlays, 3D, panels, high-DPI,
-or other platforms.
+The audit also found current defects in the legacy reference: its MCP model-only figure creation
+does not attach a visible document, requested scatter data is reported as line data, screenshot
+capture reports success without writing a file, and `panel.toggle_inspector` reproducibly crashes
+after creating a figure. These defects must be fixed or normalized, but they do not reduce the Qt
+acceptance scope.
 
-## 2. Audit scope and method
+## 2. Scope, environment, and method
 
 ### 2.1 Environment
 
-- Build: GCC/Ninja release build, ROS2 off, tests/examples/golden tests enabled.
-- Runtime: Xvfb `:99`, 1280x720 application client, lavapipe software Vulkan, isolated
-  `XDG_RUNTIME_DIR`, `SPECTRA_RUNTIME_MODE=inproc`, and `SPECTRA_AUTOMATION=1`.
-- Binaries: `build/spectra-legacy` and `build/spectra-qt-app`.
-- Verification: full incremental build and `ctest --test-dir build -L qt --output-on-failure`.
-- The working tree already contained uncommitted Qt/ImGui shell changes before this audit. Those
-  changes were left intact. Findings describe the exact working tree named above, not only committed
-  `HEAD`.
+- GCC/Ninja release build, `SPECTRA_USE_ROS2=OFF`, tests/examples/golden tests enabled.
+- Fresh successful build of `spectra` and `spectra-qt-app`.
+- Xvfb display `:99`, 1280×720 requested client size, lavapipe software Vulkan,
+  `SPECTRA_RUNTIME_MODE=inproc`, and `SPECTRA_AUTOMATION=1`.
+- Qt additionally required X11 selection (`GDK_BACKEND=x11`, `XDG_SESSION_TYPE=x11`, and no inherited
+  `WAYLAND_DISPLAY`) in this environment.
+- Verification command: `ctest --test-dir build -L qt --output-on-failure`; all nine tests passed.
+- The working tree was already dirty and contained Qt/ImGui changes before the audit. It was not
+  cleaned or reset. Results describe the exact working tree above, not committed `HEAD` alone.
 
-### 2.2 Comparison procedure
+### 2.2 Procedure
 
-1. Start the legacy application through the documented `spectra-mcp` environment.
-2. Query state, commands, menus, figures, panels, and themes; execute commands and capture the window.
-3. Start Qt with the equivalent environment and attempt the same MCP calls.
-4. After the live Qt endpoint timed out, use X11 control activation and screenshots for visible Qt
-   behavior, then inspect the action, panel, workspace, input, docking, and automation sources.
-5. Force the same Night theme and compare identical blank-plot and shell crops.
-6. Build the repository and run all tests carrying the `qt` CTest label.
+1. Launch each frontend with the documented `spectra-mcp` runtime and query its live endpoint.
+2. Record all command descriptors, available MCP methods, menus, state, figures, and command results.
+3. Exercise welcome, figure creation, line/scatter model creation, panels, settings, themes, tools,
+   tabs, splits/windows, menus, palette, and capture methods wherever each endpoint allowed.
+4. Capture both application-returned images and compositor/root images. The latter are authoritative
+   for native child windows, popups, and dialogs omitted by application grabs.
+5. Compare normalized blank plot, complete shell, welcome, panel, and capture-contract images.
+6. Trace every visible Qt rail/header/status control and the principal panel actions to their
+   handlers, models, persistence paths, and tests.
+7. Separate failures in the legacy reference from Qt gaps rather than treating a broken baseline as
+   achieved parity.
 
-### 2.3 Important limitations
+The temporary transcripts and captures are under
+`/tmp/spectra-parity-audit-20260726/`. They are diagnostic artifacts, not checked-in golden files.
 
-- Incomplete Qt MCP method semantics still prevent identical automation fixtures from creating
-  populated series, 3D scenes, splits, detached windows, and overlays in both frontends. Those areas
-  remain **unverified**, not passed. Static evidence identifying missing paths is recorded below.
-- This pass exercised Linux/X11 only. Wayland, Windows, macOS, 200% DPR, input methods, touch, and
-  screen-reader behavior remain untested.
-- Temporary screenshots and JSON transcripts were generated under
-  `/tmp/spectra-qt-gap-audit/`; the durable evidence is summarized in this report.
-- A few legacy automation/reference defects were found and are separated in section 12 so they are
-  not mistaken for Qt accomplishments.
+### 2.3 Limitations
 
-## 3. Severity definition
+- At audit time Qt could not add a series or query figure details through MCP. Those two model-level
+  operations are now implemented and shared with legacy, but populated renderer comparisons,
+  multi-axis, 3D, overlay, and animation fixtures have not yet been rerun and remain **unverified**.
+- Qt MCP can now synthesize mouse movement/click/drag/scroll, shared key codes, text commits, and
+  double-clicks against widgets and the embedded native canvas. Complete input result fixtures,
+  pixel-delta/phase scrolling, IME composition, touch/tablet/gesture, drag/drop, and focus-transition
+  coverage remain open.
+- ROS2 was disabled. The report records the explicit Qt placeholders and generic-source mismatch,
+  but no live ROS2/PX4 topic session was run.
+- This pass covers Linux/X11 only. Wayland, Windows, macOS, touch/tablet, IME, screen reader, and 200%
+  DPR remain open acceptance work.
+- Xvfb popup painting was inconsistent for some small `QMenu` windows. Menu ownership and action
+  population findings below are source-confirmed; exact pixel appearance of those small popups is
+  not used as the sole evidence.
 
-| Severity | Meaning for the migration |
+## 3. Severity
+
+| Severity | Meaning |
 |---|---|
-| P0 | Release/default-switch blocker: crash/data-loss risk, core automation absent, or fundamental shared-state/persistence failure. |
-| P1 | Major user workflow missing, inert, materially wrong, or visually unusable. |
-| P2 | Partial behavior, fidelity, accessibility, or maintainability gap that must close before parity sign-off. |
-| P3 | Polish, diagnostic, or secondary consistency issue. |
+| P0 | Default-switch blocker: automation cannot establish parity, or a core workflow risks crash, loss, duplication, or unrecoverable state. |
+| P1 | Major missing, disconnected, misleading, or materially divergent user workflow or visual surface. |
+| P2 | Partial fidelity, accessibility, consistency, test, or maintainability gap required for sign-off. |
+| P3 | Secondary polish or diagnostics issue. |
 
-## 4. Release-blocking findings
+## 4. Blocking findings
 
-| ID | Sev. | Gap | Observed result | Required result |
+| ID | Sev. | Finding | Evidence/result | Required closure |
 |---|---:|---|---|---|
-| QT-GAP-001 | ~~P0~~ ✅ PARTIAL | Live Qt MCP is broken | **FIXED:** Qt reuses the service-owned MCP server and drains its automation queue on the Qt event loop. A live socket test verifies `ping`, `get_state` on the Qt thread, and non-timeout responses for the complete tool catalogue. Remaining: process-level `spectra-qt-app` launch coverage and real Qt semantics for tools that currently return an explicit not-implemented error. | One Qt-owned endpoint, reachable through every `spectra-mcp` tool, with requests dispatched on the Qt event loop. |
-| QT-GAP-002 | ~~P0~~ ✅ FIXED | Inspector axis callbacks hold dangling references | **FIXED:** All inspector lambdas now capture `FigureId` + axes/series indices and look up live objects via `FigureRegistry::get()` + `Figure::get_axes()`. No raw pointers to local controls are captured. | Capture stable widgets/state by value or retrieve controls from owned storage; add an edit-and-destroy regression test. |
-| QT-GAP-003 | ~~P0~~ ✅ PARTIAL | Workspace/autosave is chrome-only | **FIXED:** Autosave serialize fn now calls `Workspace::capture()` with all figures from the registry, populating figure/series/axes data, theme, inspector/nav-rail state, and desktop layout. Recovery prompt already existed. Remaining: full round-trip restore of figure data on load. | Round-trip all figures, series, axes, layouts, panel state, splits, windows, active document/tool, and unsaved recovery. |
-| QT-GAP-004 | P0 | Per-canvas state is not isolated | One runtime-level ImGui integration and one `DataInteraction` are rebound among all Qt canvases. | Each canvas/document owns independent interaction and overlay state; simultaneous windows cannot mutate one another. |
-| QT-GAP-005 | ~~P0~~ ✅ FIXED | Mutating panels bypass application transactions | **FIXED:** Inspector, data-editor cell edits, individual transforms, and transform pipelines now route through frontend-neutral undo helpers. Data/axis snapshots are restored safely through `FigureRegistry`; apply, undo, and redo request redraw. Invalid/non-finite cell input is rejected without mutation or history. Regression tests cover edit/transform/pipeline apply, undo, redo, validation, and redraw counts. | Every edit uses the same frontend-neutral command/transaction path and produces identical undo and render results. |
-| QT-GAP-006 | ~~P1~~ ✅ FIXED | Command surface is incomplete | **FIXED:** Qt now registers 86 commands covering all 83 legacy command IDs plus 3 Qt-specific IDs (`app.quit`, `file.export`, `view.reset_layout`). All 51 previously-missing legacy command IDs are now registered with functional handlers where Qt infrastructure supports them. Some commands (e.g. `series.copy/cut/paste`, `view.toggle_crosshair`, `panel.toggle_curve_editor`, `plot.function`) have stub handlers with TODOs pending Qt-specific overlay/clipboard infrastructure. | Register one shared descriptor/handler set before either frontend builds menus, shortcuts, or the palette. |
-| QT-GAP-007 | ~~P1~~ ✅ PARTIAL | Visible controls are inert or miswired | **FIXED:** Inert nav rail buttons (Markers, Curve Editor, Help) are now hidden via `set_button_visible()`. Help menu added to custom app header. Inspector toggle already wired. Data/Axes/Transforms menus were already populated from command registry. | Every visible control executes a tested semantic command or is hidden until implemented. |
-| QT-GAP-008 | P1 | Timeline and curve editing are absent | Timeline is created with `nullptr` and disabled; no Qt curve editor exists. | Bind the real timeline model, transport, scrubber, loop/FPS/duration, keyframes, and curve editor with undo. |
-| QT-GAP-009 | P1 | Export/clipboard parity is absent | Qt exposes `file.export` and a PNG/plugin panel; PNG success is not verified, plugin export passes empty figure/pixel payloads, and SVG/copy/video paths are absent. | Produce and verify every legacy artifact through shared export services, including failures/cancel/progress. |
-| QT-GAP-010 | P1 | Production overlays are not ported | Qt overlay adapter has no production call sites; retained overlays still use ImGui directly. | Exercise crosshair, tooltip, legend, markers, selection, measurement, annotation, ROI, and data tips in Qt. |
-| QT-GAP-011 | P1 | Split/docking/workspace topology is incomplete | Split view flattens mixed trees; dock host cannot enumerate documents; moves can remove a source before validating the destination. | Preserve arbitrary pane trees, documents, focus/tool state, and rollback-safe cross-window moves. |
-| QT-GAP-012 | P1 | Visual parity is not established | Blank plot crop is close, but shell/welcome/panels diverge and native-white surfaces remain. | Approved, deterministic legacy-vs-Qt baselines for the complete matrix and all required sizes/DPRs/platforms. |
+| QT-GAP-001 | P0 | Common automation contract is incomplete | **Partial:** `get_screenshot_base64`, scoped capture, real Qt popup/grab dismissal, truthful native-canvas `pump_frames`, and rendered-progress-based `wait_frames` were added. 3/28 Qt tools still return explicit not-implemented fuzz errors. | Run the same complete MCP fixture against both frontends and assert equivalent state, UI, artifacts, and errors. |
+| QT-GAP-002 | P0 | Qt screenshots are not truthful | **Partial:** canvas and window capture now have distinct scopes; composed screen capture includes native canvas content and owned popups/dialogs, returns dimensions, and backs base64 PNG output. A launched X11/lavapipe 1280×720 capture matched an external root dump exactly; Wayland, multi-screen, and DPR validation remain open. | Prove the new capture path across the remaining required platform/DPR matrix. |
+| QT-GAP-003 | P0 | Document close/move state is unsafe | **Partial:** close/move/detach now share a controller, close removes UI and registry state once, destination validation precedes source release, failed transfer preserves/rolls back, and successful mutations mark persistence dirty. Nested redock and launched-process coverage remain open. | Extend the transaction through complete redock/persistence state and prove close, move, detach, rollback, and restart behavior in launched-process tests. |
+| QT-GAP-004 | P0 | Workspace/autosave/recovery cannot restore a session | **Partial:** host documents are enumerated; successful close/move marks dirty; autosave is ticked and saved before teardown; interactive startup invokes recovery. Load still cannot recreate missing figures/windows/topology, and other mutations lack dirty coverage. | Round-trip populated figures, windows, nested panes, docks, active state, and unsaved recovery in a process-restart test. |
+| QT-GAP-005 | P1 | Registered commands overstate implemented behavior | At least 10 descriptors are explicit no-ops; animation uses a model disconnected from the visible timeline; help bypasses the application UI. | Every visible/registered command must have a tested semantic result or be disabled/hidden and excluded from parity counts. |
+| QT-GAP-006 | P1 | Menu hierarchy is incomplete and contradictory | **Partial:** Menu routing now uses command-ID prefixes. Figure lifecycle (new/close/next/prev/tab/move) routed to File. Help/animation/theme/series/accessibility routed to correct menus. View menu reduced via Panels and Splits submenus. Axes/Transforms still empty (no commands registered). | Bind a shared ordered menu model with identical categories, labels, shortcuts, enable/check state, and results. |
+| QT-GAP-007 | P1 | Visible controls are inert or misleading | **Partial:** Home triggers `view.home`; cursor/FPS/GPU status fields are wired; reset layout resets panel toggle state. Rail tools now execute shared commands, while rail/status tool state follows the active canvas across document switches. Panel rail buttons no longer overwrite tool state. Remaining visible-control semantics and zoom-status updates are not fully verified. | Every visible control must execute one semantic command and reflect authoritative state. |
+| QT-GAP-008 | P1 | Timeline and curve editing are absent | Timeline receives `nullptr` and is disabled; Curve Editor has no Qt panel/handler. | Bind the production timeline/keyframe model and complete transport, scrub, loop, FPS/duration, and curve editing with undo. |
+| QT-GAP-009 | P1 | Panel graphics do not follow the dark shell/design system | **Partial:** Stylesheet now covers QListWidget, QTableWidget, QPlainTextEdit/QTextEdit, QRadioButton, QProgressBar, QSlider, QToolTip, disabled states, QComboBox down-arrows, QSpinBox up/down arrows, QMenu checkable indicators, QDockWidget close/float buttons, and central container/canvas frame backgrounds. Light theme chrome mismatch (QT-GAP-010) and golden image validation remain open. | Theme every state/control and pass approved panel goldens at all reference sizes/DPRs. |
+| QT-GAP-010 | P1 | Settings/theme behavior is disconnected | **Partial:** persisted Inspector, Navigation Rail, and Timeline visibility is applied to the live shell, while live changes synchronize back to controls/persistence. Light theme still changes the renderer while shell/panels remain hard-coded dark. | Apply one shared theme/token and settings state to renderer, chrome, panels, and persistence. |
+| QT-GAP-011 | P1 | Inspector reports contradictory/stale state | Live panel showed 1500×900 while state was 1208×612 and “Axes 0” versus tab/state axes count 1. | Derive all values from the active live model after resize and cover 2D/3D axes consistently. |
+| QT-GAP-012 | P1 | Data, transforms, topics, and plugins are prototypes | Missing row operations/import/export/targets/preview/provenance/ROS workflows; plugin IDs/payloads/schema rendering are incomplete. | Match every legacy result, validation, undo, persistence, error, and artifact path. |
+| QT-GAP-013 | P1 | Export and dialogs are not automation-safe | Direct native dialogs bypass injected services; plugin export gets null pixels/empty JSON; artifact outcomes are unverified. | Use shared dialog/export services and verify PNG, SVG, clipboard, table, figure, workspace, and plugin artifacts. |
+| QT-GAP-014 | P1 | Splits/docks cannot preserve arbitrary topology | Mixed nested splits are flattened; focus targeting is unreliable; custom and internal tabs coexist; dock controls are hidden. | Preserve nested trees, active pane/document/tool, and safe cross-pane/window movement through save/load. |
+| QT-GAP-015 | P1 | Overlay/tool parity is not demonstrated | Crosshair is a stub, Markers is hidden, retained ImGui overlays remain, and interaction cannot be automated. | Exercise select, crosshair, tooltip, legend, markers, measure, annotate, ROI, and data tips end to end. |
+| QT-GAP-016 | P1 | Input coverage is incomplete | **Partial:** MCP pointer/button/drag/wheel/key/text/double-click events now reach widgets and the native canvas. Pixel scrolling/phases, IME composition, touch/tablet/gesture, DnD, focus transitions, and complete platform key coverage remain open. | Implement and test the platform input matrix, including QAction/canvas/text focus arbitration. |
+| QT-GAP-017 | P1 | ROS2/PX4 Qt UI remains placeholder/generic | Display render area is explicitly marked placeholder; inspector is label-only; Topics is a generic registry browser. | Port all supported discovery, QoS, plot, display, inspector, bag/ULog, reconnect, and error workflows. |
+| QT-GAP-018 | P1 | Full graphics parity is unestablished | Only a blank 2D crop passes narrowly; shell, welcome, panels, series, overlays, 3D, DPR, and platform baselines remain. | Pass the complete approved visual matrix and store numerical failure artifacts. |
+| QT-GAP-019 | P2 | Shortcut/action state can diverge | Shared IDs have different defaults; action refresh does not fully establish live shortcut/check-state parity; rebinding remains TODO. | Compare and test ID, label, category, shortcut, enabled/check state, conflicts, rebind, reset, and persistence. |
+| QT-GAP-020 | P2 | Current tests cannot detect the observed failures | Visual grab excludes runtime canvas/panels; automation treats structured error as success; action tests mostly prove descriptor creation. | Replace smoke assertions with launched-process semantic, artifact, state, and image comparisons. |
 
-## 5. Command parity
+## 5. Automation parity
 
-### 5.1 Counts and semantic mismatches
+### 5.1 Endpoint and tool results
 
-| Metric | Legacy | Qt | Gap |
-|---|---:|---:|---:|
-| Registered commands | 83 | 86 | 3 more in Qt (includes Qt-specific IDs) |
-| IDs shared by both | 83 | 83 | — |
-| Legacy-only IDs | 0 | 0 | 0 missing |
-| Qt-only real IDs | 0 | 3 | `app.quit`, `file.export`, `view.reset_layout` |
+Both live applications answered on the configured endpoint. Qt logged 86 registered commands and its
+event-loop dispatch no longer timed out. The remaining difference is semantic:
 
-Qt-only IDs are `app.quit`, `file.export`, and `view.reset_layout`. They do not replace the missing
-legacy IDs for exit/cancel semantics, specific export artifacts, or split reset.
-
-Shared IDs also differ:
-
-| Command | Legacy | Qt | Gap |
-|---|---|---|---|
-| `figure.tab_1` … `figure.tab_9` | `1` … `9` | `Alt+1` … `Alt+9` | Muscle memory and documented shortcuts change. |
-| `view.autofit` | `A`, “Auto-Fit Active Axes” | `Shift+A`, “Auto-Fit Active Figure” | Shortcut and scope/label differ. |
-| `view.fullscreen` | `F` | `F11` | Shortcut differs. |
-| Tool commands | Registered without these Qt keys | `V`, `H`, `Z`, `M`, `A`, `Shift+R` | Qt introduces conflicting/changed bindings without a shared policy. |
-| Panel commands | Legacy has panel behavior, generally no default key | Qt adds `I`, `T`, `,`, `D` variants | Bindings differ and the inspector action is currently broken. |
-
-`QtActionBridge::refresh()` updates labels and enabled state but not shortcuts/check state. Shortcut
-overrides therefore cannot reliably update already-created `QAction` objects.
-
-### 5.2 Previously-missing legacy command IDs — now registered
-
-All 51 previously-missing legacy command IDs are now registered in `register_qt_commands()`.
-Some have full functional handlers; others have stub handlers pending Qt-specific infrastructure.
-
-| Category | Command IDs | Handler status |
+| MCP result | Legacy | Qt |
 |---|---|---|
-| Accessibility | `accessibility.sonify_series` | ✅ Functional (sonify_axes_to_wav) |
-| Animation | `anim.go_to_end`, `anim.go_to_start`, `anim.step_back`, `anim.step_forward`, `anim.stop`, `anim.toggle_play` | ✅ Functional (TimelineEditor) |
-| Application/help | `app.cancel`, `app.command_palette`, `app.new_window`, `help.show` | ✅ Functional (open_command_palette, create_detached_window, xdg-open) |
-| Data | `data.copy_to_clipboard`, `data.export_html_table` | ✅ Functional (series_to_tsv, figure_to_html_table_file) |
-| Figure/window | `figure.move_to_window` | ✅ Functional (create_detached_window + add_figure_tab) |
-| File/export/persistence | `file.copy_to_clipboard`, `file.export_png`, `file.export_svg`, `file.load_figure`, `file.load_workspace`, `file.save_figure`, `file.save_workspace` | ✅ Functional (save_png/svg, FigureSerializer, Workspace save/load) |
-| Panels | `panel.toggle_curve_editor`, `panel.toggle_nav_rail`, `panel.toggle_plugins` | ⚠️ `toggle_plugins` functional; `toggle_nav_rail` and `toggle_curve_editor` are stubs pending Qt API |
-| Plot creation | `plot.function`, `plot.hline`, `plot.hline_zero`, `plot.vline`, `plot.vline_zero` | ⚠️ hline/vline/zero lines functional; `plot.function` is stub pending dialog |
-| Series editing | `series.copy`, `series.cut`, `series.cycle_selection`, `series.delete`, `series.deselect`, `series.paste` | ⚠️ Stubs pending Qt canvas series selection infrastructure |
-| Themes | `theme.dark`, `theme.light`, `theme.night`, `theme.toggle` | ✅ Functional (ThemeManager::set_theme) |
-| View/navigation | `view.home`, `view.pan_down`, `view.pan_left`, `view.pan_right`, `view.pan_up`, `view.reset_splits`, `view.toggle_border`, `view.toggle_crosshair`, `view.toggle_grid`, `view.toggle_legend`, `view.zoom_in`, `view.zoom_out` | ⚠️ Most functional; `toggle_crosshair` stub pending Qt overlay |
+| `ping`, `get_state`, `list_commands`, `execute_command` | Implemented | Implemented |
+| `create_figure` | Mutates registry, but does not attach a visible document | Creates a visible Qt figure when using the semantic command; direct tool is implemented |
+| `set_window_size`, `resize_window` | Implemented | Implemented |
+| `capture_window`, `capture_screenshot` | Reports success, but the observed screenshot file was not written | Distinct whole-window/canvas scopes capture composed pixels and verify PNG output; launched X11 equivalence passes |
+| `list_menus` | Implemented, but only reports File/Edit/View/Tools/Plot | Implemented from the nine visible Qt menus with action enabled/checkable state |
+| `mouse_move`, `mouse_click`, `mouse_drag`, `scroll` | Implemented | Implemented through synchronous Qt events, including native-canvas targeting |
+| `key_press`, `text_input`, `double_click` | Implemented | Implemented for focused Qt widgets/native canvas with shared key/modifier translation |
+| `switch_figure`, `add_series`, `get_figure_info` | Implemented with legacy defects noted in section 13 | Implemented; series mutation and figure serialization share the legacy operations |
+| `get_screenshot_base64` | Implemented | Implemented from the same whole-window composed PNG capture |
+| `fuzz_step`, `fuzz_reset`, `list_fuzz_actions` | Implemented | **Not implemented** |
+| `list_methods` | Implemented | Implemented from the shared automation handler catalog |
+| `pump_frames` | Pumps legacy frames | Synchronously renders the active native canvas, returns the observed count, and errors if exact progress is impossible |
+| `wait_frames` | Waits for frame progress | Deferred by the shared queue and completed only after the requested number of successful Qt renders |
+| `dismiss_ui_capture` | Dismisses capture UI | Closes active Qt popups and releases widget keyboard/mouse plus native-canvas mouse grabs |
 
-## 6. Visible shell, menus, buttons, and result comparison
+The three explicit Qt not-implemented methods are:
 
-### 6.1 Welcome, document tabs, and shell
+`fuzz_step`, `fuzz_reset`, and `list_fuzz_actions`.
 
-| Control/surface | Legacy result | Qt result | Status |
+### 5.2 Capture contract
+
+The audit's old QWidget-only path produced byte-identical `capture_window` and
+`capture_screenshot` files, omitted the Vulkan child and top-level UI, and differed from the
+simultaneous compositor capture in **80.432%** of pixels by more than two channel values.
+
+The replacement path now:
+
+- maps `capture_screenshot` to the active native canvas bounds;
+- maps `capture_window` and `get_screenshot_base64` to the main window plus visible owned
+  top-level popup/dialog bounds;
+- captures composed screen pixels so the embedded native canvas is present;
+- verifies PNG encoding/writes before success and returns the actual pixel dimensions and scope.
+
+Adapter-level tests prove scope dispatch, dimensions, non-empty base64 data, non-blocking menu
+activation, and popup dismissal. A launched Qt X11/lavapipe session then produced a 1208×612 canvas
+PNG, a 1280×720 whole-window PNG, and a 1280×720 base64 PNG payload. The canvas contained a
+populated Vulkan line plot with axes and legend, the whole-window capture included separate
+command-palette and File-menu surfaces, and the static whole-window image matched a simultaneous
+`xwd` root capture with **0 pixels differing** and zero mean absolute channel error. The File-menu
+MCP click returned without blocking, and dismissal reported `"popup":true`. Wayland, mixed-screen,
+and 200% DPR validation are still required before this P0 gap can be closed.
+
+## 6. Command, menu, shortcut, and button parity
+
+### 6.1 Descriptor inventory
+
+| Metric | Legacy | Qt |
+|---|---:|---:|
+| Registered command IDs | 83 | 86 |
+| Shared IDs | 83 | 83 |
+| Legacy-only IDs | 0 | 0 |
+| Qt-only IDs | 0 | 3 |
+
+Qt-only IDs are `app.quit`, `file.export`, and `view.reset_layout`.
+
+Qt category counts are:
+
+| Category | Count | Category | Count |
+|---|---:|---|---:|
+| Accessibility | 1 | Animation | 6 |
+| App | 5 | Data | 2 |
+| Edit | 2 | Figure | 13 |
+| File | 9 | Panel | 3 |
+| Plot | 5 | Series | 6 |
+| Theme | 4 | Tools | 6 |
+| View | 24 |  |  |
+
+The following registered Qt commands are explicit no-ops/stubs:
+
+- `app.cancel`
+- `panel.toggle_curve_editor`
+- `plot.function`
+- `view.toggle_crosshair`
+- `series.cycle_selection`, `series.copy`, `series.cut`, `series.paste`, `series.delete`, and
+  `series.deselect`
+
+Additional descriptor-to-result divergences:
+
+- All six animation commands operate a controller-owned `TimelineEditor`, while the visible
+  `QtTimelineWidget` was created with `nullptr`.
+- Theme commands update the renderer theme, not the hard-coded Qt shell/panel stylesheet.
+- `help.show` launches an external URL through `xdg-open`; there is no integrated Help surface and
+  the visible Help menu is empty.
+- Figure/workspace/export actions use direct native dialogs, bypassing deterministic dialog
+  automation.
+- HTML/WAV outputs use hard-coded relative filenames rather than a user-selected destination.
+- `figure.move_to_window` now uses the same validated, rollback-safe detach transaction as the tab
+  action.
+
+### 6.2 Shared descriptor mismatches
+
+| Command | Legacy descriptor | Qt descriptor | Gap |
 |---|---|---|---|
-| Empty/welcome screen | Branded logo, product subtitle, `Ctrl+T` hint and version; navigation rail hidden. | Plain text welcome, no logo/version/shortcut hint; navigation rail and empty document strip remain visible. | P1 mismatch |
-| New figure | `figure.new` creates and activates a document tab. | Header `+` executes `figure.new` and created Figure 1 in the live run. | Pass for basic case |
-| Tab select/close | Shared semantic commands and legacy document UI. | Basic select/close exists; custom top tabs coexist with QTabWidget pane tabs during splits. | P1 partial |
-| Tab reorder/detach | Legacy supports window/document commands. | QTabWidget reorder is pane-local; no cross-pane drag; detach/move safety and persistence are incomplete. | P1 partial |
-| Home/reset button | Resets the active view. | Command exists, but complete parity across 2D/3D/splits was not automatable. | Unverified |
-| Inspector chevron | Opens the active figure inspector. | Direct navigation can open it; the command/shortcut calls `on_toggle_inspector()` without required `bool`, producing a Qt meta-object error. | P1 broken |
-| Status bar | Reports meaningful tool/application state. | Present, but panel navigation can change selected rail/status state without changing canvas tool state. | P2 mismatch |
+| `figure.tab_1` … `figure.tab_9` | `1` … `9` | `Alt+1` … `Alt+9` | Changed navigation muscle memory |
+| `file.export_png` | `Ctrl+S` | `Ctrl+Shift+S` | Changed shortcut |
+| `file.export_svg` | `Ctrl+Shift+S` | `Ctrl+Shift+Alt+S` | Changed shortcut |
+| `panel.open_settings` | Panel, no shortcut | View, `Ctrl+,` | Category and shortcut differ |
+| `panel.toggle_data_editor` | Panel, no shortcut | View, `D` | Category and shortcut differ |
+| `panel.toggle_inspector` | Legacy label/category, no shortcut | Different label/category, `I` | Descriptor differs |
+| `panel.toggle_timeline` | Legacy label/category | Different label/category | Descriptor differs |
+| `panel.toggle_topics` | Legacy label/category | Different label/category | Descriptor differs |
+| Tool modes | No equivalent defaults | `A`, `Z`, `M`, `H`, `Shift+R`, `V` | Qt-only default bindings/conflict risk |
+| `view.autofit` | “Auto-Fit Active Axes”, `A` | “Auto-Fit Active Figure”, `Shift+A` | Scope, label, and shortcut differ |
+| `view.fullscreen` | Canvas label, `F` | Generic label, `F11` | Label and shortcut differ |
 
-### 6.2 Top-level menus
+### 6.3 Menu hierarchy and live result
 
-| Menu | Legacy entries/results | Qt live result | Gap |
-|---|---|---|---|
-| File | New Figure; PNG/SVG; Copy as Image; plugin formats; Save/Load Workspace; Save/Load Figure; Exit. | Export Figure, Quit, Command Palette. | Nearly the entire file lifecycle is missing. `Ctrl+S` is assigned to export rather than save. |
-| Edit | Undo, Redo plus series edit commands through shortcuts/palette. | Undo, Redo. | Series clipboard/delete/select workflows are absent. |
-| View | Inspector/nav, fit/reset, grid/legend/data tips, timeline, curve editor, parameters, data editor, topics, plugins. | Small command subset plus separately constructed dock toggles. | Missing controls, duplicate semantic/ad-hoc actions, and state can diverge. |
-| Tools | Screenshot, Undo/Redo, theme settings, command palette, optional ROS2 adapter. | Tool modes and a subset of panels. | Screenshot/theme/ROS workflows and legacy grouping are absent. |
-| Plot | Zero lines, arbitrary horizontal/vertical lines, function plot. | No registered plot-creation commands. | Entire menu workflow absent. |
-| Data | Load from CSV. | Menu is visible but opens no items. | Inert advertised menu. |
-| Axes | Link X/Y/Z/all axes and unlink all, including 3D linking. | Menu is visible but empty. | Entire workflow absent. |
-| Transforms | All registered transforms plus custom formula. | Menu is visible but empty; a separate dock applies a restricted destructive pipeline. | Menu broken and semantics differ. |
-| Help | Help workflow. | A `QMenu` is constructed but is not added to the custom header; Help nav is inert. | No reachable help. |
+The Qt custom header does not build menus from the same hierarchy as legacy:
 
-### 6.3 Navigation rail buttons
-
-| Button | Qt observed/code result | Parity result |
+| Menu | Qt population/result | Parity gap |
 |---|---|---|
-| Select | Changes active `InputHandler` tool. | Basic routing implemented; selection/series actions and overlays still incomplete. |
-| Pan | Changes active tool. | Basic routing implemented; end-to-end gesture parity unverified. |
-| Box Zoom | Changes active tool. | Basic routing implemented; high-DPI/multi-axes parity unverified. |
-| Measure | Changes active tool. | Overlay remains on retained ImGui path; undo/export/accessibility unverified. |
-| Annotate | Changes active tool. | Create/edit/persist/undo parity unverified. |
-| ROI | Changes active tool. | Model/overlay/result parity unverified. |
-| Markers | Switch statement contains no action. | **Inert visible button.** |
-| Transforms | Opens the transform dock directly. | Bypasses shared command; panel behavior is destructive and incomplete. |
-| Inspector | Opens drawer directly. | Direct path works; semantic command/shortcut is broken. |
-| Timeline | Opens a disabled/null-model dock. | Visible but unusable. |
-| Curve Editor | Switch statement contains no action. | **Inert visible button.** |
-| Plugins | Opens plugin panel directly. | Partial UI and broken portable-panel callback routing. |
-| Topics | Opens topics dock directly. | Generic data-source list only; ROS topic workflows missing. |
-| Settings | Opens settings dock directly. | Settings controls are incomplete and visibility toggles are not wired to shell state. |
-| Help | Switch statement contains no action. | **Inert visible button.** |
+| File | Nine File-category actions plus an ad-hoc command-palette item | New Figure is missing from File; direct-dialog paths remain |
+| Edit | Two Edit actions | Series editing commands are not attached here |
+| View | 24 View actions, 11 ad-hoc panel toggles, and five duplicated split/reset actions | Roughly 40 entries, duplicate reset/close-split meanings, popup extends below 720px |
+| Tools | Six Tools actions | Theme/accessibility/application actions are elsewhere or unattached |
+| Plot | 13 Figure actions plus five Plot actions | Figure New/Close/Tabs are incorrectly grouped under Plot; function plot is a stub |
+| Data | Two Data actions | Hard-coded output behavior; not the legacy import/data workflow |
+| Axes | No category actions | Visible but empty |
+| Transforms | No category actions | Visible but empty; transform dock is separate |
+| Help | No category actions | Visible but empty because `help.show` is categorized as App |
 
-Panel buttons also set the rail's selected item as though they were exclusive canvas tools. Opening a
-panel can therefore remove the visual highlight from the actual active tool while leaving the
-`InputHandler::ToolMode` unchanged.
+Accessibility, Animation, App, Panel, Series, and Theme category menus are constructed transiently
+but are not attached to the custom header. The View menu rendered live but overflowed the reference
+height. Several smaller popup surfaces appeared black/blank under Xvfb; because of the Xvfb caveat,
+the source-confirmed action population—not that paint artifact—is the blocking evidence.
 
-## 7. Feature and workflow parity matrix
+The custom menu buttons now use non-blocking `QMenu::popup()`. A production MCP click returned
+immediately with the File menu still visible, enabling truthful capture and
+`dismiss_ui_capture`; the hierarchy/content mismatches above remain open.
 
-| Area | Legacy baseline | Current Qt result | Sev./state |
-|---|---|---|---|
-| Figure lifecycle | New/close/tab navigation, save/load figure, multiple windows. | Basic new/close/tab commands; no save/load figure or safe complete window movement. | P1 partial |
-| CSV/data import | CSV dialog, column selection and plotting flow. | Empty Data menu; no equivalent reachable Qt import flow. | P1 missing |
-| Series management | Copy/cut/paste/delete/deselect/cycle selection, styles and data interactions. | Commands missing; inspector covers a subset of style properties. | P1 missing |
-| Data editor | Integrated panel and figure/series editing. | Line/scatter x/y cell edits are validated, undoable, and redraw correctly. Row operations, multi-cell paste, import/export, reorder, and large-data handling remain absent. | P1 partial |
-| 2D navigation | Pan, wheel/box zoom, reset/home/fit, keyboard pan/zoom, grid, legend, crosshair. | Core tool modes exist; many semantic commands and overlays are absent. | P1 partial |
-| Axis linking | Link X/Y/Z/all, unlink, shared cursor. | Axes menu empty. | P1 missing |
-| Plot helpers | Horizontal/vertical/zero lines and function plots. | Plot commands absent. | P1 missing |
-| Legend | Visibility and interaction through shared model. | Inspector creates a legend checkbox but connects no handler. | P1 broken |
-| Markers/data tips | Create/remove/interact through overlay system. | Rail button inert; production overlay port incomplete. | P1 missing |
-| Measurement/annotation/ROI | Interactive overlays integrated with model and rendering. | Tool modes route, but overlays remain retained ImGui and complete result/persistence parity is unproven. | P1 partial |
-| 3D | Camera/orbit/pan/zoom, 3D axes and scene/display interactions. | Shared renderer may draw 3D, but Qt shell/input/inspector parity is not implemented or tested. | P1 unverified |
-| Inspector | Figure, series, axes, data controls with immediate correct redraw and state. | Axis callbacks and legend are live; figure title, series label/width, styles, visibility, axes controls, and legend changes are undoable and redraw through Qt Undo/Redo. The panel remains a subset with stale observed counts/size, no 3D inspector, and incomplete tab-title synchronization. | P1 partial |
-| Themes | Dark/light/night/toggle, palette and themed shell/panels. | Renderer theme selection exists, but shell is hard-coded and no theme commands are registered. | P1 partial |
-| Settings | Appearance, shortcuts, UI defaults, palette, glass/transparency/blur/glow and persisted controls. | Theme/palette plus three checkboxes; panel/nav/timeline checkboxes do not operate the shell. | P1 prototype |
-| Shortcut editing | Discover, capture, conflict check, rebind, reset and persist. | Rebind explicitly TODO; reset does not rebuild live QActions or persist overrides. | P1 missing |
-| Command palette | Themed palette over complete shared command set. | Only 35 commands, hard-coded light category rows, point-size warnings, and row/index logic can reject later commands. | P1 broken |
-| Timeline | Transport, step/start/end, scrubber, loop, timing model. | Widget constructed with null editor and disabled; animation commands absent. | P1 missing |
-| Curve editor | Usable curve/keyframe editing. | No Qt panel; rail button inert. | P1 missing |
-| Transforms | Registered transforms/custom formula applied through known app behavior. | Individual transforms and pipelines are one-step undoable transactions with redraw and axis-state restoration. The dock still applies to every visible line/scatter series and lacks target selection, preview, validation feedback, and persistence provenance. | P1 divergent |
-| Export | PNG, SVG, copy image, plugin formats, deterministic artifacts. | Generic export/PNG panel; no SVG/copy; plugin path receives null pixels/empty figure JSON; success is reported without artifact verification. | P1 broken |
-| Clipboard/table export | Image copy, data copy, HTML table. | Service primitives exist but equivalent commands/workflows are not registered. | P1 missing |
-| Splits | Split right/down, close/reset while preserving documents/state. | Live-canvas preservation improved, but nested mixed topology is flattened and close/context/focus behavior can target or close the wrong document. | P1 partial |
-| Detach/redock | Multiple native windows and document movement with state preserved. | Host move/detach removes source before destination success; enumeration/workspace population is incomplete. | P0 data-loss risk |
-| Workspace | Figures, series, axes, layouts, panels, windows, active state and recovery. | Geometry/state blobs only; documents and figures omitted. | P0 missing |
-| Crash recovery | Restores unsaved user session. | Check is not invoked and available payload cannot reconstruct figures. | P0 missing |
-| Multi-window runtime | Independent canvas/tool/overlay state with shared process renderer/services. | Shared process renderer improved, but interaction/ImGui state is still rebound globally. | P0 unsafe |
-| Backend/IPC | Snapshot/diff, connection loss recovery and restart. | Basic connect/snapshot/diff; no reconnect/backoff/restart; initial synchronous drain can block startup. | P1 partial |
-| Python live show | Backend/display lifecycle equivalent to legacy. | Not exercised because Qt MCP/runtime path failed first. | Unverified |
-| ROS2/PX4 | Supported topics, adapters, displays, inspectors and plot flows. | Placeholder render/inspector area and generic source list; tests use a stub display. | P1 placeholder |
-| Plugins | Load/scan/custom dirs, diagnostics, capabilities, portable panels and exports. | Reduced management UI; direct native dialogs; group children are not rendered; callbacks use empty plugin ID. | P1 broken |
-| Accessibility | Keyboard, focus, roles/names, screen reader, sonification and HTML export. | Sonification/export utilities exist, but dialogs bypass automation service and there is no complete role/focus/navigation verification. | P1 unverified |
-| Input coverage | Mouse, precise wheel, keyboard, text/IME, touch/stylus, drag/drop, focus and DPI. | Router covers basic mouse, angle wheel, and a limited key set; missing text/IME, pixel wheel phases, tablet/touch/gesture, DnD, enter/leave/focus and many keys. | P1 incomplete |
+Qt MCP now reports this hierarchy and action state. An identical cross-frontend ordering/result
+comparison is still required.
 
-## 8. Component-level findings
+### 6.4 Header, rail, tabs, and status
 
-### 8.1 Automation and services
+| Visible control | Observed Qt result | Status |
+|---|---|---|
+| Header `+` | Creates a figure through `figure.new` | Basic pass |
+| Custom document tab select | Activates visible tab | Basic pass |
+| Custom tab close | Routes through the central document lifecycle and unregisters the figure once | Adapter-level pass |
+| Rename in Inspector | Figure title changes; custom document-tab title is not synchronized | P1 broken |
+| Home | Executes the shared `view.home` action | Basic pass |
+| Select/Pan/Zoom/Measure/Annotate/ROI | Execute shared commands; rail/status reflect the active canvas's tool per document | Adapter-level pass; results/overlays unverified |
+| Markers | Hidden | Feature absent |
+| Curve Editor | Hidden and command stub | Feature absent |
+| Transform/Inspector/Timeline/Plugins/Topics/Settings | Opens a dock directly without overwriting the active tool indicator | Panel command-state unification remains open |
+| Help rail item | Hidden | Feature absent |
+| Reset Layout | Hides docks and resets panel toggle check states | Basic pass |
+| Status cursor/zoom/fps/GPU fields | Cursor/FPS/GPU receive production canvas signals; zoom remains static | Partial |
+| Status tool field | Reflects the active canvas's `InputHandler` and restores per-document state | Adapter-level pass |
 
-- `QtAutomationAdapter::start()` now starts or reuses the single automation/MCP pair owned by
-  `ApplicationServices`; it no longer creates a competing server.
-- A Qt timer drains the service-owned pending queue on the Qt thread. The live socket regression test
-  verifies this dispatch. Tool-specific Qt implementations are still incomplete, and the deployed
-  binary launch topology still needs its own process-level test.
-- Many Qt panels instantiate `QFileDialog`/`QMessageBox` directly rather than using injected
-  `DialogService`. Even after fixing the port, automation cannot deterministically accept/cancel
-  these dialogs.
-- Legacy `create_figure`/`add_series` MCP calls can update the registry without attaching the figure
-  to the visible shell. The automation contract itself needs an explicit document lifecycle model.
+The Home tooltip advertises `Ctrl+H` while the registered `view.home` shortcut is `Home`.
 
-### 8.2 Inspector and editors
+## 7. Shell and graphics comparison
 
-- Four axes-limit signals capture a local control aggregate by reference. This must be fixed before
-  any manual inspector QA because interaction can dereference dead stack memory.
-- The legend checkbox has no signal connection.
-- Figure title changes do not update the custom document-tab title.
-- Inspector mutations now create undo operations and request redraw, including figure title, series
-  label/width/style/visibility, legend, axes labels/limits, grid, and border. Range validation,
-  explicit dirty-state propagation, tab-title synchronization, and some dependent UI updates remain.
-- The inspector does not expose an equivalent 3D inspector and lacks the complete legacy series/data
-  operations.
-- The data editor supports `LineSeries` and `ScatterSeries`; each valid cell edit is an undoable
-  series-data transaction and requests redraw on apply/undo/redo. Invalid and non-finite numeric
-  values are rejected and restored. It still has no add/delete row, multi-cell paste, import/export,
-  reorder, or large-data strategy.
+### 7.1 Measured results
 
-### 8.3 Timeline, transforms, topics, and settings
+Measurements use the live 1280×720 reference session unless stated otherwise.
 
-- `QtTimelineWidget(nullptr, this)` guarantees the timeline is disabled in production.
-- There is no Qt curve editor implementation despite a visible rail button.
-- The transform dock applies each operation destructively to all visible supported series. Apply and
-  pipeline operations now snapshot series/axis state as one undoable transaction and redraw on
-  apply/undo/redo. It still lacks axes/series targeting, preview, provenance, persistence, and
-  detailed failure feedback.
-- The Topics panel lists generic `DataSourceRegistry` entries with start/stop buttons, not the legacy
-  ROS/PX4 browsing, filtering, QoS, topic selection, and topic-to-series workflow.
-- Settings changes to Inspector/Nav/Timeline visibility are stored but no main-window connection
-  applies them. Live capture showed a checked Inspector setting while the drawer was hidden.
-- Shell styling is not driven fully by the selected renderer/application theme. Native white list and
-  table surfaces appear in the command palette, data editor, transform panel, and topics panel.
-
-### 8.4 Plugins and extensibility
-
-- Plugin management omits custom scan directories, diagnostics/capabilities, detailed errors and the
-  richer rescan workflow visible in legacy.
-- Portable plugin-panel controls call `set_property_value` and `trigger_action` with an empty plugin
-  ID, so callbacks cannot be reliably routed to their owner.
-- Group elements create a container but do not recursively render their child schema elements.
-- Color is exposed as a raw line edit and separators are empty widgets rather than matching the
-  legacy UI contract.
-- Plugin export receives null pixel data and empty figure JSON, making image- and figure-aware plugin
-  exporters nonfunctional even when their name appears.
-
-### 8.5 Windows, splits, docking, and persistence
-
-- Split reconstruction uses a single `QSplitter` orientation derived from the root. It cannot render
-  nested mixed horizontal/vertical pane trees faithfully.
-- QTabWidget movement is limited to one pane; cross-pane drag/drop is absent.
-- The context close-split path closes a figure tab before collapsing the split, which can destroy the
-  document instead of preserving it.
-- Active-pane detection checks QTabWidget focus, while focus usually lives in the embedded Vulkan
-  `QWindow`; commands can target a fallback/wrong pane.
-- Split mode introduces QTabWidget's internal tab bars in addition to the custom document strip.
-- `NativeQtDockingHost::documents()` returns an empty TODO result. Workspace capture therefore cannot
-  know which documents belong to which window.
-- Detach/move removes a document from the source before proving the destination is valid. A failure
-  can make the document disappear from the UI.
-- Saved Qt main-window state/geometry does not encode figure content, document IDs, nested pane
-  topology, active tool, or complete panel controller state. Iterating an unordered host registry and
-  treating its first entry as the main window is nondeterministic.
-
-### 8.6 Rendering, overlays, and input
-
-- The Vulkan plot content is the strongest shared area, but the current successful diff covers only
-  an empty 2D renderer crop.
-- `QtOverlayDrawList` has no production usage outside its own implementation. Annotation, legend,
-  selection, measurement and related overlay code remains coupled to ImGui/`ImDrawList`.
-- One `ImGuiIntegration` and `DataInteraction` at runtime scope are rebound per canvas render. This
-  makes active selection, hover, overlay, and edit state vulnerable to cross-window bleed.
-- Qt input forwards move/press/release, angle-based wheel, and a small key map. It does not forward
-  double-click, text/IME, high-resolution `pixelDelta`/scroll phases, tablet/stylus, touch/gesture,
-  drag/drop, enter/leave/focus transitions, function keys, punctuation, or modifier-only keys.
-- QAction shortcuts and focused embedded QWindows have no demonstrated arbitration policy; shortcut,
-  text entry, and canvas-key conflicts remain untested.
-
-## 9. Visual comparison
-
-### 9.1 Measured 1280x720 results
-
-| Comparison | Pixels differing by >2 channels | Pixels differing by >10 channels | Mean absolute channel error | Interpretation |
+| Comparison | Pixels differing >2 | Pixels differing >10 | Mean absolute channel error | Result |
 |---|---:|---:|---:|---|
-| Night-theme blank renderer plot crop | 0.092% | 0.012% | 0.008 | Narrow blank-2D pass at the plan threshold. |
-| Night-theme blank full shell | 11.456% | 4.196% | 1.988 | Shell/chrome is not equivalent. |
-| Welcome full window | 99.998% | 13.937% | 9.381 | Composition and branding differ substantially. |
-| Default-theme blank full window | 99.998% over threshold | Not used as a gate | Not used as a gate | Defaults select different themes, itself a product mismatch. |
+| Normalized blank renderer-owned plot crop | 0.092% | 0.012% | 0.008 | Narrow blank-2D pass |
+| Normalized blank complete shell | 11.750% | 4.969% | 2.433 | Fail |
+| Welcome complete window | 91.553% | 14.394% | 6.660 | Fail |
+| Qt MCP grab versus actual Qt compositor image | 80.432% | 73.613% | 4.759 | Capture-contract fail |
 
-The blank plot crop was `(141,113)-(1260,627)` and the canvas-shell crop was
-`(72,74)-(1280,686)`. These coordinates are evidence for this 1280x720 run only; future golden tests
-must derive regions from the actual physical canvas rectangle rather than hard-code them.
+The normalized plot crop was `(141,113)-(1260,627)`, 1119×514. It is valid evidence only for this
+run. Production goldens must derive the physical renderer rectangle from runtime state, not preserve
+hard-coded coordinates.
 
-### 9.2 Visible defects in live captures
+### 7.2 Welcome and chrome
 
-- Qt welcome lacks the legacy logo, version and shortcut cue and shows chrome that legacy suppresses.
-- The command palette has large white native surfaces and light-gray category bands. It also emitted
-  repeated `QFont::setPointSize: Point size <= 0 (-2)` warnings.
-- Data-editor tables, transform lists, and topics sources use native white backgrounds inside the
-  dark shell.
-- Opening several docks consumes and compresses the document area rather than reproducing the legacy
-  overlay/drawer layout; stacked panels become narrow and visually clipped at the reference size.
-- The default renderer theme differs between frontends, invalidating an out-of-the-box screenshot
-  comparison until defaults are unified.
+| Legacy | Qt |
+|---|---|
+| Large Spectra logo, product name/subtitle, `Ctrl+T` hint, and version `v0.3.0` | Text-only name/subtitle, generic hint, no logo, no version, no `Ctrl+T` cue |
+| Welcome content owns the empty state without persistent navigation/document/status chrome | Navigation rail, empty document strip, and status chrome remain visible |
+| Compact renderer-centered composition | Different spacing, alignment, and hierarchy |
 
-## 10. Test-suite gap analysis
+### 7.3 Panel graphics measurements
 
-All nine Qt-labelled tests passed in the audited build. That is a build-health signal, not parity
-evidence.
+Near-white pixel share in the complete Qt window after opening each panel:
 
-| Test area | What it currently establishes | What it does not establish |
+| Qt surface | Near-white share | Main visible cause |
+|---|---:|---|
+| Topics | 16.336% | Large native-white source list |
+| Timeline | 6.452% | Large native-white Tracks list |
+| Data Editor | 5.293% | Native-white table |
+| Transforms | 3.626% | Native-white pipeline list |
+| Command Palette dialog | 77.727% | White results/category surface |
+| Clean shell | ~0.002% | Baseline |
+
+These are not subtle antialiasing differences; they are unthemed widget regions inside the dark
+shell.
+
+Other observed graphics gaps:
+
+- `QComboBox` arrows are missing or indistinguishable in Settings, Transforms, and Export.
+- Checked settings boxes render as a solid purple square without a recognizable checkmark.
+- Disabled states are not visually clear. Timeline looks interactive despite the entire widget being
+  disabled, and transform actions look enabled without a selected target or pipeline.
+- Dock title-bar close/undock icons are explicitly styled away, leaving no visible window-management
+  controls.
+- Left docks move the Spectra header and navigation rail to the right; right/bottom docks compress
+  the canvas. This does not match the legacy overlay/drawer composition.
+- Light theme produces a light plot inside unchanged dark chrome and dark panels.
+- The command palette combines a dark input with pale category bands and a nearly all-white results
+  area. It is also a separate top-level dialog omitted from MCP captures.
+- The shell stylesheet does not comprehensively theme `QListWidget`, `QTableWidget`, combo arrows,
+  checkbox indicators, or disabled states.
+- Compact mode below 1100px only narrows the rail; the inspector-overlay behavior remains a TODO and
+  docks can crush the canvas.
+
+## 8. Panel-by-panel behavior and result comparison
+
+| Panel/workflow | Observed Qt result | Gap |
 |---|---|---|
-| Visual regression | Widget sizes/presence, non-null grab, broad dark-window ratio. | No approved legacy baseline, pixel diff, opened-panel capture, plots, overlays, 3D, sizes, DPRs or platforms. |
-| Panels | Widgets can be constructed; inspector edits use live controls; data-editor and transform mutations verify apply/undo/redo/validation/redraw behavior. | Complete visible button-to-result workflows, persistence, full models, themed surfaces, and the remaining panel feature matrices. |
-| Window ops/docking | Selected helper operations and object state. | Cross-window user drag/drop, destination failure rollback, nested splits, focus routing, full state restoration. |
-| Dialogs | Dialog-service helper behavior. | Panels that bypass the service with direct native dialogs. |
-| Automation | Callback/start-stop behavior in isolation. | Launching `spectra-qt-app`, binding one MCP port, `ping`, dispatching tools, screenshots and command results. |
-| Action bridge | Basic action creation/dispatch. | Complete 83-command parity, custom shortcuts, checked state, enable predicates, command palette row mapping. |
-| Workspace | JSON/state helper round-trips. | Real figures/series/axes, split/window/document assignments, active state, unsaved recovery. |
-| Plugin UI | Registry/schema-level behavior. | Real plugin IDs, nested group children, property/action routing, export payloads and visual equivalence. |
+| Inspector | Opens and can edit a useful subset through undo-aware transactions. Live summary showed stale 1500×900 size while state was 1208×612 and “Axes 0” while tab/state showed one axis. Rename does not update document tab. | Uses inconsistent axes collections and stale refresh timing; lacks complete 2D/3D/data parity. |
+| Timeline | Opens a large bottom dock showing 0.10s, FPS 1, None, Frame 0/0. Widget was constructed with `nullptr` and disabled. | Looks usable but cannot drive the production animation model. |
+| Curve Editor | No visible Qt panel; command is a stub and rail item is hidden. | Missing. |
+| Data Editor | Edits line/scatter x/y cells with validation, undo, and redraw. Empty figure shows a large white table. | No add/delete rows, multi-cell paste, reorder, import/export, target management, or large-data strategy. |
+| Topics | Dock title is “Data Sources”; lists generic `DataSourceRegistry` entries. Start/Stop are disabled without selection. | Not the legacy ROS/PX4 browse/filter/QoS/topic-to-series workflow; large white list and weak disabled styling. |
+| Transforms | Destructively applies operations/pipeline to all visible line/scatter series; undo snapshots exist. Buttons appear available without a target/pipeline. | No series/axes target, preview, provenance, safe applicability model, persistence, or equivalent custom-formula workflow. |
+| Settings | Theme, palette, and three visibility checkboxes. | Inspector, Navigation Rail, and Timeline visibility now round-trip through the live shell and persistence; theme still affects the renderer only and controls need visual validation. |
+| Plugins | Load Plugin, Scan Default, and empty plugin list. | No custom dirs/diagnostics/capabilities; direct dialogs; callback plugin ID is empty; group children are not recursive; raw color editor; export receives null pixels/empty JSON. |
+| Export | Right dock with the observed built-in PNG entry, width/height/path/Browse/Export. | Combo affordance is unclear; no verified artifact/cancel/error matrix; plugin payload invalid; direct PNG/SVG commands use separate paths. |
+| Command Palette | Search dialog lists command descriptors. `app.cancel` did not close it; direct Escape did. | Top-level surface is omitted from captures, mostly native white, and cancel semantics are disconnected. |
+| ROS2 display/inspector | Source contains “Display render area — plugin auxiliary UI” placeholder and label-only inspector information. | Placeholder, not parity. |
 
-Minimum new tests are listed in section 13.
+## 9. Functional parity matrix
 
-## 11. Evidence in source
-
-The most direct implementation evidence is in:
-
-- [qt_application.cpp](../src/adapters/qt/qt_application.cpp): 86-command registration (all 83 legacy IDs
-  + 3 Qt-specific), static figure registry, redraw-aware undo/redo, TimelineEditor ownership, and
-  incomplete recovery/autosave ownership.
-- [qt_automation_adapter.cpp](../src/adapters/qt/qt_automation_adapter.cpp) and
-  [application_services.cpp](../src/app/application_services.cpp): duplicate MCP creation and missing
-  Qt dispatch.
-- [qt_main_window.cpp](../src/adapters/qt/qt_main_window.cpp): missing menu insertion, null timeline,
-  inert rail cases, direct panel routing and compact-mode TODO.
-- [inspector_widget.cpp](../src/adapters/qt/panels/inspector_widget.cpp): registry-resolved inspector
-  transactions and the remaining subset/tab-synchronization limitations.
-- [command_palette_dialog.cpp](../src/adapters/qt/panels/command_palette_dialog.cpp): hard-coded light
-  rows, invalid font adjustment and command/separator index handling.
-- [shortcut_widget.cpp](../src/adapters/qt/panels/shortcut_widget.cpp): explicit rebinding TODO.
-- [native_qt_docking_host.cpp](../src/adapters/qt/docking/native_qt_docking_host.cpp) and
-  [qt_workspace_bridge.cpp](../src/adapters/qt/qt_workspace_bridge.cpp): empty document enumeration and
-  geometry-only/nondeterministic workspace capture.
-- [plugin_panel_widget.cpp](../src/adapters/qt/panels/plugin_panel_widget.cpp): empty plugin IDs and
-  incomplete schema rendering.
-- [qt_runtime.cpp](../src/adapters/qt/qt_runtime.cpp): runtime-wide ImGui/interaction ownership.
-- [qt_input_router.hpp](../src/adapters/qt/qt_input_router.hpp) and
-  [spectra_vulkan_window.cpp](../src/adapters/qt/spectra_vulkan_window.cpp): restricted input event and
-  key coverage.
-- [imgui_command_bar.cpp](../src/ui/imgui/imgui_command_bar.cpp): legacy File/View/Tools/Plot/Data/Axes/
-  Transforms reference behavior used for this comparison.
-
-## 12. Legacy/reference defects discovered during comparison
-
-These do not reduce Qt's required scope. They should be fixed or explicitly normalized in the shared
-behavioral contract before creating goldens:
-
-| ID | Legacy observation | Follow-up |
+| Area | Qt result | State |
 |---|---|---|
-| LEGACY-AUDIT-001 | Fresh MCP runs of `panel.toggle_timeline` and `panel.toggle_topics` terminated with a segmentation fault. | Reproduce under ASan and fix before using those states as golden fixtures. |
-| LEGACY-AUDIT-002 | `panel.toggle_data_editor` displayed Inspector in the observed run and reported an undo entry. | Correct command-to-panel mapping and add an exact state assertion. |
-| LEGACY-AUDIT-003 | MCP `create_figure`/`add_series` changed registry state without attaching the figure to the visible welcome shell until `figure.new`. | Define whether automation creates model-only figures or visible documents; expose separate explicit tools if both are needed. |
-| LEGACY-AUDIT-004 | Window capture in some panel sequences was followed by process exit. | Isolate capture from panel crash behavior and make the endpoint return a structured failure. |
+| Figure create/activate | Basic semantic path works | Partial |
+| Figure close/rename/reopen | Close leaves registry state; rename leaves tab stale; reopen not established | P0/P1 broken |
+| CSV/data import | No equivalent verified Qt workflow | Missing |
+| Series add/remove/reorder/copy/cut/paste | Six series commands are stubs; MCP cannot add series | Missing |
+| 2D render | Blank axes render and narrow crop matches | Blank-only pass |
+| 2D pan/wheel/box/reset/fit | Tool routing and some commands exist; exact state/result matrix unavailable | Partial/unverified |
+| Axis linking X/Y/Z/all | Axes menu is empty; no complete Qt workflow | Missing |
+| Plot helpers | H/V/zero lines have handlers; function plot is stub; Plot grouping is wrong | Partial |
+| Legend/grid/border | Some handlers/inspector controls exist | Partial; interaction/fidelity unverified |
+| Crosshair/markers/data tips | Crosshair stub; Markers hidden; overlays not exercised | Missing |
+| Measure/annotate/ROI/select | Tool mode changes; produced objects, editing, undo, persistence, and export unverified | Partial |
+| 3D scene/camera/input/inspector | Shared renderer may support drawing; Qt shell/input workflow not compared | Unverified |
+| Undo/redo | Inspector/data/transform paths have transaction coverage | Partial improvement |
+| Timeline/keyframes/curves | Visible model disconnected; curve editor absent | Missing |
+| Theme/palette | Renderer changes; shell does not | Divergent |
+| Shortcuts | Descriptors exist with differences; rebinding/persistence incomplete | Partial |
+| Split panes | Basic split exists; nested mixed topology is flattened | Partial/broken |
+| Detach/redock/move | Transactional close/move/detach and enumeration implemented; nested redock/persistence coverage open | Partial improvement |
+| Multi-window isolation | Per-canvas ImGui/input/interaction ownership improved | Improvement; concurrent gesture matrix unverified |
+| Workspace save/load | Captures some model/chrome data; cannot recreate complete session | P0 incomplete |
+| Autosave/crash recovery | Document mutations, timer, pre-teardown save, and interactive startup wired; restore/dirty coverage incomplete | Partial improvement |
+| PNG/SVG/copy image | Handlers/panel paths exist; artifacts and equivalent UI not verified | Partial |
+| Copy data/HTML/WAV | Service calls exist; filenames/dialog behavior diverge | Partial/divergent |
+| Plugins | Reduced management and broken ownership/payload paths | P1 broken |
+| Backend/IPC reconnect | No complete reconnect/backoff/restart parity evidence | Unverified |
+| Python publisher/show | Not exercised in this pass | Unverified |
+| ROS2/PX4 | Generic/placeholder Qt panels; ROS2-off build | P1 placeholder |
+| Accessibility/keyboard/focus | Sonification descriptor exists; full roles/focus/screen-reader matrix absent | Unverified |
 
-## 13. Required closure plan and acceptance evidence
+## 10. Windows, docking, persistence, overlay, and input details
 
-### P0 — make comparison and state safe
+### 10.1 Documents, splits, and windows
 
-1. Complete Qt semantics for every `spectra-mcp` tool now that Qt uses one server and event-loop
-   dispatch. Add a process-level launch/ping/state/command/capture test.
-2. Keep the fixed inspector callback/transaction tests in the sanitizer-backed interaction suite and
-   expand them to every inspector control.
-3. Introduce shared, frontend-neutral command handlers/transactions for all mutations. Require undo,
-   redraw, dirty-state, validation and serialized-result assertions.
-4. Serialize and recover real documents and model data, including split/window assignments and active
-   state. Test crash recovery with a populated multi-window workspace.
-5. Scope interaction and overlays to canvas/document ownership and test simultaneous windows.
+- Custom tab close now reaches `MainWindowRegistry::close_document()`, removes every visual
+  occurrence, and unregisters the figure model. Main-window forwarding emits one close notification.
+- `open_figure_ids()` iterates unordered maps, making numeric tab navigation order nondeterministic.
+- Split reconstruction flattens panes under one root `QSplitter` orientation and cannot restore mixed
+  nested horizontal/vertical topology.
+- Split mode introduces internal `QTabWidget` bars in addition to the custom document strip.
+- Active-pane detection checks the `QTabWidget` focus while focus normally belongs to the embedded
+  Vulkan `QWindow`, so commands can fall back to the wrong pane.
+- Cross-pane document drag is absent.
+- Custom-tab detach, `figure.move_to_window`, and native host movement now share one registry
+  transaction. It validates source/destination and unique ownership, adds the destination before
+  releasing the source, rolls the destination back if release fails, and preserves the source when
+  a destination cannot be created.
+- `NativeQtDockingHost::documents()` now returns the window's open figure IDs.
 
-### P1 — close user-visible workflow gaps
+### 10.2 Workspace, autosave, and recovery
 
-6. Register the complete shared command set; remove replacement-only divergence or provide explicit
-   compatibility aliases. Bind menus, palette, shortcuts and rail buttons only through it.
-7. Hide no-longer-empty placeholders until their commands exist; then port Data, Axes, Transforms,
-   Plot and Help workflows exactly.
-8. Complete inspector, data editor, timeline, curve editor, settings, shortcuts, topics, plugins,
-   accessibility and ROS/PX4 panels with real models and artifacts.
-9. Complete PNG/SVG/clipboard/plugin export and verify written artifacts and error/cancel behavior.
-10. Finish arbitrary split topology, safe cross-pane/window moves, focus targeting and full workspace
-    persistence.
-11. Put every overlay on a production renderer-neutral path and complete the input event matrix.
+- Workspace capture can now enumerate window/document associations, but restore still cannot
+  reconstruct the complete document/window topology.
+- Workspace load applies serialized data to the vector of figures that already exists; it does not
+  recreate missing figures/documents/windows and topology.
+- Host selection iterates unordered IDs and treats the first result as the main window.
+- Interactive in-process startup now invokes `check_crash_recovery()` (suppressed under automation),
+  but it only restores the limited available desktop state.
+- Successful document close/move marks autosave dirty, and a Qt timer calls `tick()`. Other figure,
+  series, panel, split, theme, and layout mutations still lack complete dirty propagation.
+- Dirty state is saved before live windows and the docking registry are destroyed, preserving the
+  available document/window topology in the shutdown snapshot.
 
-### Required automated gates
+### 10.3 Overlays and interaction ownership
 
-- Exact command ID/label/default-shortcut/category/enabled/check-state comparison for both frontends.
-- A button/menu matrix test that activates every visible control and asserts the expected model,
-  view, panel, undo, persistence, or artifact result; no visible no-op is allowed.
-- Identical MCP fixtures for welcome, line/scatter, multi-axes, 3D, every overlay, inspector/editor,
-  split, detached window, dialogs, plugins, topics and recovery.
-- Approved screenshot baselines at 1280x720, 1600x900 and 200% DPR on X11 and Wayland, followed by
-  Windows and macOS release baselines. Store failure images and numerical diffs.
-- Artifact comparison for PNG, SVG, clipboard image/data, HTML table, figure and workspace files.
-- ASan/UBSan interaction run covering inspector, split/detach, panel lifecycle and endpoint shutdown.
-- Keyboard-only navigation, focus order, accessible names/roles and screen-reader smoke tests.
+Per-canvas state is a verified improvement in the current working tree:
 
-## 14. Sign-off rule
+- each canvas owns its `ImGuiIntegration`/context, `DataInteraction`, frame timing, input binding, and
+  inspector callbacks;
+- icon-font lookup is context-local;
+- tests cover canvas-local inspector routing and teardown.
 
-Do not interpret a constructed widget, non-null screenshot, matching blank renderer crop, or passing
-Qt-labelled test as application parity. Qt may become the default only when every P0/P1 item above is
-closed, the exhaustive visible-control matrix has no unexplained no-op or divergent result, the full
-functional matrix in the migration plan is green, and the approved visual/artifact gates pass on the
-required platforms.
+That fixes a serious shared-state design defect, but it does not complete overlay parity:
+
+- `QtOverlayDrawList` has no production call site;
+- production crosshair, tooltip, legend, marker, selection, measurement, annotation, ROI, and data-tip
+  paths remain retained ImGui or absent;
+- `view.toggle_crosshair` is a stub;
+- simultaneous hover/selection/gesture behavior across canvases is not tested.
+
+### 10.4 Input
+
+The router covers mouse press/release/move/double-click, angle wheel, printable/shared navigation and
+function keys, modifier translation, and committed text through the MCP path. Automation hit-tests
+widgets in main-window coordinates and explicitly targets the embedded native canvas when the point
+falls inside it. It does not yet cover:
+
+- high-resolution `pixelDelta`, scroll phases, and momentum;
+- IME preedit/composition;
+- touch, tablet/stylus, or gestures;
+- drag/drop;
+- enter/leave/focus transitions;
+- keypad identity and the complete platform-specific key map;
+- exhaustive arbitration between QAction shortcuts, text widgets, and the focused native canvas.
+
+## 11. Test-suite gap analysis
+
+All nine Qt-labelled tests passed in 0.92 seconds. This proves the current tree builds and its tested
+helpers remain stable; it does not prove application parity.
+
+| Test area | What it establishes | What it misses |
+|---|---|---|
+| Visual regression | Main widget can be grabbed, dimensions are plausible, closed shell is broadly dark | No services/runtime/native Vulkan `QWindow`, opened panels, legacy baseline, numerical diff, plots, overlays, 3D, DPRs, or platforms |
+| Automation | Live MCP verifies menu/method discovery, figure activation, exact scatter data/type, validation errors, widget/native-canvas input dispatch, text/key results, capture scopes/base64, exact frame pumping, rendered-progress waiting, and the three known unsupported methods; manual launched X11 capture matches the compositor and launched frame pumping/waiting succeeds | No automated cross-frontend launched-process semantic/state/artifact equality; remaining advanced-input/fuzz and non-X11 capture semantics |
+| Action bridge | Descriptors produce actions and dispatch helpers | Handler result parity, complete menu attachment/order, shortcut/check-state/rebind conflicts |
+| Panels | Construction and selected mutation helpers; inspector/data/transform undo improvements | Full visible control-to-result workflows, real models, styling, persistence, dialogs |
+| Docking/window ops | Selected helper state changes | User drag/drop, destination rollback, nested topology, native focus, complete restoration |
+| Workspace | Serialization helper round-trips | Process restart with real populated figures, documents, windows, recovery |
+| Dialogs | Injected dialog helper behavior | Panels/actions that bypass it with direct native dialogs |
+| Plugin UI | Registry/schema helper behavior | Real plugin identity, nested groups, action/property ownership, valid export payloads, visual parity |
+
+Minimum replacements:
+
+1. Launch both production executables and run identical MCP workflows.
+2. Treat structured errors and false-success responses as failures.
+3. Assert command/menu/button results, state, undo, saved data, and artifacts—not only existence.
+4. Capture the compositor-equivalent complete Qt surface including native canvas and top-level UI.
+5. Store approved reference images and numerical diffs for every migration-plan fixture.
+6. Add ASan/UBSan interaction coverage for close/move/detach, panels, dialogs, and endpoint shutdown.
+
+## 12. Direct source evidence
+
+- [qt_automation_adapter.cpp](../src/adapters/qt/qt_automation_adapter.cpp): implemented Qt MCP
+  command/figure/menu/catalog, widget/native-canvas input, scoped capture/base64, and popup/grab
+  dismissal branches, truthful active-canvas frame pumping, rendered-frame progress reporting, and
+  three explicit not-implemented fuzz returns.
+- [automation_server.cpp](../src/ui/automation/automation_server.cpp): deferred frame waits consume
+  a frontend-supplied rendered-frame delta; the legacy per-frame poll retains its one-frame default.
+- [spectra_vulkan_window.cpp](../src/adapters/qt/spectra_vulkan_window.cpp): successful Qt render
+  completions advance the shared monotonic frame counter used by automation.
+- [qt_application.cpp](../src/adapters/qt/qt_application.cpp): 86 command registrations, explicit
+  stubs, theme/help/export behavior, timeline model, and incomplete autosave/recovery lifecycle.
+- [qt_main_window.cpp](../src/adapters/qt/qt_main_window.cpp): menu category construction, duplicated
+  View actions, null visible timeline model, direct panel routing, and compact-mode limitations.
+- [spectra_app_header.cpp](../src/adapters/qt/components/spectra_app_header.cpp): custom menu/header,
+  document strip, Home signal, and welcome controls.
+- [spectra_status_bar.cpp](../src/adapters/qt/components/spectra_status_bar.cpp): placeholder status
+  fields and public setters with no production update path.
+- [inspector_widget.cpp](../src/adapters/qt/panels/inspector_widget.cpp): undo-aware editing plus stale
+  summary/axes-source and tab-synchronization gaps.
+- [timeline_widget.cpp](../src/adapters/qt/panels/timeline_widget.cpp): disabled/null-model behavior.
+- [settings_widget.cpp](../src/adapters/qt/panels/settings_widget.cpp): local settings store and
+  incomplete shell/theme connection.
+- [command_palette_dialog.cpp](../src/adapters/qt/panels/command_palette_dialog.cpp): palette
+  construction, light fallback surfaces, and direct dialog behavior.
+- [shortcut_widget.cpp](../src/adapters/qt/panels/shortcut_widget.cpp): shortcut rebinding TODO.
+- [export_widget.cpp](../src/adapters/qt/panels/export_widget.cpp): built-in/plugin export UI and
+  incomplete export payload/verification.
+- [native_qt_docking_host.cpp](../src/adapters/qt/docking/native_qt_docking_host.cpp): empty document
+  enumeration and move/detach ordering.
+- [qt_workspace_bridge.cpp](../src/adapters/qt/qt_workspace_bridge.cpp): incomplete/nondeterministic
+  host, document, and restore mapping.
+- [split_view_container.cpp](../src/adapters/qt/split_view_container.cpp): flattened split
+  reconstruction, focus selection, and document movement.
+- [qt_runtime.cpp](../src/adapters/qt/qt_runtime.cpp): improved per-canvas integration/input/overlay
+  ownership.
+- [spectra_vulkan_window.cpp](../src/adapters/qt/spectra_vulkan_window.cpp) and
+  [qt_input_router.hpp](../src/adapters/qt/qt_input_router.hpp): native canvas embedding and restricted
+  event/key coverage.
+- [ros_panel_manager.cpp](../src/adapters/qt/ros2/ros_panel_manager.cpp): explicit placeholder
+  display and label-only inspector surfaces.
+- [test_qt_visual_regression.cpp](../tests/qt/test_qt_visual_regression.cpp): QWidget grab and broad
+  darkness assertions without the production Vulkan/panel matrix.
+- [test_qt_automation.cpp](../tests/qt/test_qt_automation.cpp): live semantic checks for figure,
+  menu, input, scoped capture/base64 methods and explicit assertions for the three unsupported fuzz
+  methods.
+- [imgui_command_bar.cpp](../src/ui/imgui/imgui_command_bar.cpp): legacy command/menu behavior used as
+  the reference alongside the live endpoint.
+
+## 13. Legacy/reference defects found
+
+These are legacy defects, not Qt parity credits:
+
+| ID | Current reproduction | Required follow-up |
+|---|---|---|
+| LEGACY-AUDIT-001 | MCP `create_figure` and `add_series` mutate the registry but leave the visible application on Welcome; a later semantic `figure.new` creates a separate visible document. | Define model-only versus visible-document automation explicitly and make the fixture deterministic. |
+| LEGACY-AUDIT-002 | After a visible figure exists, MCP-added series changes registry state but the visible canvas remains empty axes. | Attach automation series to the same authoritative visible document model. |
+| LEGACY-AUDIT-003 | A requested scatter series was returned by `get_figure_info` as type `line`. | Fix type serialization and add exact type/data assertions. |
+| LEGACY-AUDIT-004 | `capture_screenshot` returned a success path, but no file was created. | Verify filesystem output before returning success and cover failure/cancel. |
+| LEGACY-AUDIT-005 | On clean repeated launches, `figure.new` followed by `panel.toggle_inspector` terminated the legacy process and the endpoint returned an empty reply. | Reproduce under ASan, fix the crash, and add a process-survival test. |
+| LEGACY-AUDIT-006 | Live `list_menus` reports only File, Edit, View, Tools, and Plot even though legacy source exposes additional Data/Axes/Transforms behavior. | Make menu introspection enumerate the authoritative complete menu model. |
+
+Legacy goldens involving these paths must not be approved until the reference behavior is stable.
+
+## 14. Verified improvements that must be retained
+
+The following work is valuable but does not close the application parity gate:
+
+- Qt and the services layer expose one reachable MCP endpoint with Qt event-loop dispatch.
+- Qt registers all 83 legacy command IDs, making descriptor differences measurable.
+- Basic semantic `figure.new`, tab activation, tool-mode routing, and blank Vulkan rendering work.
+- Inspector, data-cell, and transform mutations have shared undo/redraw transaction coverage.
+- Inspector callbacks resolve stable figure/axes identifiers rather than retaining dead local
+  references.
+- Per-canvas ImGui context, interaction, input, timing, font, and inspector routing are isolated.
+- All nine Qt-labelled tests build and pass.
+
+These improvements should remain covered while semantic and visual tests are expanded.
+
+## 15. Required closure gates
+
+### P0
+
+1. Implement the complete MCP contract in Qt, fix truthful canvas/window/dialog capture, and run one
+   fixture suite unchanged against both production executables.
+2. Consolidate document lifecycle into one transactional path; prove close, reorder, detach, move,
+   destination failure, redock, and registry/pane synchronization without loss or duplication.
+3. Round-trip a populated multi-window workspace with mixed nested splits through save, load,
+   autosave, forced crash, and restart recovery.
+4. Fix the legacy reference crashes and false-success automation results required to generate stable
+   comparison fixtures.
+
+### P1
+
+5. Give every registered and visible command a real semantic result; remove or disable stubs until
+   implemented. Share menu hierarchy, labels, shortcuts, enable/check state, and conflict policy.
+6. Complete timeline/curve editor, inspector, data editor, settings, transforms, topics, plugins,
+   export, accessibility, and ROS2/PX4 workflows against their production models.
+7. Route every header/rail/menu/palette/shortcut entry through the same command and state controller;
+   eliminate inert Home, placeholder status values, stale rail selection, and duplicated menu items.
+8. Complete nested split/dock/window behavior, deterministic active-pane focus, and visible
+   close/undock controls.
+9. Port and exercise all overlays and complete mouse, keyboard, IME, scrolling, touch/tablet,
+   drag/drop, focus, and high-DPI input.
+10. Bind all Qt chrome and panels to shared theme/design tokens. No native-white fallbacks, missing
+    indicators, illegible disabled states, clipping, or unexpected canvas compression are allowed.
+
+### Required evidence
+
+- Exact command ID/label/category/default shortcut/enabled/check-state and menu-order comparison.
+- A visible-control matrix that activates every button, menu item, palette item, and shortcut and
+  asserts its model, panel, tool, undo, persistence, artifact, or error result.
+- Approved welcome, line, scatter, multi-axis, 3D, every overlay, every panel/dialog, split, detached
+  window, plugin, topic, and recovery images at 1280×720, 1600×900, and 200% DPR on X11 and Wayland,
+  followed by Windows and macOS release baselines.
+- Renderer-owned regions at no more than 0.1% pixels differing by more than two 8-bit channel values,
+  plus approved shell/panel thresholds and stored diff images.
+- Verified PNG, SVG, clipboard image/data, HTML table, figure, workspace, plugin, and failure/cancel
+  artifacts.
+- Keyboard-only focus/order/roles/names, screen-reader smoke, and sanitizer-backed interaction tests.
+
+## 16. Sign-off rule
+
+A command descriptor, constructed widget, HTTP 200 response, non-null QWidget grab, matching blank
+plot, or passing Qt-labelled smoke test is not application parity.
+
+Qt may become the default only when every P0/P1 item in this report is closed, the migration plan's
+complete functional matrix is green, every visible control has an equivalent tested result, and the
+approved visual/state/artifact gates pass on the required platforms. Until then, Qt remains opt-in
+and the legacy frontend remains the production default.

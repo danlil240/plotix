@@ -242,6 +242,7 @@ foreach(_ui_src
     src/embed/spectra_embed_c.cpp
     src/ui/automation/automation_server.cpp
     src/ui/automation/automation_dispatch.cpp
+    src/ui/automation/automation_figure_ops.cpp
     src/ui/automation/mcp_server.cpp
     src/ui/automation/handlers/handlers_command.cpp
     src/ui/automation/handlers/handlers_input.cpp

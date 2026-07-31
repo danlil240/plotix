@@ -5,6 +5,7 @@
 #include "qt_input_router.hpp"
 #include "qt_runtime.hpp"
 
+#include "ui/app/perf_metrics.hpp"
 #include "ui/input/input.hpp"
 
 #include <spectra/embed.hpp>
@@ -20,8 +21,7 @@
 namespace spectra::adapters::qt
 {
 
-SpectraVulkanWindow::SpectraVulkanWindow(QWindow* parent)
-    : QWindow(parent)
+SpectraVulkanWindow::SpectraVulkanWindow(QWindow* parent) : QWindow(parent)
 {
     setSurfaceType(QSurface::VulkanSurface);
     setMinimumSize(QSize(400, 300));
@@ -34,6 +34,10 @@ void SpectraVulkanWindow::setRuntime(QtRuntime* rt)
     if (runtime_ && input_)
     {
         runtime_->set_input_handler(this, input_);
+    }
+    if (runtime_ && (inspector_toggle_ || inspector_is_open_))
+    {
+        runtime_->set_inspector_toggle_callbacks(this, inspector_toggle_, inspector_is_open_);
     }
 }
 
@@ -49,6 +53,28 @@ void SpectraVulkanWindow::setInputHandler(InputHandler* ih)
     {
         runtime_->set_input_handler(this, input_);
     }
+}
+
+void SpectraVulkanWindow::setInspectorToggleCallbacks(std::function<void()> toggle,
+                                                      std::function<bool()> is_open)
+{
+    inspector_toggle_  = std::move(toggle);
+    inspector_is_open_ = std::move(is_open);
+    if (runtime_)
+    {
+        runtime_->set_inspector_toggle_callbacks(this, inspector_toggle_, inspector_is_open_);
+    }
+}
+
+void SpectraVulkanWindow::toggleInspector()
+{
+    if (inspector_toggle_)
+        inspector_toggle_();
+}
+
+bool SpectraVulkanWindow::isInspectorOpen() const
+{
+    return inspector_is_open_ ? inspector_is_open_() : false;
 }
 
 void SpectraVulkanWindow::setAnimationTick(AnimationTickCallback cb)
@@ -72,6 +98,8 @@ bool SpectraVulkanWindow::ensureAttached()
     if (!runtime_->attach_window(this, w, h))
         return false;
 
+    runtime_->set_input_handler(this, input_);
+    runtime_->set_inspector_toggle_callbacks(this, inspector_toggle_, inspector_is_open_);
     attached_ = true;
     last_dpr_ = dpr;
     return true;
@@ -84,7 +112,7 @@ void SpectraVulkanWindow::forceDetach()
         runtime_->detach_window(this);
     }
     attached_           = false;
-    surface_generation_ = 0;  // Invalidate generation on detach
+    surface_generation_ = 0;   // Invalidate generation on detach
 }
 
 void SpectraVulkanWindow::requestFrame()
@@ -98,12 +126,12 @@ void SpectraVulkanWindow::requestFrame()
 void SpectraVulkanWindow::startAnimationTimer()
 {
     if (timer_)
-        return;  // Already running
+        return;   // Already running
 
     has_last_frame_time_ = false;
     timer_               = new QTimer(this);
     connect(timer_, &QTimer::timeout, this, &SpectraVulkanWindow::renderFrame);
-    timer_->start(16);  // ~60 FPS
+    timer_->start(16);   // ~60 FPS
 }
 
 void SpectraVulkanWindow::stopAnimationTimer()
@@ -119,9 +147,7 @@ void SpectraVulkanWindow::stopAnimationTimer()
 void SpectraVulkanWindow::handleSurfaceCreated()
 {
     ++surface_generation_;
-    SPECTRA_LOG_DEBUG("qt_window",
-                      "Surface created, generation={}",
-                      surface_generation_);
+    SPECTRA_LOG_DEBUG("qt_window", "Surface created, generation={}", surface_generation_);
 }
 
 void SpectraVulkanWindow::handleSurfaceAboutToBeDestroyed()
@@ -145,8 +171,7 @@ bool SpectraVulkanWindow::event(QEvent* event)
     if (event && event->type() == QEvent::PlatformSurface && runtime_)
     {
         auto* platform_event = static_cast<QPlatformSurfaceEvent*>(event);
-        if (platform_event->surfaceEventType()
-            == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed)
+        if (platform_event->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed)
         {
             handleSurfaceAboutToBeDestroyed();
         }
@@ -236,14 +261,23 @@ void SpectraVulkanWindow::renderFrame()
         animation_tick_(dt);
     }
 
-    (void)runtime_->render_window(this, *figure_);
+    if (!runtime_->render_window(this, *figure_))
+        return;
+
+    PerfMetrics::instance().increment_frame_count();
+
+    // Emit frame stats for status bar updates
+    const double gpu_ms = dt * 1000.0;
+    const int    fps    = dt > 0.0 ? static_cast<int>(1.0 / dt) : 0;
+    emit         frameStats(fps, gpu_ms);
 }
 
 void SpectraVulkanWindow::mouseMoveEvent(QMouseEvent* event)
 {
+    auto pos = event->position();
+    emit cursorMoved(pos.x(), pos.y());
     if (!input_)
         return;
-    auto pos = event->position();
     auto dpr = devicePixelRatio();
     input_->on_mouse_move(pos.x() * dpr, pos.y() * dpr);
     requestFrame();
@@ -257,11 +291,7 @@ void SpectraVulkanWindow::mousePressEvent(QMouseEvent* event)
     auto dpr = devicePixelRatio();
     int  btn = QtInputRouter::qtButtonToSpectra(event->button());
     int  mod = QtInputRouter::qtModsToSpectra(event->modifiers());
-    input_->on_mouse_button(btn,
-                            spectra::embed::ACTION_PRESS,
-                            mod,
-                            pos.x() * dpr,
-                            pos.y() * dpr);
+    input_->on_mouse_button(btn, spectra::embed::ACTION_PRESS, mod, pos.x() * dpr, pos.y() * dpr);
     requestFrame();
 }
 
@@ -273,11 +303,19 @@ void SpectraVulkanWindow::mouseReleaseEvent(QMouseEvent* event)
     auto dpr = devicePixelRatio();
     int  btn = QtInputRouter::qtButtonToSpectra(event->button());
     int  mod = QtInputRouter::qtModsToSpectra(event->modifiers());
-    input_->on_mouse_button(btn,
-                            spectra::embed::ACTION_RELEASE,
-                            mod,
-                            pos.x() * dpr,
-                            pos.y() * dpr);
+    input_->on_mouse_button(btn, spectra::embed::ACTION_RELEASE, mod, pos.x() * dpr, pos.y() * dpr);
+    requestFrame();
+}
+
+void SpectraVulkanWindow::mouseDoubleClickEvent(QMouseEvent* event)
+{
+    if (!input_)
+        return;
+    auto pos = event->position();
+    auto dpr = devicePixelRatio();
+    int  btn = QtInputRouter::qtButtonToSpectra(event->button());
+    int  mod = QtInputRouter::qtModsToSpectra(event->modifiers());
+    input_->on_mouse_button(btn, spectra::embed::ACTION_PRESS, mod, pos.x() * dpr, pos.y() * dpr);
     requestFrame();
 }
 

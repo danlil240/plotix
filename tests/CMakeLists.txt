@@ -294,6 +294,9 @@ foreach(_test ${SPECTRA_UNIT_TESTS})
         if(_test STREQUAL "test_eigen_support" AND SPECTRA_USE_EIGEN)
             target_link_libraries(unit_${_test} PRIVATE Eigen3::Eigen)
         endif()
+        if(_test STREQUAL "test_ui_icons" AND SPECTRA_USE_IMGUI AND DEFINED imgui_SOURCE_DIR)
+            target_include_directories(unit_${_test} SYSTEM PRIVATE ${imgui_SOURCE_DIR})
+        endif()
         # Pass mock plugin path to transform plugin tests
         if(_test STREQUAL "test_plugin_transforms")
             target_compile_definitions(unit_${_test} PRIVATE

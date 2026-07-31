@@ -26,6 +26,7 @@ public:
     void set_message(const QString& message);
     QString message() const;
     void set_active_tool(const QString& tool_name);
+    QString active_tool() const;
     void set_zoom(double zoom);
     void set_fps(int fps);
     void set_gpu_frame_time(double ms);

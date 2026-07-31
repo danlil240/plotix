@@ -59,8 +59,10 @@ class AutomationServer
     void poll(App& app, WindowUIContext* ui_ctx);
 
     // Frontend-neutral main-thread dispatch. Qt uses this overload from its
-    // event loop because it does not own an App or WindowUIContext.
-    void poll(const RequestDispatcher& dispatcher);
+    // event loop because it does not own an App or WindowUIContext. Event-loop
+    // frontends report actual render progress so wait_frames cannot mistake a
+    // timer tick for a rendered frame.
+    void poll(const RequestDispatcher& dispatcher, uint32_t frames_elapsed = 1);
 
     std::string invoke(const std::string&        method,
                        const std::string&        params_json = "{}",
@@ -74,6 +76,10 @@ class AutomationServer
     // Returns the default automation socket path:
     //   /tmp/spectra-auto-<pid>.sock
     static std::string default_socket_path();
+
+    // Serialize the registered method metadata for frontend-specific
+    // dispatchers that share this server but do not use App/WindowUIContext.
+    std::string handler_catalog_json() const;
 
    private:
     void listener_thread_fn();
@@ -114,7 +120,7 @@ class AutomationServer
     // Populate handlers_ from the handler group factories.
     void register_handlers();
 
-    void poll_pending(const RequestDispatcher& dispatcher);
+    void poll_pending(const RequestDispatcher& dispatcher, uint32_t frames_elapsed);
 };
 
 }   // namespace spectra

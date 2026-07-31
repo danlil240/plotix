@@ -97,11 +97,7 @@ void SpectraNavRail::build_buttons()
         connect(btn,
                 &SpectraNavButton::clicked,
                 this,
-                [this, index]()
-                {
-                    set_active_tool(index);
-                    emit tool_selected(index);
-                });
+                [this, index]() { emit tool_selected(index); });
 
         layout_->addWidget(btn, 1);
         buttons_.append(btn);

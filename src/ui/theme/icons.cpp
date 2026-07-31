@@ -45,17 +45,24 @@ IconFont& IconFont::instance()
 
 bool IconFont::initialize()
 {
-    if (initialized_)
-        return true;
+    ImGuiContext* context = ImGui::GetCurrentContext();
+    if (!context)
+        return false;
 
-    build_icon_map();
+    if (!initialized_)
+    {
+        build_icon_map();
+        initialized_ = true;
+    }
 
     // The icon font glyphs are merged into every ImGui font by load_fonts()
-    // in imgui_integration.cpp. We just grab the current font (which has icons).
-    font_16_ = ImGui::GetFont();
-    font_20_ = ImGui::GetFont();
-    font_24_ = ImGui::GetFont();
-    font_32_ = ImGui::GetFont();
+    // in imgui_integration.cpp. Cache pointers per ImGui context so one
+    // canvas can never use another canvas's font atlas.
+    ContextFonts fonts;
+    fonts.font_16 = ImGui::GetFont();
+    fonts.font_20 = ImGui::GetFont();
+    fonts.font_24 = ImGui::GetFont();
+    fonts.font_32 = ImGui::GetFont();
 
     // Try to find size-specific fonts from the atlas
     ImFontAtlas* atlas = ImGui::GetIO().Fonts;
@@ -67,13 +74,13 @@ bool IconFont::initialize()
                 continue;
             float sz = font->LegacySize;
             if (sz >= 15.5f && sz <= 16.5f)
-                font_16_ = font;
+                fonts.font_16 = font;
             else if (sz >= 19.5f && sz <= 20.5f)
-                font_20_ = font;
+                fonts.font_20 = font;
             else if (sz >= 17.5f && sz <= 18.5f)
-                font_24_ = font;   // use 18px as closest to 24
+                fonts.font_24 = font;   // use 18px as closest to 24
         }
-        // font_32_ falls back to the largest available
+        // font_32 falls back to the largest available
         if (atlas->Fonts.Size > 0)
         {
             ImFont* largest = atlas->Fonts[0];
@@ -82,12 +89,18 @@ bool IconFont::initialize()
                 if (font && font->LegacySize > largest->LegacySize)
                     largest = font;
             }
-            font_32_ = largest;
+            fonts.font_32 = largest;
         }
     }
 
-    initialized_ = true;
+    fonts_by_context_[context] = fonts;
     return true;
+}
+
+void IconFont::release_context(ImGuiContext* context)
+{
+    if (context)
+        fonts_by_context_.erase(context);
 }
 
 ImFont* IconFont::get_font(float size) const
@@ -95,13 +108,18 @@ ImFont* IconFont::get_font(float size) const
     if (!initialized_)
         return nullptr;
 
+    auto it = fonts_by_context_.find(ImGui::GetCurrentContext());
+    if (it == fonts_by_context_.end())
+        return nullptr;
+
+    const auto& fonts = it->second;
     if (size <= 16.0f)
-        return font_16_;
+        return fonts.font_16;
     if (size <= 20.0f)
-        return font_20_;
+        return fonts.font_20;
     if (size <= 24.0f)
-        return font_24_;
-    return font_32_;
+        return fonts.font_24;
+    return fonts.font_32;
 }
 
 void IconFont::draw(Icon icon, float size, const Color& color) const

@@ -168,12 +168,6 @@ void QtRuntime::shutdown()
         backend_->wait_idle();
     }
 
-#ifdef SPECTRA_USE_IMGUI
-    data_interaction_.reset();
-    imgui_ui_.reset();
-    ui_has_last_frame_time_ = false;
-#endif
-
     // Destroy per-window contexts before renderer/backend teardown.
     if (backend_)
     {
@@ -184,6 +178,15 @@ void QtRuntime::shutdown()
             {
                 continue;
             }
+#ifdef SPECTRA_USE_IMGUI
+            if (state->input_handler)
+                state->input_handler->set_data_interaction(nullptr);
+            if (state->imgui_ui)
+                state->imgui_ui->set_data_interaction(nullptr);
+            state->imgui_ui.reset();
+            state->data_interaction.reset();
+            state->ui_has_last_frame_time = false;
+#endif
             backend_->set_active_window(state->window_ctx.get());
             backend_->destroy_window_context(*state->window_ctx);
         }
@@ -192,6 +195,7 @@ void QtRuntime::shutdown()
 
     window_states_.clear();
     pending_input_handlers_.clear();
+    pending_inspector_callbacks_.clear();
     primary_window_       = nullptr;
     current_frame_window_ = nullptr;
     next_window_id_       = 1;
@@ -246,6 +250,11 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
     {
         state->input_handler = pending_it->second;
     }
+    if (auto pending_it = pending_inspector_callbacks_.find(window);
+        pending_it != pending_inspector_callbacks_.end())
+    {
+        state->inspector_callbacks = pending_it->second;
+    }
 
     if (!backend_->init_window_context(*state->window_ctx, width, height))
     {
@@ -270,38 +279,36 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
     backend_->ensure_pipelines();
 
 #ifdef SPECTRA_USE_IMGUI
-    if (!imgui_ui_)
+    state->imgui_ui = make_imgui_integration();
+    state->imgui_ui->set_theme_manager(&theme_mgr_);
+    if (!state->imgui_ui->init_headless(*backend_, width, height))
     {
-        imgui_ui_ = make_imgui_integration();
-        imgui_ui_->set_theme_manager(&theme_mgr_);
-        if (!imgui_ui_->init_headless(*backend_, width, height))
+        SPECTRA_LOG_WARN(
+            "qt_runtime",
+            "ImGui headless init failed — Qt runtime continues with canvas-only rendering");
+        state->imgui_ui.reset();
+    }
+    else
+    {
+        state->data_interaction = std::make_unique<DataInteraction>();
+        state->data_interaction->set_theme_manager(&theme_mgr_);
+        state->imgui_ui->set_data_interaction(state->data_interaction.get());
+        if (state->input_handler)
         {
-            SPECTRA_LOG_WARN(
-                "qt_runtime",
-                "ImGui headless init failed — Qt runtime continues with canvas-only rendering");
-            imgui_ui_.reset();
+            state->imgui_ui->set_input_handler(state->input_handler);
+            state->input_handler->set_data_interaction(state->data_interaction.get());
         }
-        else
-        {
-            data_interaction_ = std::make_unique<DataInteraction>();
-            data_interaction_->set_theme_manager(&theme_mgr_);
-            imgui_ui_->set_data_interaction(data_interaction_.get());
-            if (state->input_handler)
-            {
-                imgui_ui_->set_input_handler(state->input_handler);
-                state->input_handler->set_data_interaction(data_interaction_.get());
-            }
 
-            // Qt owns the application shell — suppress all legacy ImGui chrome.
-            // Only plot overlays (legends, tooltips, data interaction) remain.
-            imgui_ui_->set_command_bar_visible(false);
-            imgui_ui_->set_status_bar_visible(false);
-            imgui_ui_->set_nav_rail_visible(false);
-            imgui_ui_->set_shell_chrome_visible(false);
-            imgui_ui_->set_external_inspector_toggle_callbacks(inspector_toggle_cb_,
-                                                               inspector_open_cb_);
-            imgui_ui_->get_layout_manager().set_inspector_visible(false);
-        }
+        // Qt owns the application shell — suppress all legacy ImGui chrome.
+        // Only plot overlays (legends, tooltips, data interaction) remain.
+        state->imgui_ui->set_command_bar_visible(false);
+        state->imgui_ui->set_status_bar_visible(false);
+        state->imgui_ui->set_nav_rail_visible(false);
+        state->imgui_ui->set_shell_chrome_visible(false);
+        state->imgui_ui->set_external_inspector_toggle_callbacks(
+            state->inspector_callbacks.toggle,
+            state->inspector_callbacks.is_open);
+        state->imgui_ui->get_layout_manager().set_inspector_visible(false);
     }
 #endif
 
@@ -323,15 +330,27 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
     return true;
 }
 
-void QtRuntime::set_inspector_toggle_callbacks(std::function<void()> toggle,
+void QtRuntime::set_inspector_toggle_callbacks(QWindow*              window,
+                                               std::function<void()> toggle,
                                                std::function<bool()> is_open)
 {
-    inspector_toggle_cb_ = std::move(toggle);
-    inspector_open_cb_   = std::move(is_open);
+    if (!window)
+        return;
+
+    InspectorCallbacks callbacks{std::move(toggle), std::move(is_open)};
+    pending_inspector_callbacks_[window] = callbacks;
+    auto* state                          = find_window_state(window);
+    if (!state)
+        return;
+
+    state->inspector_callbacks = std::move(callbacks);
 #ifdef SPECTRA_USE_IMGUI
-    if (imgui_ui_)
-        imgui_ui_->set_external_inspector_toggle_callbacks(inspector_toggle_cb_,
-                                                           inspector_open_cb_);
+    if (state->imgui_ui)
+    {
+        state->imgui_ui->set_external_inspector_toggle_callbacks(
+            state->inspector_callbacks.toggle,
+            state->inspector_callbacks.is_open);
+    }
 #endif
 }
 
@@ -349,6 +368,18 @@ void QtRuntime::detach_window(QWindow* window)
     }
 
     auto* state = it->second.get();
+#ifdef SPECTRA_USE_IMGUI
+    if (state)
+    {
+        if (state->input_handler)
+            state->input_handler->set_data_interaction(nullptr);
+        if (state->imgui_ui)
+            state->imgui_ui->set_data_interaction(nullptr);
+        state->imgui_ui.reset();
+        state->data_interaction.reset();
+        state->ui_has_last_frame_time = false;
+    }
+#endif
     if (backend_ && state && state->window_ctx)
     {
         backend_->set_active_window(state->window_ctx.get());
@@ -364,6 +395,7 @@ void QtRuntime::detach_window(QWindow* window)
     }
 
     pending_input_handlers_.erase(window);
+    pending_inspector_callbacks_.erase(window);
 
     window_states_.erase(it);
 
@@ -371,15 +403,6 @@ void QtRuntime::detach_window(QWindow* window)
     {
         primary_window_ = window_states_.empty() ? nullptr : window_states_.begin()->first;
     }
-
-#ifdef SPECTRA_USE_IMGUI
-    if (window_states_.empty())
-    {
-        data_interaction_.reset();
-        imgui_ui_.reset();
-        ui_has_last_frame_time_ = false;
-    }
-#endif
 
     if (backend_)
     {
@@ -512,9 +535,9 @@ bool QtRuntime::begin_frame(QWindow* window)
             state->resize_pending                    = false;
 
 #ifdef SPECTRA_USE_IMGUI
-            if (imgui_ui_)
+            if (state->imgui_ui)
             {
-                imgui_ui_->on_swapchain_recreated(*backend_);
+                state->imgui_ui->on_swapchain_recreated(*backend_);
             }
 #endif
         }
@@ -593,40 +616,40 @@ void QtRuntime::render_figure(QWindow* window, Figure& figure)
     bool layout_applied = false;
 
 #ifdef SPECTRA_USE_IMGUI
-    if (imgui_ui_)
+    if (state->imgui_ui)
     {
         if (state->input_handler)
         {
-            imgui_ui_->set_input_handler(state->input_handler);
-            if (data_interaction_)
+            state->imgui_ui->set_input_handler(state->input_handler);
+            if (state->data_interaction)
             {
-                state->input_handler->set_data_interaction(data_interaction_.get());
+                state->input_handler->set_data_interaction(state->data_interaction.get());
                 const auto& readout = state->input_handler->cursor_readout();
-                imgui_ui_->set_cursor_data(readout.data_x, readout.data_y, readout.valid);
-                data_interaction_->update(readout, figure);
+                state->imgui_ui->set_cursor_data(readout.data_x, readout.data_y, readout.valid);
+                state->data_interaction->update(readout, figure);
             }
         }
         else
         {
-            imgui_ui_->set_input_handler(nullptr);
-            if (data_interaction_)
+            state->imgui_ui->set_input_handler(nullptr);
+            if (state->data_interaction)
             {
                 CursorReadout no_cursor;
                 no_cursor.valid = false;
-                data_interaction_->update(no_cursor, figure);
-                imgui_ui_->set_cursor_data(0.0f, 0.0f, false);
+                state->data_interaction->update(no_cursor, figure);
+                state->imgui_ui->set_cursor_data(0.0f, 0.0f, false);
             }
         }
 
         float      dt  = 1.0f / 60.0f;
         const auto now = std::chrono::steady_clock::now();
-        if (ui_has_last_frame_time_)
+        if (state->ui_has_last_frame_time)
         {
-            dt = std::chrono::duration<float>(now - ui_last_frame_time_).count();
+            dt = std::chrono::duration<float>(now - state->ui_last_frame_time).count();
             dt = std::clamp(dt, 1.0f / 240.0f, 0.1f);
         }
-        ui_last_frame_time_     = now;
-        ui_has_last_frame_time_ = true;
+        state->ui_last_frame_time     = now;
+        state->ui_has_last_frame_time = true;
 
         ImGuiIntegration::HeadlessFrameInput fi{};
         fi.display_w = sw;
@@ -644,17 +667,17 @@ void QtRuntime::render_figure(QWindow* window, Figure& figure)
         fi.mouse_down[1]               = (buttons & Qt::RightButton) != 0;
         fi.mouse_down[2]               = (buttons & Qt::MiddleButton) != 0;
 
-        imgui_ui_->new_frame_headless(fi);
+        state->imgui_ui->new_frame_headless(fi);
 
         // The QWindow is already the plot canvas: Qt owns the title, menus,
         // document tabs, navigation rail, inspector, and status bar outside
         // this surface. Reusing the legacy layout without an override subtracts
         // its command/status chrome a second time and visibly shifts/shrinks the
         // renderer relative to the GLFW reference.
-        imgui_ui_->get_layout_manager().set_canvas_override(Rect{0.0f, 0.0f, sw, sh});
-        imgui_ui_->build_ui(figure);
+        state->imgui_ui->get_layout_manager().set_canvas_override(Rect{0.0f, 0.0f, sw, sh});
+        state->imgui_ui->build_ui(figure);
 
-        auto& lm = imgui_ui_->get_layout_manager();
+        auto& lm = state->imgui_ui->get_layout_manager();
 
         const Rect  canvas    = lm.canvas_rect();
         const auto& fig_style = figure.style();
@@ -716,9 +739,9 @@ void QtRuntime::render_figure(QWindow* window, Figure& figure)
     renderer_->render_text(sw, sh);
 
 #ifdef SPECTRA_USE_IMGUI
-    if (imgui_ui_)
+    if (state->imgui_ui)
     {
-        imgui_ui_->render(*backend_);
+        state->imgui_ui->render(*backend_);
     }
 #endif
 
@@ -785,12 +808,16 @@ void QtRuntime::set_input_handler(QWindow* window, InputHandler* input)
 
     if (auto* state = find_window_state(window))
     {
+#ifdef SPECTRA_USE_IMGUI
+        if (state->input_handler && state->input_handler != input)
+            state->input_handler->set_data_interaction(nullptr);
+#endif
         state->input_handler = input;
 
 #ifdef SPECTRA_USE_IMGUI
-        if (data_interaction_ && input)
+        if (state->data_interaction && input)
         {
-            input->set_data_interaction(data_interaction_.get());
+            input->set_data_interaction(state->data_interaction.get());
         }
 #endif
     }
