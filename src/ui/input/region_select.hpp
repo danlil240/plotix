@@ -78,6 +78,10 @@ class RegionSelect
     // Finish the selection (mouse release). Computes statistics.
     void finish(const Axes* axes);
 
+    // Restore a completed data-coordinate selection and recompute its point
+    // membership/statistics against the recreated axes.
+    void restore(float x_min, float x_max, float y_min, float y_max, const Axes* axes);
+
     // Dismiss / clear the current selection.
     void dismiss();
 

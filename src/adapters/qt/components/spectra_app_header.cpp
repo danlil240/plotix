@@ -77,15 +77,14 @@ class SpectraHomeButton : public QPushButton
     {
         setFixedSize(28, 28);
         setCursor(Qt::PointingHandCursor);
-        setToolTip("Home (Ctrl+H)");
+        setToolTip("Home (Home)");
+        setAccessibleName("Home");
+        setAccessibleDescription("Restore the original view. Shortcut Home");
 
         setStyleSheet(QString("QPushButton {"
                               "  background: transparent;"
                               "  border: none;"
                               "  border-radius: %1px;"
-                              "}"
-                              "QPushButton:hover {"
-                              "  background: rgba(26, 35, 50, 140);"
                               "}")
                           .arg(spectra_geometry().radius_md));
     }

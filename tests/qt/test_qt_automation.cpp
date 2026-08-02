@@ -414,6 +414,39 @@ TEST(QtAutomation, LiveMcpUsesSingleServiceEndpointAndQtDispatch)
     const auto        first_figure  = registry.register_figure(std::make_unique<spectra::Figure>());
     const auto        second_figure = registry.register_figure(std::make_unique<spectra::Figure>());
     spectra::FigureId switched_figure = spectra::INVALID_FIGURE_ID;
+    int               split_count     = 0;
+    int               detach_count    = 0;
+    int               resize_count    = 0;
+
+    services.commands().register_command("test.safe", "Safe Test Command", []() {}, "", "Test");
+    services.commands().register_command(
+        "view.split_right",
+        "Split Right",
+        [&split_count]() { ++split_count; },
+        "",
+        "View");
+    services.commands().register_command(
+        "view.split_down",
+        "Split Down",
+        [&split_count]() { ++split_count; },
+        "",
+        "View");
+    services.commands().register_command(
+        "figure.move_to_window",
+        "Move to Window",
+        [&detach_count]() { ++detach_count; },
+        "",
+        "Figure");
+    services.commands().register_command(
+        "figure.close",
+        "Close Figure",
+        [&registry, &switched_figure]()
+        {
+            if (switched_figure != spectra::INVALID_FIGURE_ID)
+                registry.unregister_figure(switched_figure);
+        },
+        "",
+        "Figure");
 
     QWidget input_root;
     input_root.resize(360, 180);
@@ -448,6 +481,36 @@ TEST(QtAutomation, LiveMcpUsesSingleServiceEndpointAndQtDispatch)
         {
             switched_figure = id;
             return true;
+        });
+    adapter.set_close_figure(
+        [&registry](spectra::FigureId id)
+        {
+            if (!registry.get(id))
+                return false;
+            registry.unregister_figure(id);
+            return registry.get(id) == nullptr;
+        });
+    adapter.set_detach_figure(
+        [&detach_count](spectra::FigureId)
+        {
+            ++detach_count;
+            return true;
+        });
+    adapter.set_create_figure(
+        [&registry](uint32_t width, uint32_t height)
+        {
+            auto figure = std::make_unique<spectra::Figure>();
+            figure->set_size(width, height);
+            figure->subplot(1, 1, 1);
+            return registry.register_figure(std::move(figure));
+        });
+    adapter.set_execute_command([&services](const std::string& id)
+                                { return services.commands().execute(id); });
+    adapter.set_resize_window(
+        [&resize_count, &input_root](uint32_t width, uint32_t height)
+        {
+            ++resize_count;
+            input_root.resize(static_cast<int>(width), static_cast<int>(height));
         });
     adapter.set_list_menus(
         []()
@@ -632,20 +695,125 @@ TEST(QtAutomation, LiveMcpUsesSingleServiceEndpointAndQtDispatch)
     EXPECT_NE(dismiss_response.find(R"("popup":true)"), std::string::npos);
     EXPECT_EQ(QApplication::activePopupWidget(), nullptr);
 
-    static constexpr std::array<const char*, 3> kUnsupportedTools = {
-        "fuzz_step",
-        "fuzz_reset",
-        "list_fuzz_actions",
-    };
-    for (const char* tool_name : kUnsupportedTools)
+    const std::string fuzz_catalog = invoke_with_qt_events(port, "list_fuzz_actions");
+    EXPECT_EQ(fuzz_catalog.find(R"("isError":true)"), std::string::npos);
+    for (const char* action : {"ExecuteCommand",
+                               "MouseClick",
+                               "MouseDrag",
+                               "MouseScroll",
+                               "KeyPress",
+                               "CreateFigure",
+                               "CloseFigure",
+                               "SwitchTab",
+                               "AddSeries",
+                               "UpdateData",
+                               "LargeDataset",
+                               "SplitDock",
+                               "WaitFrames",
+                               "WindowResize",
+                               "WindowDrag",
+                               "TabDetach"})
+        EXPECT_NE(fuzz_catalog.find(action), std::string::npos) << action;
+
+    const std::string reset_response = invoke_with_qt_events(port, "fuzz_reset", R"({"seed":77})");
+    EXPECT_EQ(reset_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(reset_response.find(R"("reset":true)"), std::string::npos);
+    EXPECT_NE(reset_response.find(R"("seed":77)"), std::string::npos);
+
+    const auto force_action = [port](const char* action, int seed = 77)
     {
-        const std::string response = invoke_with_qt_events(port, tool_name);
-        EXPECT_FALSE(response.empty()) << tool_name;
-        EXPECT_NE(response.find("HTTP/1.1 200 OK"), std::string::npos) << tool_name;
-        EXPECT_NE(response.find(R"("isError":true)"), std::string::npos) << tool_name;
-        EXPECT_NE(response.find("Qt automation method is not implemented"), std::string::npos)
-            << tool_name;
+        return invoke_with_qt_events(
+            port,
+            "fuzz_step",
+            R"({"seed":)" + std::to_string(seed) + R"(,"action":")" + action + R"("})");
+    };
+
+    const std::string first_click  = force_action("MouseClick");
+    const std::string second_click = force_action("MouseClick");
+    EXPECT_EQ(first_click, second_click);
+    EXPECT_NE(first_click.find(R"("action":"MouseClick")"), std::string::npos);
+    EXPECT_NE(first_click.find(R"("dispatched":true)"), std::string::npos);
+
+    const std::array<float, 2> fuzz_x{0.0f, 1.0f};
+    const std::array<float, 2> fuzz_y{1.0f, 2.0f};
+    for (spectra::FigureId id : registry.all_ids())
+    {
+        auto* figure = registry.get(id);
+        ASSERT_NE(figure, nullptr);
+        auto& axes = figure->subplot(1, 1, 1);
+        while (!axes.series().empty())
+            ASSERT_TRUE(axes.remove_series(0));
+        axes.line(fuzz_x, fuzz_y);
     }
+    const auto total_series = [&registry]()
+    {
+        size_t total = 0;
+        for (spectra::FigureId id : registry.all_ids())
+        {
+            if (auto* figure = registry.get(id))
+                figure->for_each_axes(
+                    [&total](spectra::AxesBase* axes)
+                    {
+                        if (axes)
+                            total += axes->series().size();
+                    });
+        }
+        return total;
+    };
+
+    EXPECT_NE(force_action("MouseDrag").find(R"("dispatched":true)"), std::string::npos);
+    EXPECT_NE(force_action("MouseScroll").find(R"("dispatched":true)"), std::string::npos);
+    EXPECT_NE(force_action("KeyPress").find(R"("dispatched":true)"), std::string::npos);
+
+    const size_t      figures_before_create = registry.all_ids().size();
+    const std::string create_response       = force_action("CreateFigure");
+    EXPECT_NE(create_response.find(R"("created":true)"), std::string::npos);
+    EXPECT_EQ(registry.all_ids().size(), figures_before_create + 1);
+
+    const size_t series_before_add = total_series();
+    EXPECT_EQ(force_action("AddSeries").find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(total_series(), series_before_add + 1);
+
+    const std::string update_response = force_action("UpdateData", 8);
+    EXPECT_EQ(update_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(update_response.find("no_line_series"), std::string::npos);
+
+    const size_t      series_before_large = total_series();
+    const std::string large_response      = force_action("LargeDataset");
+    EXPECT_EQ(large_response.find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(total_series(), series_before_large + 1);
+
+    EXPECT_EQ(split_count, 0);
+    EXPECT_EQ(force_action("SplitDock").find(R"("isError":true)"), std::string::npos);
+    EXPECT_EQ(split_count, 1);
+
+    const std::string wait_fuzz_response = force_action("WaitFrames");
+    EXPECT_NE(wait_fuzz_response.find(R"("requested_frames":)"), std::string::npos);
+    EXPECT_NE(wait_fuzz_response.find(R"("pump_frames":)"), std::string::npos);
+
+    EXPECT_EQ(resize_count, 0);
+    EXPECT_NE(force_action("WindowResize").find(R"("resized":true)"), std::string::npos);
+    EXPECT_EQ(resize_count, 1);
+    EXPECT_NE(force_action("WindowDrag").find(R"("moved":true)"), std::string::npos);
+
+    switched_figure = spectra::INVALID_FIGURE_ID;
+    EXPECT_NE(force_action("SwitchTab").find(R"("switched":true)"), std::string::npos);
+    EXPECT_NE(switched_figure, spectra::INVALID_FIGURE_ID);
+
+    EXPECT_EQ(detach_count, 0);
+    EXPECT_NE(force_action("TabDetach").find(R"("detached":true)"), std::string::npos);
+    EXPECT_EQ(detach_count, 1);
+
+    EXPECT_EQ(force_action("ExecuteCommand").find(R"("isError":true)"), std::string::npos);
+
+    const size_t figures_before_close = registry.all_ids().size();
+    EXPECT_NE(force_action("CloseFigure").find(R"("closed":true)"), std::string::npos);
+    EXPECT_EQ(registry.all_ids().size(), figures_before_close - 1);
+
+    const std::string unknown_fuzz =
+        invoke_with_qt_events(port, "fuzz_step", R"({"action":"DoesNotExist"})");
+    EXPECT_NE(unknown_fuzz.find(R"("isError":true)"), std::string::npos);
+    EXPECT_NE(unknown_fuzz.find("Unknown fuzz action"), std::string::npos);
 
     adapter.stop();
     EXPECT_FALSE(adapter.is_running());

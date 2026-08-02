@@ -12,6 +12,21 @@ constexpr int ACTION_PRESS   = 1;
 constexpr int ACTION_RELEASE = 0;
 }   // anonymous namespace
 
+void InputHandler::restore_measure_result(Axes*  axes,
+                                          double start_x,
+                                          double start_y,
+                                          double end_x,
+                                          double end_y)
+{
+    measure_dragging_     = false;
+    measure_click_state_  = axes ? 2 : 0;
+    measure_axes_         = axes;
+    measure_start_data_x_ = start_x;
+    measure_start_data_y_ = start_y;
+    measure_end_data_x_   = end_x;
+    measure_end_data_y_   = end_y;
+}
+
 // ─── Measure tool: drag or two-click distance measurement ───────────────────
 
 void InputHandler::handle_mouse_button_measure(int action, double x, double y)

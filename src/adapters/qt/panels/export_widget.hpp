@@ -13,6 +13,7 @@
 
 #include <functional>
 #include <string>
+#include <utility>
 
 class QComboBox;
 class QSpinBox;
@@ -38,6 +39,8 @@ class QtExportWidget : public QDockWidget
     using ExportPathCallback = std::function<std::optional<std::string>(
         const std::string& title, const std::string& default_name,
         const std::string& filter)>;
+    using ExportCallback =
+        std::function<bool(FigureId, const std::string&, const std::string&, uint32_t, uint32_t)>;
 
     QtExportWidget(ExportFormatRegistry* formats,
                    FigureRegistry*       registry,
@@ -51,6 +54,7 @@ class QtExportWidget : public QDockWidget
    public slots:
     void set_active_figure(spectra::FigureId id);
     void refresh_formats();
+    void set_export_callback(ExportCallback callback) { export_callback_ = std::move(callback); }
 
    private slots:
     void on_browse_clicked();
@@ -60,6 +64,7 @@ class QtExportWidget : public QDockWidget
     ExportFormatRegistry* formats_   = nullptr;
     FigureRegistry*       registry_  = nullptr;
     DialogService*        dialogs_   = nullptr;
+    ExportCallback        export_callback_;
 
     FigureId active_id_ = INVALID_FIGURE_ID;
 

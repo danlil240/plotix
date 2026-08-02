@@ -82,6 +82,10 @@ class CommandRegistry
     // Enable/disable a command.
     void set_enabled(const std::string& id, bool enabled);
 
+    // Update the human-readable shortcut metadata exposed to menus,
+    // automation, and frontend action bridges.
+    void set_shortcut(const std::string& id, const std::string& shortcut);
+
     // Track recent commands (for "recent" section in palette).
     void                        record_execution(const std::string& id);
     std::vector<const Command*> recent_commands(size_t max_count = 10) const;

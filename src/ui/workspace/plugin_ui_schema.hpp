@@ -128,6 +128,12 @@ struct PluginUISchema
     uint32_t version = 1;
 };
 
+struct RegisteredPluginUISchema
+{
+    std::string    id;
+    PluginUISchema schema;
+};
+
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 // Callbacks from the plugin UI registry to the plugin.
@@ -172,6 +178,9 @@ class PluginUIRegistry
 
     // Get all registered schemas.
     std::vector<PluginUISchema> schemas() const;
+
+    // Get schemas together with the stable IDs required for interaction callbacks.
+    std::vector<RegisteredPluginUISchema> registered_schemas() const;
 
     // Get a schema by ID.  Returns nullptr if not found.
     const PluginUISchema* find_schema(const std::string& schema_id) const;

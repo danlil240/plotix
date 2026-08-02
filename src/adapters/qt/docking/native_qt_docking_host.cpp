@@ -169,11 +169,23 @@ bool NativeQtDockingHost::restore_layout(const DockLayoutState& state)
     {
         if (ws.host_id == id_)
         {
-            window_->restoreState(from_base64(ws.state_base64));
-            window_->restoreGeometry(from_base64(ws.geometry_base64));
+            bool attempted = false;
+            bool restored  = true;
+            if (!ws.state_base64.empty())
+            {
+                attempted              = true;
+                const QByteArray bytes = from_base64(ws.state_base64);
+                restored = !bytes.isEmpty() && window_->restoreState(bytes) && restored;
+            }
+            if (!ws.geometry_base64.empty())
+            {
+                attempted              = true;
+                const QByteArray bytes = from_base64(ws.geometry_base64);
+                restored = !bytes.isEmpty() && window_->restoreGeometry(bytes) && restored;
+            }
             if (!ws.title.empty())
                 set_title(ws.title);
-            return true;
+            return attempted && restored;
         }
     }
     return false;

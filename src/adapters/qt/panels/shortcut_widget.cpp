@@ -2,9 +2,16 @@
 
 #include "shortcut_widget.hpp"
 
+#include "../qt_action_bridge.hpp"
+
+#include "ui/commands/command_registry.hpp"
 #include "ui/commands/shortcut_manager.hpp"
 
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
 #include <QHeaderView>
+#include <QKeySequenceEdit>
 #include <QLabel>
 #include <QPushButton>
 #include <QTableWidget>
@@ -14,8 +21,10 @@
 namespace spectra::adapters::qt
 {
 
-QtShortcutWidget::QtShortcutWidget(ShortcutManager* shortcuts, QWidget* parent)
-    : QDockWidget("Shortcuts", parent), shortcuts_(shortcuts)
+QtShortcutWidget::QtShortcutWidget(ShortcutManager* shortcuts,
+                                   QtActionBridge*  action_bridge,
+                                   QWidget*         parent)
+    : QDockWidget("Shortcuts", parent), shortcuts_(shortcuts), action_bridge_(action_bridge)
 {
     setObjectName("shortcut_panel");
     setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -59,14 +68,12 @@ QtShortcutWidget::QtShortcutWidget(ShortcutManager* shortcuts, QWidget* parent)
     layout->addStretch();
 
     // ── Connections ───────────────────────────────────────────────────
-    connect(rebind_btn_, &QPushButton::clicked,
-            this, &QtShortcutWidget::on_rebind_clicked);
-    connect(reset_btn_, &QPushButton::clicked,
-            this, &QtShortcutWidget::on_reset_clicked);
-    connect(table_, &QTableWidget::itemSelectionChanged,
-            this, [this]() {
-                rebind_btn_->setEnabled(table_->currentRow() >= 0);
-            });
+    connect(rebind_btn_, &QPushButton::clicked, this, &QtShortcutWidget::on_rebind_clicked);
+    connect(reset_btn_, &QPushButton::clicked, this, &QtShortcutWidget::on_reset_clicked);
+    connect(table_,
+            &QTableWidget::itemSelectionChanged,
+            this,
+            [this]() { rebind_btn_->setEnabled(table_->currentRow() >= 0); });
 
     refresh();
 }
@@ -87,6 +94,8 @@ void QtShortcutWidget::refresh()
     int row = 0;
     for (const auto& b : bindings)
     {
+        if (shortcuts_->command_registry() && !shortcuts_->command_registry()->find(b.command_id))
+            continue;
         auto* cmd_item = new QTableWidgetItem(QString::fromStdString(b.command_id));
         cmd_item->setFlags(cmd_item->flags() & ~Qt::ItemIsEditable);
         table_->setItem(row, 0, cmd_item);
@@ -98,6 +107,8 @@ void QtShortcutWidget::refresh()
         ++row;
     }
 
+    table_->setRowCount(row);
+
     status_label_->setText(QString("%1 shortcut(s) bound").arg(bindings.size()));
 }
 
@@ -107,14 +118,26 @@ void QtShortcutWidget::on_rebind_clicked()
     if (row < 0 || !shortcuts_)
         return;
 
-    QString cmd_id = table_->item(row, 0)->text();
-    QString old_shortcut = table_->item(row, 1)->text();
+    const QString command_id = table_->item(row, 0)->text();
+    QDialog       dialog(this);
+    dialog.setWindowTitle("Rebind Shortcut");
+    auto* layout = new QFormLayout(&dialog);
+    auto* edit   = new QKeySequenceEdit(QKeySequence(table_->item(row, 1)->text()), &dialog);
+    edit->setObjectName("shortcut_key_capture");
+    layout->addRow(command_id, edit);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
 
-    // TODO: Implement a key-capture dialog for rebinding.
-    // For now, show a placeholder message.
-    status_label_->setText(QString("Rebinding for '%1' — key capture dialog not yet implemented")
-                               .arg(cmd_id));
-    status_label_->setStyleSheet("color: orange;");
+    std::string error;
+    if (!rebind_command(command_id.toStdString(), edit->keySequence(), &error))
+    {
+        status_label_->setText(QString::fromStdString(error));
+        status_label_->setStyleSheet("color: #ef4444;");
+    }
 }
 
 void QtShortcutWidget::on_reset_clicked()
@@ -122,11 +145,56 @@ void QtShortcutWidget::on_reset_clicked()
     if (!shortcuts_)
         return;
 
-    shortcuts_->clear();
-    shortcuts_->register_defaults();
-    refresh();
+    reset_to_defaults();
     status_label_->setText("Shortcuts reset to defaults");
     status_label_->setStyleSheet("color: green;");
+}
+
+bool QtShortcutWidget::rebind_command(const std::string&  command_id,
+                                      const QKeySequence& sequence,
+                                      std::string*        error)
+{
+    if (!shortcuts_ || command_id.empty())
+        return false;
+    const std::string text     = sequence.toString(QKeySequence::PortableText).toStdString();
+    const Shortcut    shortcut = Shortcut::from_string(text);
+    if (!shortcut.valid())
+    {
+        if (error)
+            *error = "Choose a valid shortcut";
+        return false;
+    }
+
+    const std::string displaced = shortcuts_->command_for_shortcut(shortcut);
+    shortcuts_->unbind_command(command_id);
+    shortcuts_->bind(shortcut, command_id);
+    if (auto* registry = shortcuts_->command_registry())
+    {
+        registry->set_shortcut(command_id, text);
+        if (!displaced.empty() && displaced != command_id)
+            registry->set_shortcut(displaced, "");
+    }
+    if (action_bridge_)
+        action_bridge_->sync_shortcuts(*shortcuts_);
+    refresh();
+    status_label_->setText(
+        QString("%1 is now %2")
+            .arg(QString::fromStdString(command_id), QString::fromStdString(text)));
+    status_label_->setStyleSheet("color: #22c55e;");
+    emit shortcuts_changed();
+    return true;
+}
+
+void QtShortcutWidget::reset_to_defaults()
+{
+    if (!shortcuts_)
+        return;
+    shortcuts_->clear();
+    shortcuts_->register_defaults();
+    if (action_bridge_)
+        action_bridge_->sync_shortcuts(*shortcuts_);
+    refresh();
+    emit shortcuts_changed();
 }
 
 }   // namespace spectra::adapters::qt

@@ -3,10 +3,13 @@
 #include "qt_action_bridge.hpp"
 
 #include "ui/commands/command_registry.hpp"
+#include "ui/commands/shortcut_manager.hpp"
 
 #include <spectra/logger.hpp>
 
 #include <QString>
+
+#include <algorithm>
 
 namespace spectra::adapters::qt
 {
@@ -39,8 +42,7 @@ void QtActionBridge::rebuild()
 
         // Capture command_id by value for the lambda.
         std::string id = cmd->id;
-        connect(action.get(), &QAction::triggered, this,
-                [this, id]() { registry_.execute(id); });
+        connect(action.get(), &QAction::triggered, this, [this, id]() { registry_.execute(id); });
 
         actions_[cmd->id] = std::move(action);
     }
@@ -55,10 +57,9 @@ QAction* QtActionBridge::action_for(const std::string& command_id) const
     return it != actions_.end() ? it->second.get() : nullptr;
 }
 
-std::vector<QtActionBridge::CategoryActions>
-QtActionBridge::actions_by_category() const
+std::vector<QtActionBridge::CategoryActions> QtActionBridge::actions_by_category() const
 {
-    std::vector<CategoryActions> result;
+    std::vector<CategoryActions>            result;
     std::unordered_map<std::string, size_t> cat_index;
 
     for (const auto& [id, action] : actions_)
@@ -74,6 +75,18 @@ QtActionBridge::actions_by_category() const
         }
         result[it->second].actions.push_back(action.get());
     }
+
+    for (auto& category : result)
+    {
+        std::sort(category.actions.begin(),
+                  category.actions.end(),
+                  [](const QAction* lhs, const QAction* rhs)
+                  { return lhs->objectName() < rhs->objectName(); });
+    }
+    std::sort(result.begin(),
+              result.end(),
+              [](const CategoryActions& lhs, const CategoryActions& rhs)
+              { return lhs.category < rhs.category; });
 
     return result;
 }
@@ -93,6 +106,27 @@ void QtActionBridge::refresh()
 
         action->setText(QString::fromStdString(cmd->label));
         action->setEnabled(cmd->enabled);
+    }
+}
+
+void QtActionBridge::sync_shortcuts(const ShortcutManager& shortcuts)
+{
+    std::unordered_map<std::string, QList<QKeySequence>> sequences;
+    for (const auto& binding : shortcuts.all_bindings())
+    {
+        const QKeySequence sequence = shortcut_to_qt(binding.shortcut.to_string());
+        if (!sequence.isEmpty())
+            sequences[binding.command_id].push_back(sequence);
+    }
+
+    for (auto& [id, action] : actions_)
+    {
+        const auto it = sequences.find(id);
+        action->setShortcuts(it == sequences.end() ? QList<QKeySequence>{} : it->second);
+        registry_.set_shortcut(id,
+                               it == sequences.end() || it->second.empty()
+                                   ? std::string{}
+                                   : it->second.front().toString().toStdString());
     }
 }
 

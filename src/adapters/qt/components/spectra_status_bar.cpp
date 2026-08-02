@@ -33,6 +33,7 @@ SpectraStatusBar::SpectraStatusBar(QWidget* parent) : QWidget(parent)
 
     // Zoom
     zoom_chip_ = new SpectraStatusChip("Zoom: 100%", SpectraStatusChip::Type::Normal, this);
+    zoom_chip_->setObjectName("spectra_status_zoom");
     layout_->addWidget(zoom_chip_);
 
     layout_->addStretch();
@@ -49,6 +50,11 @@ SpectraStatusBar::SpectraStatusBar(QWidget* parent) : QWidget(parent)
 void SpectraStatusBar::set_cursor_coords(double x, double y)
 {
     coord_chip_->set_text(QString("X: %1  Y: %2").arg(x, 0, 'f', 2).arg(y, 0, 'f', 2));
+}
+
+void SpectraStatusBar::clear_cursor_coords()
+{
+    coord_chip_->set_text(QString::fromUtf8("X: —  Y: —"));
 }
 
 void SpectraStatusBar::set_message(const QString& message)
@@ -73,7 +79,20 @@ QString SpectraStatusBar::active_tool() const
 
 void SpectraStatusBar::set_zoom(double zoom)
 {
-    zoom_chip_->set_text(QString("Zoom: %1%").arg(static_cast<int>(zoom * 100)));
+    zoom_                   = zoom;
+    const double zoom_pct   = zoom * 100.0;
+    QString      zoom_label = "Zoom: ";
+    if (zoom_pct < 10000.0)
+        zoom_label += QString::number(zoom_pct, 'f', 0) + '%';
+    else if (zoom_pct < 1.0e7)
+        zoom_label += QString::number(zoom_pct / 1.0e3, 'f', 1) + "K%";
+    else if (zoom_pct < 1.0e10)
+        zoom_label += QString::number(zoom_pct / 1.0e6, 'f', 1) + "M%";
+    else if (zoom_pct < 1.0e13)
+        zoom_label += QString::number(zoom_pct / 1.0e9, 'f', 1) + "G%";
+    else
+        zoom_label += QString::number(zoom_pct, 'e', 2) + '%';
+    zoom_chip_->set_text(zoom_label);
 }
 
 void SpectraStatusBar::set_fps(int fps)

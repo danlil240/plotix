@@ -1,4 +1,5 @@
 #define _USE_MATH_DEFINES
+#include <array>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <numeric>
@@ -799,10 +800,33 @@ TEST(TransformRegistryTest, RegisterCustom)
 {
     TransformRegistry reg;
     reg.register_transform("cube", [](float v) { return v * v * v; }, "y³");
+    ASSERT_TRUE(reg.set_transform_source("cube", "TestProvider"));
 
     DataTransform t;
     EXPECT_TRUE(reg.get_transform("cube", t));
     EXPECT_FLOAT_EQ(t.apply_scalar(2.0f), 8.0f);
+    EXPECT_TRUE(t.available());
+    EXPECT_EQ(t.source(), "TestProvider");
+    EXPECT_EQ(reg.transform_source("cube"), "TestProvider");
+}
+
+TEST(DataTransformTest, UnavailableCustomPipelineStepIsPreservedButSkipped)
+{
+    TransformPipeline pipeline;
+    pipeline.push_back(DataTransform(TransformType::Scale, TransformParams{.scale_factor = 2.0f}));
+    pipeline.push_back(DataTransform::unavailable_custom("MissingPluginStep", "Plugin A"));
+    pipeline.push_back(DataTransform(TransformType::Offset, TransformParams{.offset_value = 1.0f}));
+
+    ASSERT_EQ(pipeline.step_count(), 3u);
+    EXPECT_FALSE(pipeline.step(1).available());
+    EXPECT_EQ(pipeline.step(1).source(), "Plugin A");
+    std::vector<float> x_out;
+    std::vector<float> y_out;
+    pipeline.apply(std::array<float, 2>{0.0f, 1.0f},
+                   std::array<float, 2>{2.0f, 3.0f},
+                   x_out,
+                   y_out);
+    EXPECT_EQ(y_out, (std::vector<float>{5.0f, 7.0f}));
 }
 
 TEST(TransformRegistryTest, GetNonexistent)

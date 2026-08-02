@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "ui/animation/keyframe_interpolator.hpp"
 #include "ui/animation/timeline_editor.hpp"
 
 using namespace spectra;
@@ -402,7 +403,92 @@ TEST(TimelineEditorTracks, GetTrackConst)
     EXPECT_EQ(cte.get_track(999), nullptr);
 }
 
+TEST(TimelineEditorSerialization, RestoresTracksKeyframesNamesAndViewState)
+{
+    TimelineEditor source;
+    source.set_duration(12.0f);
+    source.set_fps(24.0f);
+    source.set_playhead(3.5f);
+    source.set_loop_mode(LoopMode::PingPong);
+    source.set_snap_mode(SnapMode::Beat);
+    source.set_snap_interval(0.25f);
+    source.set_view_range(2.0f, 8.0f);
+    source.set_zoom(180.0f);
+    const auto first  = source.add_track("Position \"X\"");
+    const auto second = source.add_track("Opacity");
+    ASSERT_TRUE(source.set_track_property_path(second, "axes/0/series/1/opacity"));
+    source.add_keyframe(first, 4.0f);
+    source.add_keyframe(first, 1.0f);
+    source.add_keyframe(second, 2.5f);
+    source.set_track_visible(second, false);
+    source.set_track_locked(second, true);
+
+    TimelineEditor restored;
+    ASSERT_TRUE(restored.deserialize(source.serialize()));
+    EXPECT_FLOAT_EQ(restored.duration(), 12.0f);
+    EXPECT_FLOAT_EQ(restored.fps(), 24.0f);
+    EXPECT_FLOAT_EQ(restored.playhead(), 3.5f);
+    EXPECT_EQ(restored.loop_mode(), LoopMode::PingPong);
+    EXPECT_EQ(restored.snap_mode(), SnapMode::Beat);
+    EXPECT_FLOAT_EQ(restored.snap_interval(), 0.25f);
+    EXPECT_FLOAT_EQ(restored.view_start(), 2.0f);
+    EXPECT_FLOAT_EQ(restored.view_end(), 8.0f);
+    EXPECT_FLOAT_EQ(restored.zoom(), 180.0f);
+    ASSERT_EQ(restored.track_count(), 2u);
+    ASSERT_NE(restored.get_track(first), nullptr);
+    EXPECT_EQ(restored.get_track(first)->name, "Position \"X\"");
+    ASSERT_EQ(restored.get_track(first)->keyframes.size(), 2u);
+    EXPECT_FLOAT_EQ(restored.get_track(first)->keyframes[0].time, 1.0f);
+    EXPECT_FLOAT_EQ(restored.get_track(first)->keyframes[1].time, 4.0f);
+    ASSERT_NE(restored.get_track(second), nullptr);
+    EXPECT_FALSE(restored.get_track(second)->visible);
+    EXPECT_TRUE(restored.get_track(second)->locked);
+    EXPECT_EQ(restored.get_track(second)->property_path, "axes/0/series/1/opacity");
+    EXPECT_EQ(restored.total_keyframe_count(), 3u);
+}
+
 // ─── Keyframes ───────────────────────────────────────────────────────────────
+
+TEST(TimelineEditorSerialization, RestoresTypedKeyframeTangents)
+{
+    TimelineEditor       source;
+    KeyframeInterpolator interpolator;
+    source.set_interpolator(&interpolator);
+    const auto track = source.add_animated_track("Opacity", 0.0f);
+    source.add_animated_keyframe(track, 1.5f, 0.25f, static_cast<int>(InterpMode::CubicBezier));
+    ASSERT_TRUE(source.set_animated_keyframe_tangents(track,
+                                                      1.5f,
+                                                      static_cast<int>(TangentMode::Aligned),
+                                                      -0.2f,
+                                                      -1.0f,
+                                                      0.3f,
+                                                      2.0f));
+
+    TimelineEditor       restored;
+    KeyframeInterpolator restored_interpolator;
+    restored.set_interpolator(&restored_interpolator);
+    ASSERT_TRUE(restored.deserialize(source.serialize()));
+    const auto* keyframe = restored_interpolator.channel(track)->find_keyframe(1.5f);
+    ASSERT_NE(keyframe, nullptr);
+    EXPECT_EQ(keyframe->tangent_mode, TangentMode::Aligned);
+    EXPECT_FLOAT_EQ(keyframe->in_tangent.dt, -0.2f);
+    EXPECT_FLOAT_EQ(keyframe->in_tangent.dv, -1.0f);
+    EXPECT_FLOAT_EQ(keyframe->out_tangent.dt, 0.3f);
+    EXPECT_FLOAT_EQ(keyframe->out_tangent.dv, 2.0f);
+
+    ASSERT_TRUE(restored.set_animated_keyframe_tangents(track,
+                                                        1.5f,
+                                                        static_cast<int>(TangentMode::Flat),
+                                                        -9.0f,
+                                                        -9.0f,
+                                                        9.0f,
+                                                        9.0f));
+    keyframe = restored_interpolator.channel(track)->find_keyframe(1.5f);
+    ASSERT_NE(keyframe, nullptr);
+    EXPECT_EQ(keyframe->tangent_mode, TangentMode::Flat);
+    EXPECT_FLOAT_EQ(keyframe->in_tangent.dv, 0.0f);
+    EXPECT_FLOAT_EQ(keyframe->out_tangent.dv, 0.0f);
+}
 
 TEST(TimelineEditorKeyframes, AddAndCount)
 {

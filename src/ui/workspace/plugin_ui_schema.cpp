@@ -81,6 +81,16 @@ std::vector<PluginUISchema> PluginUIRegistry::schemas() const
     return result;
 }
 
+std::vector<RegisteredPluginUISchema> PluginUIRegistry::registered_schemas() const
+{
+    std::lock_guard                       lock(mutex_);
+    std::vector<RegisteredPluginUISchema> result;
+    result.reserve(entries_.size());
+    for (const auto& entry : entries_)
+        result.push_back({entry.id, entry.schema});
+    return result;
+}
+
 const PluginUISchema* PluginUIRegistry::find_schema(const std::string& schema_id) const
 {
     std::lock_guard lock(mutex_);

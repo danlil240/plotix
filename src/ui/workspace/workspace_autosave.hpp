@@ -83,6 +83,10 @@ class WorkspaceAutosave
     /// Check if an autosave file exists at the configured path.
     [[nodiscard]] bool has_autosave() const;
 
+    /// Remove the autosave at this instance's configured path. Returns true
+    /// when no recovery file remains (including when none existed).
+    bool clear_autosave();
+
     /// Check if the autosave is newer than a reference file (for recovery detection).
     /// Returns false if autosave doesn't exist.
     [[nodiscard]] bool autosave_is_newer_than(const std::string& reference_path) const;

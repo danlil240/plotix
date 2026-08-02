@@ -151,6 +151,24 @@ void RegionSelect::finish(const Axes* axes)
     }
 }
 
+void RegionSelect::restore(float x_min, float x_max, float y_min, float y_max, const Axes* axes)
+{
+    dragging_      = false;
+    has_selection_ = x_min != x_max || y_min != y_max;
+    data_x0_       = x_min;
+    data_x1_       = x_max;
+    data_y0_       = y_min;
+    data_y1_       = y_max;
+    selected_points_.clear();
+    stats_   = {};
+    opacity_ = has_selection_ ? 1.0f : 0.0f;
+    if (has_selection_ && axes)
+    {
+        collect_points(axes);
+        compute_statistics();
+    }
+}
+
 void RegionSelect::dismiss()
 {
     dragging_      = false;
@@ -437,9 +455,9 @@ void RegionSelect::draw_mini_toolbar(float rx0,
     if (ImGui::Begin("##region_stats", nullptr, flags))
     {
         ImU32 text_primary   = ImGui::ColorConvertFloat4ToU32(ImVec4(colors.text_primary.r,
-                                                                     colors.text_primary.g,
-                                                                     colors.text_primary.b,
-                                                                     colors.text_primary.a));
+                                                                   colors.text_primary.g,
+                                                                   colors.text_primary.b,
+                                                                   colors.text_primary.a));
         ImU32 text_secondary = ImGui::ColorConvertFloat4ToU32(ImVec4(colors.text_secondary.r,
                                                                      colors.text_secondary.g,
                                                                      colors.text_secondary.b,

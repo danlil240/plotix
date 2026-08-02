@@ -2,10 +2,12 @@
 
 #include "command_palette_dialog.hpp"
 
+#include "../components/spectra_design_tokens.hpp"
 #include "ui/commands/command_registry.hpp"
 
 #include <spectra/logger.hpp>
 
+#include <QBrush>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
@@ -18,7 +20,8 @@ namespace spectra::adapters::qt
 {
 
 QtCommandPaletteDialog::QtCommandPaletteDialog(CommandRegistry& registry, QWidget* parent)
-    : QDialog(parent), registry_(registry)
+    : QDialog(parent), registry_(registry), search_edit_(new QLineEdit(this)),
+      results_list_(new QListWidget(this))
 {
     setWindowTitle("Command Palette");
     setObjectName("command_palette_dialog");
@@ -33,14 +36,12 @@ QtCommandPaletteDialog::QtCommandPaletteDialog(CommandRegistry& registry, QWidge
     layout->setSpacing(6);
 
     // Search input
-    search_edit_ = new QLineEdit(this);
     search_edit_->setObjectName("palette_search");
     search_edit_->setPlaceholderText("Type a command...");
     search_edit_->setClearButtonEnabled(true);
     layout->addWidget(search_edit_);
 
     // Results list
-    results_list_ = new QListWidget(this);
     results_list_->setObjectName("palette_results");
     results_list_->setMinimumHeight(280);
     results_list_->setMaximumHeight(420);
@@ -167,6 +168,8 @@ void QtCommandPaletteDialog::update_results(const std::string& query)
         results = registry_.search(query, 50);
     }
 
+    const auto& colors = spectra_colors();
+
     std::string current_category;
     for (const auto& result : results)
     {
@@ -184,7 +187,8 @@ void QtCommandPaletteDialog::update_results(const std::string& query)
             f.setBold(true);
             f.setPointSize(f.pointSize() - 1);
             sep->setFont(f);
-            sep->setBackground(QColor(240, 240, 240));
+            sep->setBackground(QBrush(colors.input_surface));
+            sep->setForeground(QBrush(colors.text_secondary));
         }
 
         // Command item
@@ -197,9 +201,7 @@ void QtCommandPaletteDialog::update_results(const std::string& query)
         if (!result.command->enabled)
         {
             item->setFlags(item->flags() & ~Qt::ItemIsEnabled);
-            QBrush br = item->foreground();
-            br.setColor(QColor(160, 160, 160));
-            item->setForeground(br);
+            item->setForeground(QBrush(colors.text_muted));
         }
 
         result_command_ids_.push_back(result.command->id);

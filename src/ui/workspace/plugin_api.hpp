@@ -619,6 +619,7 @@ struct PluginEntry
     void*             handle             = nullptr;   // dlopen/LoadLibrary handle
     SpectraPluginShutdownFn  shutdown_fn = nullptr;
     std::vector<std::string> registered_commands;   // Commands registered by this plugin
+    std::vector<std::string> registered_transforms;   // Transforms registered by this plugin
     PluginManifest manifest;   // Parsed plugin.json manifest (may be empty if no manifest)
 };
 

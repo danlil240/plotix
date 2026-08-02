@@ -21,15 +21,20 @@
 #include <spectra/fwd.hpp>
 
 #include <memory>
+#include <string>
+#include <unordered_map>
 #include <vector>
 
 class QSplitter;
 class QTabWidget;
+class QString;
 
 namespace spectra
 {
 class SplitViewManager;
 class FigureRegistry;
+class AxisLinkManager;
+class InputHandler;
 enum class ToolMode;
 }   // namespace spectra
 
@@ -68,6 +73,7 @@ class QtSplitViewContainer : public QWidget
 
     // Get the canvas widget for a figure, or nullptr.
     FigureCanvasWidget* canvas_for(FigureId id) const;
+    InputHandler*       input_handler_for(FigureId id) const;
 
     // Number of open figure tabs across all panes.
     int figure_tab_count() const;
@@ -78,9 +84,15 @@ class QtSplitViewContainer : public QWidget
     // Activate an already-open figure and focus its pane.
     bool activate_figure(FigureId id);
 
+    // Keep the native per-pane tab text synchronized with the figure model.
+    bool    set_figure_title(FigureId id, const QString& title);
+    QString figure_title(FigureId id) const;
+
     // Select the interaction tool for the active document.
     void     set_active_tool(ToolMode tool);
     ToolMode active_tool() const;
+    void     set_axis_link_manager(AxisLinkManager* manager);
+    void     set_detached_host(bool detached) { detached_host_ = detached; }
 
     // ── Welcome page ───────────────────────────────────────────────────────
 
@@ -108,6 +120,13 @@ class QtSplitViewContainer : public QWidget
 
     // Number of panes.
     size_t pane_count() const;
+    bool   move_figure_to_pane(FigureId id, size_t target_pane_index);
+    bool   set_next_figure_target_pane(size_t target_pane_index);
+    void   clear_next_figure_target_pane() { next_figure_target_pane_ = nullptr; }
+
+    std::string serialize_split_layout() const;
+    bool        restore_split_layout(const std::string&                            layout,
+                                     const std::unordered_map<FigureId, FigureId>& id_map);
 
     // ── Accessors ──────────────────────────────────────────────────────────
 
@@ -117,7 +136,11 @@ class QtSplitViewContainer : public QWidget
     void figure_closed(FigureId id);
     void figure_activated(FigureId id);
     void figure_detach_requested(FigureId id);
+    void figure_redock_requested(FigureId id);
     void canvas_created(FigureId id, FigureCanvasWidget* canvas);
+    void split_layout_changed();
+    void external_figure_drop_requested(FigureId id, size_t target_pane_index);
+    void welcome_page_visible(bool visible);
 
    private slots:
     void on_tab_changed(int index);
@@ -144,6 +167,9 @@ class QtSplitViewContainer : public QWidget
     QWidget*   welcome_page_ = nullptr;
 
     std::vector<PaneWidget*> panes_;
+    bool                     detached_host_           = false;
+    AxisLinkManager*         axis_link_manager_       = nullptr;
+    PaneWidget*              next_figure_target_pane_ = nullptr;
 };
 
 }   // namespace spectra::adapters::qt

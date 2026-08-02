@@ -176,6 +176,11 @@ class InputHandler
     double measure_start_data_y() const { return measure_start_data_y_; }
     double measure_end_data_x() const { return measure_end_data_x_; }
     double measure_end_data_y() const { return measure_end_data_y_; }
+    void   restore_measure_result(Axes*  axes,
+                                  double start_x,
+                                  double start_y,
+                                  double end_x,
+                                  double end_y);
 
     // True if any interaction animation is running (zoom, pan inertia, auto-fit)
     bool has_active_animations() const;

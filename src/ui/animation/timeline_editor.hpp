@@ -57,6 +57,11 @@ struct TimelineTrack
     bool        locked   = false;
     bool        expanded = true;
 
+    // Stable, frontend-independent identity for the model property driven by
+    // this track. Runtime callbacks are rebuilt from this path after undo or
+    // workspace restore; they are deliberately not serialized as pointers.
+    std::string property_path;
+
     std::vector<KeyframeMarker> keyframes;
 };
 
@@ -168,6 +173,7 @@ class TimelineEditor
 
     void set_track_visible(uint32_t track_id, bool visible);
     void set_track_locked(uint32_t track_id, bool locked);
+    bool set_track_property_path(uint32_t track_id, const std::string& property_path);
 
     // ─── Keyframes ───────────────────────────────────────────────────────
 
@@ -248,6 +254,20 @@ class TimelineEditor
     // Add a keyframe to both the track (visual marker) and the interpolator channel.
     // interp_mode: 0=Step, 1=Linear, 2=CubicBezier, 3=Spring, 4=EaseIn, 5=EaseOut, 6=EaseInOut
     void add_animated_keyframe(uint32_t track_id, float time, float value, int interp_mode = 1);
+
+    // Edit the value and interpolation of an existing animated keyframe.
+    bool set_animated_keyframe(uint32_t track_id, float time, float value, int interp_mode);
+    bool set_animated_keyframe_tangents(uint32_t track_id,
+                                        float    time,
+                                        int      tangent_mode,
+                                        float    in_dt,
+                                        float    in_dv,
+                                        float    out_dt,
+                                        float    out_dv);
+
+    // Rebuild visual markers from the authoritative typed channels after a
+    // graphical curve edit. Track/channel IDs remain the stable join key.
+    void synchronize_markers_from_interpolator();
 
     // Serialize timeline state + interpolator to a JSON string.
     std::string serialize() const;

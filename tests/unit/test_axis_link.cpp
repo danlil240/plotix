@@ -2,6 +2,7 @@
 #include <atomic>
 #include <gtest/gtest.h>
 #include <spectra/axes.hpp>
+#include <spectra/axes3d.hpp>
 #include <spectra/figure.hpp>
 #include <thread>
 
@@ -694,6 +695,47 @@ TEST(AxisLinkSerialization, DeserializePreservesAxisType)
     auto* g = mgr2.group(groups[0]);
     ASSERT_NE(g, nullptr);
     EXPECT_EQ(g->axis, LinkAxis::Both);
+}
+
+TEST(AxisLinkSerialization, RoundTrips3DGroupsAndClear)
+{
+    Figure figure;
+    auto&  first  = figure.subplot3d(1, 2, 1);
+    auto&  second = figure.subplot3d(1, 2, 2);
+    first.zlim(-2.0, 2.0);
+    second.zlim(-5.0, 5.0);
+
+    AxisLinkManager manager;
+    ASSERT_GT(manager.link_3d(&first, &second, LinkAxis::Z), 0u);
+    const std::vector<Axes3D*> axes{&first, &second};
+    const std::string          json = manager.serialize(
+        [](const Axes*) { return -1; },
+        [&axes](const Axes3D* candidate)
+        {
+            const auto found = std::find(axes.begin(), axes.end(), candidate);
+            return found == axes.end() ? -1 : static_cast<int>(found - axes.begin());
+        });
+    EXPECT_NE(json.find("groups3d"), std::string::npos);
+
+    AxisLinkManager restored;
+    restored.deserialize(
+        json,
+        [](int) -> Axes* { return nullptr; },
+        [&axes](int index) -> Axes3D*
+        {
+            return index >= 0 && static_cast<size_t>(index) < axes.size()
+                       ? axes[static_cast<size_t>(index)]
+                       : nullptr;
+        });
+    EXPECT_EQ(restored.group_count(), 0u);
+    EXPECT_EQ(restored.group_3d_count(), 1u);
+    first.zlim(10.0, 20.0);
+    restored.propagate_from_3d(&first);
+    EXPECT_DOUBLE_EQ(second.z_limits().min, 10.0);
+    EXPECT_DOUBLE_EQ(second.z_limits().max, 20.0);
+
+    restored.clear();
+    EXPECT_EQ(restored.group_3d_count(), 0u);
 }
 
 // ─── Thread safety ───────────────────────────────────────────────────────────

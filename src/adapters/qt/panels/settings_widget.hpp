@@ -8,6 +8,8 @@
 
 #include <QDockWidget>
 
+#include <string>
+
 namespace spectra
 {
 class CommandRegistry;
@@ -36,8 +38,8 @@ class QtSettingsWidget : public QDockWidget
 
    public:
     QtSettingsWidget(ui::settings::SettingsStore* store,
-                     ui::ThemeManager*           theme_mgr,
-                     QWidget*                    parent = nullptr);
+                     ui::ThemeManager*            theme_mgr,
+                     QWidget*                     parent = nullptr);
     ~QtSettingsWidget() override = default;
 
     QtSettingsWidget(const QtSettingsWidget&)            = delete;
@@ -46,6 +48,7 @@ class QtSettingsWidget : public QDockWidget
     void set_inspector_visible(bool visible);
     void set_nav_rail_visible(bool visible);
     void set_timeline_visible(bool visible);
+    void set_theme_name(const std::string& name);
 
    signals:
     void settings_changed();
@@ -61,14 +64,14 @@ class QtSettingsWidget : public QDockWidget
     void on_timeline_toggled(bool checked);
 
    private:
-    ui::settings::SettingsStore* store_      = nullptr;
-    ui::ThemeManager*            theme_mgr_  = nullptr;
+    ui::settings::SettingsStore* store_     = nullptr;
+    ui::ThemeManager*            theme_mgr_ = nullptr;
 
-    QComboBox*   theme_combo_      = nullptr;
-    QComboBox*   palette_combo_    = nullptr;
-    QCheckBox*   inspector_check_  = nullptr;
-    QCheckBox*   nav_rail_check_   = nullptr;
-    QCheckBox*   timeline_check_   = nullptr;
+    QComboBox* theme_combo_     = nullptr;
+    QComboBox* palette_combo_   = nullptr;
+    QCheckBox* inspector_check_ = nullptr;
+    QCheckBox* nav_rail_check_  = nullptr;
+    QCheckBox* timeline_check_  = nullptr;
 };
 
 }   // namespace spectra::adapters::qt

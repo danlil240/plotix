@@ -12,6 +12,8 @@
 #include <spectra/series3d.hpp>
 #include <sstream>
 
+#include "figure_serializer.hpp"
+
 namespace spectra
 {
 
@@ -48,6 +50,76 @@ static std::string escape_json(const std::string& s)
     return out;
 }
 
+static std::string encode_base64(std::string_view input)
+{
+    static constexpr char alphabet[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string output;
+    output.reserve(((input.size() + 2) / 3) * 4);
+
+    for (size_t i = 0; i < input.size(); i += 3)
+    {
+        const auto     a    = static_cast<unsigned char>(input[i]);
+        const auto     b    = i + 1 < input.size() ? static_cast<unsigned char>(input[i + 1]) : 0;
+        const auto     c    = i + 2 < input.size() ? static_cast<unsigned char>(input[i + 2]) : 0;
+        const uint32_t bits = (static_cast<uint32_t>(a) << 16) | (static_cast<uint32_t>(b) << 8)
+                              | static_cast<uint32_t>(c);
+        output.push_back(alphabet[(bits >> 18) & 0x3f]);
+        output.push_back(alphabet[(bits >> 12) & 0x3f]);
+        output.push_back(i + 1 < input.size() ? alphabet[(bits >> 6) & 0x3f] : '=');
+        output.push_back(i + 2 < input.size() ? alphabet[bits & 0x3f] : '=');
+    }
+    return output;
+}
+
+static bool decode_base64(std::string_view input, std::string& output)
+{
+    if (input.size() % 4 != 0)
+        return false;
+
+    auto value_of = [](char c) -> int
+    {
+        if (c >= 'A' && c <= 'Z')
+            return c - 'A';
+        if (c >= 'a' && c <= 'z')
+            return c - 'a' + 26;
+        if (c >= '0' && c <= '9')
+            return c - '0' + 52;
+        if (c == '+')
+            return 62;
+        if (c == '/')
+            return 63;
+        return -1;
+    };
+
+    output.clear();
+    output.reserve((input.size() / 4) * 3);
+    for (size_t i = 0; i < input.size(); i += 4)
+    {
+        const bool final_group = i + 4 == input.size();
+        const bool pad2        = input[i + 2] == '=';
+        const bool pad3        = input[i + 3] == '=';
+        if ((!final_group && (pad2 || pad3)) || (pad2 && !pad3))
+            return false;
+
+        const int a = value_of(input[i]);
+        const int b = value_of(input[i + 1]);
+        const int c = pad2 ? 0 : value_of(input[i + 2]);
+        const int d = pad3 ? 0 : value_of(input[i + 3]);
+        if (a < 0 || b < 0 || c < 0 || d < 0)
+            return false;
+
+        const uint32_t bits = (static_cast<uint32_t>(a) << 18) | (static_cast<uint32_t>(b) << 12)
+                              | (static_cast<uint32_t>(c) << 6) | static_cast<uint32_t>(d);
+        output.push_back(static_cast<char>((bits >> 16) & 0xff));
+        if (!pad2)
+            output.push_back(static_cast<char>((bits >> 8) & 0xff));
+        if (!pad3)
+            output.push_back(static_cast<char>(bits & 0xff));
+    }
+    return true;
+}
+
 // static void write_indent(std::ostringstream& os, int depth) {
 //     for (int i = 0; i < depth; ++i) os << "  ";
 // }
@@ -75,6 +147,7 @@ std::string Workspace::serialize_json(const WorkspaceData& data)
     {
         const auto& fig = data.figures[fi];
         os << "    {\n";
+        os << "      \"figure_id\": " << fig.figure_id << ",\n";
         os << R"(      "title": ")" << escape_json(fig.title) << "\",\n";
         os << "      \"width\": " << fig.width << ",\n";
         os << "      \"height\": " << fig.height << ",\n";
@@ -168,7 +241,9 @@ std::string Workspace::serialize_json(const WorkspaceData& data)
                 os << ",";
             os << "\n";
         }
-        os << "      ]\n";
+        os << "      ],\n";
+        os << R"(      "snapshot_base64": ")" << escape_json(fig.snapshot_base64) << "\",\n";
+        os << R"(      "timeline_json": ")" << escape_json(fig.timeline_json) << "\"\n";
 
         os << "    }";
         if (fi + 1 < data.figures.size())
@@ -239,12 +314,25 @@ std::string Workspace::serialize_json(const WorkspaceData& data)
         os << "    {\n";
         os << "      \"figure_index\": " << t.figure_index << ",\n";
         os << "      \"axes_index\": " << t.axes_index << ",\n";
+        os << "      \"series_index\": " << t.series_index << ",\n";
+        os << "      \"all_visible\": " << (t.all_visible ? "true" : "false") << ",\n";
+        os << "      \"axes_only\": " << (t.axes_only ? "true" : "false") << ",\n";
+        os << R"(      "target": ")" << escape_json(t.target) << "\",\n";
+        os << R"(      "name": ")" << escape_json(t.name) << "\",\n";
         os << "      \"steps\": [\n";
         for (size_t si = 0; si < t.steps.size(); ++si)
         {
             const auto& s = t.steps[si];
             os << "        {\"type\": " << s.type << ", \"param\": " << s.param
-               << ", \"enabled\": " << (s.enabled ? "true" : "false") << "}";
+               << ", \"enabled\": " << (s.enabled ? "true" : "false") << R"(, "name": ")"
+               << escape_json(s.name) << R"(", "source": ")" << escape_json(s.source)
+               << "\", \"params_version\": " << s.params_version
+               << ", \"scale_factor\": " << s.scale_factor
+               << ", \"offset_value\": " << s.offset_value << ", \"clamp_min\": " << s.clamp_min
+               << ", \"clamp_max\": " << s.clamp_max << ", \"log_base\": " << s.log_base
+               << ", \"skip_nan\": " << (s.skip_nan ? "true" : "false")
+               << ", \"fft_db\": " << (s.fft_db ? "true" : "false")
+               << ", \"fft_sample_rate\": " << s.fft_sample_rate << "}";
             if (si + 1 < t.steps.size())
                 os << ",";
             os << "\n";
@@ -294,10 +382,24 @@ std::string Workspace::serialize_json(const WorkspaceData& data)
     // v5: Desktop layout state
     os << "  \"desktop_layout\": {\n";
     os << R"(    "provider": ")" << escape_json(data.desktop_layout.provider) << "\",\n";
-    os << R"(    "provider_version": ")" << escape_json(data.desktop_layout.provider_version) << "\",\n";
-    os << R"(    "main_window_state_base64": ")" << escape_json(data.desktop_layout.main_window_state_base64) << "\",\n";
-    os << R"(    "main_window_geometry_base64": ")" << escape_json(data.desktop_layout.main_window_geometry_base64) << "\",\n";
-    os << R"(    "provider_layout": ")" << escape_json(data.desktop_layout.provider_layout) << "\",\n";
+    os << R"(    "provider_version": ")" << escape_json(data.desktop_layout.provider_version)
+       << "\",\n";
+    os << R"(    "main_window_state_base64": ")"
+       << escape_json(data.desktop_layout.main_window_state_base64) << "\",\n";
+    os << R"(    "main_window_geometry_base64": ")"
+       << escape_json(data.desktop_layout.main_window_geometry_base64) << "\",\n";
+    os << R"(    "main_window_split_layout": ")"
+       << escape_json(data.desktop_layout.main_window_split_layout) << "\",\n";
+    os << "    \"main_window_figure_ids\": [";
+    for (size_t i = 0; i < data.desktop_layout.main_window_figure_ids.size(); ++i)
+    {
+        if (i > 0)
+            os << ", ";
+        os << data.desktop_layout.main_window_figure_ids[i];
+    }
+    os << "],\n";
+    os << R"(    "provider_layout": ")" << escape_json(data.desktop_layout.provider_layout)
+       << "\",\n";
     os << "    \"windows\": [\n";
     for (size_t wi = 0; wi < data.desktop_layout.windows.size(); ++wi)
     {
@@ -305,7 +407,16 @@ std::string Workspace::serialize_json(const WorkspaceData& data)
         os << "      {\n";
         os << R"(        "state_base64": ")" << escape_json(w.state_base64) << "\",\n";
         os << R"(        "geometry_base64": ")" << escape_json(w.geometry_base64) << "\",\n";
-        os << R"(        "title": ")" << escape_json(w.title) << "\"\n";
+        os << R"(        "title": ")" << escape_json(w.title) << "\",\n";
+        os << R"(        "split_layout": ")" << escape_json(w.split_layout) << "\",\n";
+        os << "        \"figure_ids\": [";
+        for (size_t i = 0; i < w.figure_ids.size(); ++i)
+        {
+            if (i > 0)
+                os << ", ";
+            os << w.figure_ids[i];
+        }
+        os << "]\n";
         os << "      }";
         if (wi + 1 < data.desktop_layout.windows.size())
             os << ",";
@@ -499,6 +610,35 @@ static std::vector<std::string> parse_json_array(const std::string& json, const 
     return objects;
 }
 
+static std::vector<FigureId> parse_figure_id_array(const std::string& json, const std::string& key)
+{
+    std::vector<FigureId> result;
+    const auto            key_pos = json.find("\"" + key + "\"");
+    if (key_pos == std::string::npos)
+        return result;
+    const auto begin = json.find('[', key_pos);
+    const auto end   = begin == std::string::npos ? std::string::npos : json.find(']', begin + 1);
+    if (begin == std::string::npos || end == std::string::npos)
+        return result;
+
+    std::istringstream values(json.substr(begin + 1, end - begin - 1));
+    std::string        token;
+    try
+    {
+        while (std::getline(values, token, ','))
+        {
+            token = trim(token);
+            if (!token.empty())
+                result.push_back(static_cast<FigureId>(std::stoull(token)));
+        }
+    }
+    catch (...)
+    {
+        result.clear();
+    }
+    return result;
+}
+
 bool Workspace::deserialize_json(const std::string& json, WorkspaceData& data)
 {
     data.version = static_cast<uint32_t>(read_number_value(json, "version", 1));
@@ -522,6 +662,7 @@ bool Workspace::deserialize_json(const std::string& json, WorkspaceData& data)
     for (const auto& fig_json : fig_objects)
     {
         WorkspaceData::FigureState fig;
+        fig.figure_id = static_cast<FigureId>(read_number_value(fig_json, "figure_id", 0));
         fig.title     = read_string_value(fig_json, "title");
         fig.width     = static_cast<uint32_t>(read_number_value(fig_json, "width", 1280));
         fig.height    = static_cast<uint32_t>(read_number_value(fig_json, "height", 720));
@@ -642,6 +783,9 @@ bool Workspace::deserialize_json(const std::string& json, WorkspaceData& data)
             }
         }
 
+        fig.snapshot_base64 = read_string_value(fig_json, "snapshot_base64");
+        fig.timeline_json   = read_string_value(fig_json, "timeline_json");
+
         data.figures.push_back(std::move(fig));
     }
 
@@ -727,6 +871,11 @@ bool Workspace::deserialize_json(const std::string& json, WorkspaceData& data)
             WorkspaceData::TransformState ts;
             ts.figure_index   = static_cast<size_t>(read_number_value(t_json, "figure_index", 0));
             ts.axes_index     = static_cast<size_t>(read_number_value(t_json, "axes_index", 0));
+            ts.series_index   = static_cast<size_t>(read_number_value(t_json, "series_index", 0));
+            ts.all_visible    = read_bool_value(t_json, "all_visible", false);
+            ts.axes_only      = read_bool_value(t_json, "axes_only", false);
+            ts.target         = read_string_value(t_json, "target");
+            ts.name           = read_string_value(t_json, "name");
             auto step_objects = parse_json_array(t_json, "steps");
             for (const auto& s_json : step_objects)
             {
@@ -734,6 +883,21 @@ bool Workspace::deserialize_json(const std::string& json, WorkspaceData& data)
                 step.type    = static_cast<int>(read_number_value(s_json, "type", 0));
                 step.param   = static_cast<float>(read_number_value(s_json, "param", 0));
                 step.enabled = read_bool_value(s_json, "enabled", true);
+                step.name    = read_string_value(s_json, "name");
+                step.source  = read_string_value(s_json, "source");
+                step.params_version =
+                    static_cast<int>(read_number_value(s_json, "params_version", 0));
+                step.scale_factor =
+                    static_cast<float>(read_number_value(s_json, "scale_factor", 1.0));
+                step.offset_value =
+                    static_cast<float>(read_number_value(s_json, "offset_value", 0.0));
+                step.clamp_min = static_cast<float>(read_number_value(s_json, "clamp_min", 0.0));
+                step.clamp_max = static_cast<float>(read_number_value(s_json, "clamp_max", 1.0));
+                step.log_base  = static_cast<float>(read_number_value(s_json, "log_base", 10.0));
+                step.skip_nan  = read_bool_value(s_json, "skip_nan", true);
+                step.fft_db    = read_bool_value(s_json, "fft_db", false);
+                step.fft_sample_rate =
+                    static_cast<float>(read_number_value(s_json, "fft_sample_rate", 0.0));
                 ts.steps.push_back(step);
             }
             data.transforms.push_back(std::move(ts));
@@ -827,16 +991,18 @@ bool Workspace::deserialize_json(const std::string& json, WorkspaceData& data)
                 }
                 std::string dl_json = json.substr(brace, end - brace + 1);
 
-                data.desktop_layout.provider =
-                    read_string_value(dl_json, "provider");
+                data.desktop_layout.provider = read_string_value(dl_json, "provider");
                 data.desktop_layout.provider_version =
                     read_string_value(dl_json, "provider_version");
                 data.desktop_layout.main_window_state_base64 =
                     read_string_value(dl_json, "main_window_state_base64");
                 data.desktop_layout.main_window_geometry_base64 =
                     read_string_value(dl_json, "main_window_geometry_base64");
-                data.desktop_layout.provider_layout =
-                    read_string_value(dl_json, "provider_layout");
+                data.desktop_layout.main_window_split_layout =
+                    read_string_value(dl_json, "main_window_split_layout");
+                data.desktop_layout.main_window_figure_ids =
+                    parse_figure_id_array(dl_json, "main_window_figure_ids");
+                data.desktop_layout.provider_layout = read_string_value(dl_json, "provider_layout");
 
                 // Parse windows array
                 auto win_objects = parse_json_array(dl_json, "windows");
@@ -846,6 +1012,8 @@ bool Workspace::deserialize_json(const std::string& json, WorkspaceData& data)
                     ws.state_base64    = read_string_value(w_json, "state_base64");
                     ws.geometry_base64 = read_string_value(w_json, "geometry_base64");
                     ws.title           = read_string_value(w_json, "title");
+                    ws.split_layout    = read_string_value(w_json, "split_layout");
+                    ws.figure_ids      = parse_figure_id_array(w_json, "figure_ids");
                     data.desktop_layout.windows.push_back(std::move(ws));
                 }
             }
@@ -887,12 +1055,13 @@ bool Workspace::load(const std::string& path, WorkspaceData& data)
 
 // ─── Capture / Apply ─────────────────────────────────────────────────────────
 
-WorkspaceData Workspace::capture(const std::vector<Figure*>& figures,
-                                 size_t                      active_index,
-                                 const std::string&          theme_name,
-                                 bool                        inspector_visible,
-                                 float                       inspector_width,
-                                 bool                        nav_rail_expanded)
+WorkspaceData Workspace::capture(const std::vector<Figure*>&         figures,
+                                 size_t                              active_index,
+                                 const std::string&                  theme_name,
+                                 bool                                inspector_visible,
+                                 float                               inspector_width,
+                                 bool                                nav_rail_expanded,
+                                 const std::vector<OverlaySnapshot>* overlays)
 {
     WorkspaceData data;
     data.theme_name               = theme_name;
@@ -901,8 +1070,9 @@ WorkspaceData Workspace::capture(const std::vector<Figure*>& figures,
     data.panels.inspector_width   = inspector_width;
     data.panels.nav_rail_expanded = nav_rail_expanded;
 
-    for (const auto* fig : figures)
+    for (size_t figure_index = 0; figure_index < figures.size(); ++figure_index)
     {
+        const auto* fig = figures[figure_index];
         if (!fig)
             continue;
 
@@ -911,8 +1081,14 @@ WorkspaceData Workspace::capture(const std::vector<Figure*>& figures,
         fs.custom_tab_title = fig->tab_title();
         fs.width            = fig->width();
         fs.height           = fig->height();
-        fs.grid_rows = fig->grid_rows();
-        fs.grid_cols = fig->grid_cols();
+        fs.grid_rows        = fig->grid_rows();
+        fs.grid_cols        = fig->grid_cols();
+
+        std::string            snapshot;
+        const OverlaySnapshot* overlay =
+            overlays && figure_index < overlays->size() ? &(*overlays)[figure_index] : nullptr;
+        if (FigureSerializer::serialize(*fig, snapshot, overlay))
+            fs.snapshot_base64 = encode_base64(snapshot);
 
         // Capture axes: use all_axes() if populated (mixed/3D figures),
         // otherwise fall back to axes() (2D-only figures).
@@ -1167,6 +1343,40 @@ bool Workspace::apply(const WorkspaceData& data, std::vector<Figure*>& figures)
                 apply_series_vis(ax.get());
         }
     }
+    return true;
+}
+
+bool Workspace::restore_figures(const WorkspaceData&                  data,
+                                std::vector<std::unique_ptr<Figure>>& figures,
+                                std::vector<OverlaySnapshot>*         overlays)
+{
+    std::vector<std::unique_ptr<Figure>> restored;
+    std::vector<OverlaySnapshot>         restored_overlays;
+    restored.reserve(data.figures.size());
+    restored_overlays.reserve(data.figures.size());
+
+    for (const auto& state : data.figures)
+    {
+        if (state.snapshot_base64.empty())
+            return false;
+
+        std::string bytes;
+        if (!decode_base64(state.snapshot_base64, bytes))
+            return false;
+
+        auto            figure = std::make_unique<Figure>(FigureConfig{state.width, state.height});
+        OverlaySnapshot overlay;
+        if (!FigureSerializer::deserialize(bytes, *figure, &overlay))
+            return false;
+        figure->set_tab_title(state.custom_tab_title.empty() ? state.title
+                                                             : state.custom_tab_title);
+        restored.push_back(std::move(figure));
+        restored_overlays.push_back(std::move(overlay));
+    }
+
+    figures = std::move(restored);
+    if (overlays)
+        *overlays = std::move(restored_overlays);
     return true;
 }
 

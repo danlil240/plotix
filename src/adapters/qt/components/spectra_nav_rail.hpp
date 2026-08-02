@@ -40,6 +40,7 @@ class SpectraNavRail : public QWidget
     bool is_compact() const { return compact_; }
 
     void set_button_visible(int tool_index, bool visible);
+    void set_button_active(int tool_index, bool active);
 
     int width_hint() const;
 

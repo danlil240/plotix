@@ -8,14 +8,28 @@
 #include <gtest/gtest.h>
 
 #include <QApplication>
+#include <QCheckBox>
+#include <QGroupBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QSpinBox>
 
+#include "adapters/qt/panels/plugin_panel_widget.hpp"
+#include "adapters/qt/panels/plugins_widget.hpp"
+#include "math/data_transform.hpp"
 #include "ui/workspace/plugin_ui_schema.hpp"
 #include "ui/workspace/plugin_api.hpp"
 
+#include <filesystem>
 #include <memory>
 #include <string>
 
 namespace {
+
+#ifndef SPECTRA_MOCK_TRANSFORM_PLUGIN_PATH
+    #define SPECTRA_MOCK_TRANSFORM_PLUGIN_PATH ""
+#endif
 
 struct QtPluginUIEnv
 {
@@ -85,6 +99,160 @@ TEST(QtPluginUI, RegisterMultipleSchemas)
 
     auto all = registry.schemas();
     EXPECT_EQ(all.size(), 2u);
+}
+
+TEST(QtPluginUI, RegisteredSchemasExposeStableInteractionIds)
+{
+    spectra::PluginUIRegistry registry;
+    spectra::PluginUISchema   schema;
+    schema.plugin_name           = "stable_id";
+    schema.panel_title           = "Stable";
+    const std::string first_id   = registry.register_schema(schema);
+    auto              registered = registry.registered_schemas();
+    ASSERT_EQ(registered.size(), 1u);
+    EXPECT_EQ(registered[0].id, first_id);
+
+    schema.panel_title = "Replaced";
+    EXPECT_EQ(registry.register_schema(schema), first_id);
+    registered = registry.registered_schemas();
+    ASSERT_EQ(registered.size(), 1u);
+    EXPECT_EQ(registered[0].id, first_id);
+    EXPECT_EQ(registered[0].schema.panel_title, "Replaced");
+}
+
+TEST(QtPluginUI, QtPanelRendersNestedGroupsAndSendsExactCallbackPayloads)
+{
+    spectra::PluginUIRegistry registry;
+    spectra::PluginUISchema   schema;
+    schema.plugin_name = "nested_plugin";
+    schema.panel_title = "Nested Plugin";
+
+    spectra::PluginUIElement property;
+    property.type               = spectra::PluginUIElementType::Property;
+    property.property.id        = "gain";
+    property.property.label     = "Gain";
+    property.property.type      = spectra::PluginUIPropertyType::Integer;
+    property.property.value     = "1";
+    property.property.min_value = "0";
+    property.property.max_value = "10";
+    schema.elements.push_back(property);
+
+    spectra::PluginUIElement action;
+    action.type         = spectra::PluginUIElementType::Action;
+    action.action.id    = "apply";
+    action.action.label = "Apply";
+    schema.elements.push_back(action);
+
+    spectra::PluginUIElement inner;
+    inner.type            = spectra::PluginUIElementType::Group;
+    inner.group.title     = "Inner";
+    inner.group.collapsed = false;
+    inner.children        = {0, 1};
+    schema.elements.push_back(inner);
+
+    spectra::PluginUIElement outer;
+    outer.type            = spectra::PluginUIElementType::Group;
+    outer.group.title     = "Outer";
+    outer.group.collapsed = false;
+    outer.children        = {2};
+    schema.elements.push_back(outer);
+
+    std::string                property_schema_id;
+    std::string                property_id;
+    std::string                property_value;
+    std::string                action_schema_id;
+    std::string                action_id;
+    spectra::PluginUICallbacks callbacks;
+    callbacks.on_property_changed =
+        [&](const std::string& sid, const std::string& pid, const std::string& value)
+    {
+        property_schema_id = sid;
+        property_id        = pid;
+        property_value     = value;
+        return std::string("5");
+    };
+    callbacks.on_action_triggered = [&](const std::string& sid, const std::string& aid)
+    {
+        action_schema_id = sid;
+        action_id        = aid;
+    };
+    const std::string schema_id = registry.register_schema(schema, callbacks);
+
+    spectra::adapters::qt::QtPluginPanelWidget panel(&registry);
+    auto* gain  = panel.findChild<QSpinBox*>("plugin_ui_property_gain");
+    auto* apply = panel.findChild<QPushButton*>("plugin_ui_action_apply");
+    ASSERT_NE(gain, nullptr);
+    ASSERT_NE(apply, nullptr);
+    EXPECT_EQ(panel.findChildren<QSpinBox*>("plugin_ui_property_gain").size(), 1);
+    EXPECT_EQ(panel.findChildren<QPushButton*>("plugin_ui_action_apply").size(), 1);
+    EXPECT_NE(panel.findChild<QGroupBox*>("plugin_ui_group_2"), nullptr);
+    EXPECT_NE(panel.findChild<QGroupBox*>("plugin_ui_group_3"), nullptr);
+
+    gain->setValue(9);
+    EXPECT_EQ(property_schema_id, schema_id);
+    EXPECT_EQ(property_id, "gain");
+    EXPECT_EQ(property_value, "9");
+    EXPECT_EQ(gain->value(), 5);
+    apply->click();
+    EXPECT_EQ(action_schema_id, schema_id);
+    EXPECT_EQ(action_id, "apply");
+}
+
+TEST(QtPluginUI, PluginManagerPanelAddsDeduplicatesAndRemovesCustomDirectories)
+{
+    spectra::PluginManager                 manager;
+    spectra::PluginUIRegistry              registry;
+    spectra::adapters::qt::QtPluginsWidget panel(&manager, &registry, nullptr);
+
+    auto* input = panel.findChild<QLineEdit*>("plugin_scan_dir_input");
+    auto* add   = panel.findChild<QPushButton*>("plugin_add_scan_dir_button");
+    ASSERT_NE(input, nullptr);
+    ASSERT_NE(add, nullptr);
+    input->setText("/tmp/spectra-custom-plugins");
+    add->click();
+
+    auto labels = panel.findChildren<QLabel*>("plugin_scan_dir_0");
+    ASSERT_EQ(labels.size(), 1);
+    EXPECT_EQ(labels.front()->text(), "/tmp/spectra-custom-plugins");
+    input = panel.findChild<QLineEdit*>("plugin_scan_dir_input");
+    add   = panel.findChild<QPushButton*>("plugin_add_scan_dir_button");
+    ASSERT_NE(input, nullptr);
+    ASSERT_NE(add, nullptr);
+    input->setText("/tmp/spectra-custom-plugins");
+    add->click();
+    EXPECT_EQ(panel.findChildren<QLabel*>("plugin_scan_dir_0").size(), 1);
+    EXPECT_TRUE(panel.findChildren<QLabel*>("plugin_scan_dir_1").empty());
+
+    auto* remove = panel.findChild<QPushButton*>("plugin_remove_scan_dir_0");
+    ASSERT_NE(remove, nullptr);
+    remove->click();
+    EXPECT_TRUE(panel.findChildren<QLabel*>("plugin_scan_dir_0").empty());
+}
+
+TEST(QtPluginUI, PluginManagerPanelShowsPathCapabilitiesAndLifecycleDiagnostics)
+{
+    const std::string plugin_path = SPECTRA_MOCK_TRANSFORM_PLUGIN_PATH;
+    if (plugin_path.empty() || !std::filesystem::exists(plugin_path))
+        GTEST_SKIP() << "Mock transform plugin not found";
+
+    spectra::TransformRegistry transforms;
+    spectra::PluginManager     manager;
+    spectra::PluginUIRegistry  registry;
+    manager.set_transform_registry(&transforms);
+    ASSERT_TRUE(manager.load_plugin(plugin_path));
+    spectra::adapters::qt::QtPluginsWidget panel(&manager, &registry, nullptr);
+
+    auto* info = panel.findChild<QLabel*>("plugin_info_MockTransformPlugin");
+    ASSERT_NE(info, nullptr);
+    EXPECT_TRUE(info->text().contains(QString::fromStdString(plugin_path)));
+    EXPECT_TRUE(info->text().contains("API: v"));
+    EXPECT_TRUE(info->text().contains("Capabilities: (not declared)"));
+    EXPECT_TRUE(info->text().contains("Calls: 0  Faults: 0"));
+    EXPECT_TRUE(info->text().contains("Status: healthy"));
+    EXPECT_NE(panel.findChild<QCheckBox*>("plugin_enabled_MockTransformPlugin"), nullptr);
+    EXPECT_NE(panel.findChild<QPushButton*>("plugin_unload_MockTransformPlugin"), nullptr);
+
+    manager.unload_all();
 }
 
 TEST(QtPluginUI, ReplaceSchema)

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <format>
 #include <sstream>
+#include <string_view>
 
 #include "ui/animation/camera_animator.hpp"
 #include "ui/animation/keyframe_interpolator.hpp"
@@ -17,6 +18,135 @@
 
 namespace spectra
 {
+namespace
+{
+
+std::string escape_timeline_json(std::string_view value)
+{
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (const char c : value)
+    {
+        switch (c)
+        {
+            case '\\':
+                escaped += "\\\\";
+                break;
+            case '"':
+                escaped += "\\\"";
+                break;
+            case '\n':
+                escaped += "\\n";
+                break;
+            case '\r':
+                escaped += "\\r";
+                break;
+            case '\t':
+                escaped += "\\t";
+                break;
+            default:
+                escaped += c;
+                break;
+        }
+    }
+    return escaped;
+}
+
+std::string unescape_timeline_json(std::string_view value)
+{
+    std::string result;
+    result.reserve(value.size());
+    bool escaped = false;
+    for (const char c : value)
+    {
+        if (escaped)
+        {
+            switch (c)
+            {
+                case 'n':
+                    result += '\n';
+                    break;
+                case 'r':
+                    result += '\r';
+                    break;
+                case 't':
+                    result += '\t';
+                    break;
+                default:
+                    result += c;
+                    break;
+            }
+            escaped = false;
+        }
+        else if (c == '\\')
+        {
+            escaped = true;
+        }
+        else
+        {
+            result += c;
+        }
+    }
+    if (escaped)
+        result += '\\';
+    return result;
+}
+
+std::vector<std::string> timeline_object_array(const std::string& json, const std::string& key)
+{
+    std::vector<std::string> objects;
+    const std::string        search = "\"" + key + "\"";
+    size_t                   pos    = json.find(search);
+    if (pos == std::string::npos)
+        return objects;
+    pos = json.find('[', pos + search.size());
+    if (pos == std::string::npos)
+        return objects;
+
+    int    depth     = 0;
+    bool   in_string = false;
+    bool   escaped   = false;
+    size_t start     = std::string::npos;
+    for (size_t i = pos + 1; i < json.size(); ++i)
+    {
+        const char c = json[i];
+        if (in_string)
+        {
+            if (escaped)
+                escaped = false;
+            else if (c == '\\')
+                escaped = true;
+            else if (c == '"')
+                in_string = false;
+            continue;
+        }
+        if (c == '"')
+        {
+            in_string = true;
+            continue;
+        }
+        if (c == '{')
+        {
+            if (depth++ == 0)
+                start = i;
+        }
+        else if (c == '}' && depth > 0)
+        {
+            if (--depth == 0 && start != std::string::npos)
+            {
+                objects.push_back(json.substr(start, i - start + 1));
+                start = std::string::npos;
+            }
+        }
+        else if (c == ']' && depth == 0)
+        {
+            break;
+        }
+    }
+    return objects;
+}
+
+}   // namespace
 
 TimelineEditor::TimelineEditor() : view_end_(duration_) {}
 
@@ -369,6 +499,8 @@ void TimelineEditor::remove_track(uint32_t track_id)
 {
     std::lock_guard lock(mutex_);
     std::erase_if(tracks_, [track_id](const TimelineTrack& t) { return t.id == track_id; });
+    if (interpolator_)
+        interpolator_->remove_channel(track_id);
 }
 
 void TimelineEditor::rename_track(uint32_t track_id, const std::string& name)
@@ -379,6 +511,9 @@ void TimelineEditor::rename_track(uint32_t track_id, const std::string& name)
         if (t.id == track_id)
         {
             t.name = name;
+            if (interpolator_)
+                if (auto* channel = interpolator_->channel(track_id))
+                    channel->set_name(name);
             return;
         }
     }
@@ -444,6 +579,19 @@ void TimelineEditor::set_track_locked(uint32_t track_id, bool locked)
     }
 }
 
+bool TimelineEditor::set_track_property_path(uint32_t track_id, const std::string& property_path)
+{
+    std::lock_guard lock(mutex_);
+    for (auto& track : tracks_)
+    {
+        if (track.id != track_id)
+            continue;
+        track.property_path = property_path;
+        return true;
+    }
+    return false;
+}
+
 // ─── Keyframes ───────────────────────────────────────────────────────────────
 
 void TimelineEditor::add_keyframe(uint32_t track_id, float time)
@@ -500,6 +648,8 @@ void TimelineEditor::remove_keyframe(uint32_t track_id, float time)
             if (it != t.keyframes.end())
             {
                 t.keyframes.erase(it);
+                if (interpolator_)
+                    interpolator_->remove_keyframe(track_id, time);
                 if (on_keyframe_removed_)
                 {
                     on_keyframe_removed_(track_id, time);
@@ -527,6 +677,9 @@ void TimelineEditor::move_keyframe(uint32_t track_id, float old_time, float new_
             if (it != t.keyframes.end())
             {
                 it->time = std::clamp(new_time, 0.0f, duration_);
+                if (interpolator_)
+                    if (auto* channel = interpolator_->channel(track_id))
+                        channel->move_keyframe(old_time, it->time);
                 std::sort(t.keyframes.begin(),
                           t.keyframes.end(),
                           [](const KeyframeMarker& a, const KeyframeMarker& b)
@@ -886,11 +1039,7 @@ uint32_t TimelineEditor::add_animated_track(const std::string& name,
     // Add a matching interpolator channel with the same ID
     if (interpolator_)
     {
-        // We need to ensure the channel ID matches the track ID.
-        // The interpolator assigns IDs sequentially, so we add and track the mapping.
-        // For simplicity, we use add_channel which returns its own ID.
-        // The track_id and channel_id may differ — we store the mapping in the track name.
-        interpolator_->add_channel(name, default_value);
+        interpolator_->add_channel_with_id(id, name, default_value);
     }
 
     return id;
@@ -947,8 +1096,80 @@ void TimelineEditor::add_animated_keyframe(uint32_t track_id,
     // Add typed keyframe to the interpolator channel
     if (interpolator_)
     {
+        if (!interpolator_->channel(track_id))
+        {
+            const auto track =
+                std::find_if(tracks_.begin(),
+                             tracks_.end(),
+                             [track_id](const TimelineTrack& item) { return item.id == track_id; });
+            interpolator_->add_channel_with_id(track_id,
+                                               track == tracks_.end() ? "Track" : track->name,
+                                               value);
+        }
         TypedKeyframe tkf(time, value, static_cast<InterpMode>(interp_mode));
         interpolator_->add_keyframe(track_id, tkf);
+    }
+}
+
+bool TimelineEditor::set_animated_keyframe(uint32_t track_id,
+                                           float    time,
+                                           float    value,
+                                           int      interp_mode)
+{
+    std::lock_guard lock(mutex_);
+    if (!interpolator_ || interp_mode < static_cast<int>(InterpMode::Step)
+        || interp_mode > static_cast<int>(InterpMode::EaseInOut))
+        return false;
+    auto* channel = interpolator_->channel(track_id);
+    if (!channel || !channel->find_keyframe(time))
+        return false;
+    const bool value_changed = channel->set_keyframe_value(time, value);
+    const bool mode_changed =
+        channel->set_keyframe_interp(time, static_cast<InterpMode>(interp_mode));
+    return value_changed || mode_changed;
+}
+
+bool TimelineEditor::set_animated_keyframe_tangents(uint32_t track_id,
+                                                    float    time,
+                                                    int      tangent_mode,
+                                                    float    in_dt,
+                                                    float    in_dv,
+                                                    float    out_dt,
+                                                    float    out_dv)
+{
+    std::lock_guard lock(mutex_);
+    if (!interpolator_ || tangent_mode < static_cast<int>(TangentMode::Free)
+        || tangent_mode > static_cast<int>(TangentMode::Auto))
+        return false;
+    auto* channel = interpolator_->channel(track_id);
+    if (!channel || !channel->find_keyframe(time))
+        return false;
+    const auto mode            = static_cast<TangentMode>(tangent_mode);
+    bool       handles_changed = false;
+    if (mode == TangentMode::Free || mode == TangentMode::Aligned)
+    {
+        handles_changed = channel->set_keyframe_tangents(time,
+                                                         TangentHandle{in_dt, in_dv},
+                                                         TangentHandle{out_dt, out_dv});
+    }
+    const bool mode_changed = channel->set_keyframe_tangent_mode(time, mode);
+    return mode_changed || handles_changed;
+}
+
+void TimelineEditor::synchronize_markers_from_interpolator()
+{
+    std::lock_guard lock(mutex_);
+    if (!interpolator_)
+        return;
+    for (auto& track : tracks_)
+    {
+        const AnimationChannel* channel = interpolator_->channel(track.id);
+        if (!channel)
+            continue;
+        track.keyframes.clear();
+        track.keyframes.reserve(channel->keyframes().size());
+        for (const auto& keyframe : channel->keyframes())
+            track.keyframes.push_back({keyframe.time, track.id, keyframe.selected});
     }
 }
 
@@ -956,10 +1177,12 @@ std::string TimelineEditor::serialize() const
 {
     std::lock_guard    lock(mutex_);
     std::ostringstream ss;
-    ss << "{\"duration\":" << duration_ << ",\"fps\":" << fps_
+    ss << "{\"duration\":" << duration_ << ",\"fps\":" << fps_ << ",\"playhead\":" << playhead_
+       << ",\"state\":" << static_cast<int>(state_)
        << ",\"loop_mode\":" << static_cast<int>(loop_mode_)
        << ",\"snap_mode\":" << static_cast<int>(snap_mode_)
-       << ",\"snap_interval\":" << snap_interval_;
+       << ",\"snap_interval\":" << snap_interval_ << ",\"view_start\":" << view_start_
+       << ",\"view_end\":" << view_end_ << ",\"zoom\":" << zoom_;
 
     if (has_loop_region_)
     {
@@ -973,11 +1196,12 @@ std::string TimelineEditor::serialize() const
         if (i > 0)
             ss << ",";
         const auto& t = tracks_[i];
-        ss << "{\"id\":" << t.id << R"(,"name":")" << t.name << "\""
+        ss << "{\"id\":" << t.id << R"(,"name":")" << escape_timeline_json(t.name) << "\""
+           << R"(,"property_path":")" << escape_timeline_json(t.property_path) << "\""
            << ",\"color\":[" << t.color.r << "," << t.color.g << "," << t.color.b << ","
-           << t.color.a << "]"
-           << ",\"visible\":" << (t.visible ? "true" : "false")
-           << ",\"locked\":" << (t.locked ? "true" : "false") << ",\"keyframes\":[";
+           << t.color.a << "]" << ",\"visible\":" << (t.visible ? "true" : "false")
+           << ",\"locked\":" << (t.locked ? "true" : "false")
+           << ",\"expanded\":" << (t.expanded ? "true" : "false") << ",\"keyframes\":[";
         for (size_t k = 0; k < t.keyframes.size(); ++k)
         {
             if (k > 0)
@@ -1001,6 +1225,9 @@ std::string TimelineEditor::serialize() const
 bool TimelineEditor::deserialize(const std::string& json)
 {
     std::lock_guard lock(mutex_);
+
+    if (json.find('{') == std::string::npos || json.find('}') == std::string::npos)
+        return false;
 
     // Minimal parsing — extract key fields
     auto extract_float = [&](const std::string& key, float def) -> float
@@ -1037,12 +1264,68 @@ bool TimelineEditor::deserialize(const std::string& json)
         }
     };
 
-    duration_      = extract_float("duration", 10.0f);
-    fps_           = extract_float("fps", 60.0f);
-    loop_mode_     = static_cast<LoopMode>(extract_int("loop_mode", 0));
-    snap_mode_     = static_cast<SnapMode>(extract_int("snap_mode", 1));
+    auto extract_bool = [](const std::string& object, const std::string& key, bool def)
+    {
+        const std::string search = "\"" + key + "\":";
+        const size_t      pos    = object.find(search);
+        if (pos == std::string::npos)
+            return def;
+        const size_t value_pos = pos + search.size();
+        if (object.compare(value_pos, 4, "true") == 0)
+            return true;
+        if (object.compare(value_pos, 5, "false") == 0)
+            return false;
+        return def;
+    };
+
+    auto extract_string = [](const std::string& object, const std::string& key)
+    {
+        const std::string search = "\"" + key + "\":";
+        size_t            pos    = object.find(search);
+        if (pos == std::string::npos)
+            return std::string{};
+        pos = object.find('"', pos + search.size());
+        if (pos == std::string::npos)
+            return std::string{};
+        const size_t start   = ++pos;
+        bool         escaped = false;
+        for (; pos < object.size(); ++pos)
+        {
+            if (escaped)
+                escaped = false;
+            else if (object[pos] == '\\')
+                escaped = true;
+            else if (object[pos] == '"')
+                return unescape_timeline_json(std::string_view(object).substr(start, pos - start));
+        }
+        return std::string{};
+    };
+
+    auto object_number = [](const std::string& object, const std::string& key, float def)
+    {
+        const std::string search = "\"" + key + "\":";
+        const size_t      pos    = object.find(search);
+        if (pos == std::string::npos)
+            return def;
+        try
+        {
+            return std::stof(object.substr(pos + search.size()));
+        }
+        catch (...)
+        {
+            return def;
+        }
+    };
+
+    duration_      = std::max(0.1f, extract_float("duration", 10.0f));
+    fps_           = std::max(1.0f, extract_float("fps", 60.0f));
+    playhead_      = extract_float("playhead", 0.0f);
+    state_         = static_cast<PlaybackState>(std::clamp(extract_int("state", 0), 0, 3));
+    loop_mode_     = static_cast<LoopMode>(std::clamp(extract_int("loop_mode", 0), 0, 2));
+    snap_mode_     = static_cast<SnapMode>(std::clamp(extract_int("snap_mode", 1), 0, 2));
     snap_interval_ = extract_float("snap_interval", 0.1f);
 
+    has_loop_region_ = false;
     float li = extract_float("loop_in", -1.0f);
     float lo = extract_float("loop_out", -1.0f);
     if (li >= 0.0f && lo > li)
@@ -1052,7 +1335,48 @@ bool TimelineEditor::deserialize(const std::string& json)
         has_loop_region_ = true;
     }
 
-    view_end_ = duration_;
+    view_start_ = extract_float("view_start", 0.0f);
+    view_end_   = extract_float("view_end", duration_);
+    zoom_       = extract_float("zoom", 100.0f);
+    clamp_playhead();
+
+    tracks_.clear();
+    next_track_id_ = 1;
+    for (const std::string& track_json : timeline_object_array(json, "tracks"))
+    {
+        TimelineTrack track;
+        track.id   = static_cast<uint32_t>(object_number(track_json, "id", next_track_id_));
+        track.name = extract_string(track_json, "name");
+        track.property_path = extract_string(track_json, "property_path");
+        track.visible       = extract_bool(track_json, "visible", true);
+        track.locked        = extract_bool(track_json, "locked", false);
+        track.expanded      = extract_bool(track_json, "expanded", true);
+
+        const size_t color_key = track_json.find("\"color\":[");
+        if (color_key != std::string::npos)
+        {
+            const size_t begin = track_json.find('[', color_key);
+            const size_t end   = track_json.find(']', begin);
+            if (begin != std::string::npos && end != std::string::npos)
+            {
+                std::string color_values = track_json.substr(begin + 1, end - begin - 1);
+                std::replace(color_values.begin(), color_values.end(), ',', ' ');
+                std::istringstream color_stream(color_values);
+                color_stream >> track.color.r >> track.color.g >> track.color.b >> track.color.a;
+            }
+        }
+
+        for (const std::string& keyframe_json : timeline_object_array(track_json, "keyframes"))
+        {
+            const float time = std::clamp(object_number(keyframe_json, "t", 0.0f), 0.0f, duration_);
+            track.keyframes.push_back({time, track.id, false});
+        }
+        std::sort(track.keyframes.begin(),
+                  track.keyframes.end(),
+                  [](const KeyframeMarker& a, const KeyframeMarker& b) { return a.time < b.time; });
+        next_track_id_ = std::max(next_track_id_, track.id + 1);
+        tracks_.push_back(std::move(track));
+    }
 
     // Deserialize interpolator data if present
     if (interpolator_)

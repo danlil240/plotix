@@ -117,6 +117,12 @@ void SpectraNavRail::set_button_visible(int tool_index, bool visible)
         buttons_[tool_index]->setVisible(visible);
 }
 
+void SpectraNavRail::set_button_active(int tool_index, bool active)
+{
+    if (tool_index >= 0 && tool_index < buttons_.size())
+        buttons_[tool_index]->set_active(active);
+}
+
 void SpectraNavRail::set_compact_mode(bool compact)
 {
     compact_      = compact;
@@ -143,16 +149,31 @@ void SpectraNavRail::paintEvent(QPaintEvent*)
 
     const QRectF    rail = QRectF(rect()).adjusted(4.5, 3.5, -4.5, -3.5);
     QLinearGradient glass(rail.topLeft(), rail.topRight());
-    glass.setColorAt(0.0, QColor(17, 27, 43, 246));
-    glass.setColorAt(0.70, QColor(20, 27, 45, 246));
-    glass.setColorAt(1.0, QColor(29, 24, 48, 246));
+    QColor          rail_start = colors.panel_surface;
+    QColor          rail_mid   = colors.panel_surface;
+    QColor          rail_end   = QColor::fromRgbF(
+        colors.panel_surface.redF() * 0.90 + colors.purple_ambient.redF() * 0.10,
+        colors.panel_surface.greenF() * 0.90 + colors.purple_ambient.greenF() * 0.10,
+        colors.panel_surface.blueF() * 0.90 + colors.purple_ambient.blueF() * 0.10);
+    rail_start.setAlpha(246);
+    rail_mid.setAlpha(246);
+    rail_end.setAlpha(246);
+    glass.setColorAt(0.0, rail_start);
+    glass.setColorAt(0.70, rail_mid);
+    glass.setColorAt(1.0, rail_end);
     painter.setBrush(glass);
-    painter.setPen(QPen(QColor(55, 72, 104, 190), 1));
+    QColor rail_border = colors.border_default;
+    rail_border.setAlpha(190);
+    painter.setPen(QPen(rail_border, 1));
     painter.drawRoundedRect(rail, 8, 8);
 
     QLinearGradient edge(rail.topRight(), rail.bottomRight());
-    edge.setColorAt(0.0, QColor(107, 199, 242, 70));
-    edge.setColorAt(1.0, QColor(124, 92, 252, 70));
+    QColor          edge_start = colors.cyan_accent;
+    QColor          edge_end   = colors.purple_ambient;
+    edge_start.setAlpha(70);
+    edge_end.setAlpha(70);
+    edge.setColorAt(0.0, edge_start);
+    edge.setColorAt(1.0, edge_end);
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(QBrush(edge), 1));
     painter.drawLine(QPointF(rail.right(), rail.top() + 8),

@@ -26,6 +26,8 @@ class QtRuntime;
 
 class FigureCanvasWidget : public QWidget
 {
+    Q_OBJECT
+
    public:
     explicit FigureCanvasWidget(QtRuntime*   runtime,
                                 Figure*      figure   = nullptr,
@@ -43,6 +45,12 @@ class FigureCanvasWidget : public QWidget
     // Animation timer control
     void startAnimationTimer();
     void stopAnimationTimer();
+
+   signals:
+    void activated();
+
+   protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
    private:
     SpectraVulkanWindow* window_ = nullptr;

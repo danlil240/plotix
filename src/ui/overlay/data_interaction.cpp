@@ -1322,6 +1322,16 @@ OverlaySnapshot DataInteraction::capture_overlay_snapshot(const Figure& figure) 
         snap.annotations.push_back(std::move(ae));
     }
 
+    if (region_.has_selection() && region_axes_)
+    {
+        snap.region.valid      = true;
+        snap.region.x_min      = region_.data_x_min();
+        snap.region.x_max      = region_.data_x_max();
+        snap.region.y_min      = region_.data_y_min();
+        snap.region.y_max      = region_.data_y_max();
+        snap.region.axes_index = resolve_axes_index(region_axes_);
+    }
+
     return snap;
 }
 
@@ -1376,7 +1386,7 @@ void DataInteraction::restore_overlay_snapshot(const OverlaySnapshot& snapshot, 
                     break;
             }
         }
-        add_marker(me.data_x, me.data_y, series_ptr, me.point_index);
+        markers_.add(me.data_x, me.data_y, series_ptr, me.point_index, axes_ptr);
     }
 
     // Restore annotations
@@ -1393,6 +1403,21 @@ void DataInteraction::restore_overlay_snapshot(const OverlaySnapshot& snapshot, 
         ann.offset_x         = ae.offset_x;
         ann.offset_y         = ae.offset_y;
         ann.editing          = false;
+    }
+
+    region_.dismiss();
+    region_axes_ = nullptr;
+    if (snapshot.region.valid)
+    {
+        region_axes_ = const_cast<Axes*>(resolve_axes_ptr(snapshot.region.axes_index));
+        if (region_axes_)
+        {
+            region_.restore(snapshot.region.x_min,
+                            snapshot.region.x_max,
+                            snapshot.region.y_min,
+                            snapshot.region.y_max,
+                            region_axes_);
+        }
     }
 }
 

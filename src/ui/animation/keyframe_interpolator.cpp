@@ -466,6 +466,24 @@ uint32_t KeyframeInterpolator::add_channel(const std::string& name, float defaul
     return id;
 }
 
+uint32_t KeyframeInterpolator::add_channel_with_id(uint32_t           channel_id,
+                                                   const std::string& name,
+                                                   float              default_value)
+{
+    if (channel_id == 0)
+        return 0;
+    std::lock_guard lock(mutex_);
+    if (auto* existing = find_channel_unlocked(channel_id))
+    {
+        existing->set_name(name);
+        existing->set_default_value(default_value);
+        return channel_id;
+    }
+    channels_.emplace_back(channel_id, AnimationChannel(name, default_value));
+    next_channel_id_ = std::max(next_channel_id_, channel_id + 1);
+    return channel_id;
+}
+
 void KeyframeInterpolator::remove_channel(uint32_t channel_id)
 {
     std::lock_guard lock(mutex_);

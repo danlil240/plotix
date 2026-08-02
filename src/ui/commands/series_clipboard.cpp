@@ -15,6 +15,7 @@ SeriesSnapshot SeriesClipboard::snapshot(const Series& series)
     snap.color   = series.color();
     snap.style   = series.plot_style();
     snap.visible = series.visible();
+    snap.x_offset = series.x_offset();
 
     // 2D types
     if (const auto* line = dynamic_cast<const LineSeries*>(&series))
@@ -72,6 +73,7 @@ static void apply_style(Series& s, const SeriesSnapshot& snap)
     s.marker_size(snap.style.marker_size);
     s.opacity(snap.style.opacity);
     s.visible(snap.visible);
+    s.x_offset(snap.x_offset);
 }
 
 Series* SeriesClipboard::paste_to(AxesBase& axes_base, const SeriesSnapshot& snap)

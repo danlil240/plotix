@@ -12,7 +12,9 @@
 #include "ui/commands/command_registry.hpp"
 
 #include <spectra/figure_registry.hpp>
+#include <spectra/axes.hpp>
 #include <spectra/logger.hpp>
+#include <spectra/series.hpp>
 
 #include <QApplication>
 #include <QCoreApplication>
@@ -293,6 +295,25 @@ bool send_mouse_event(const InputTarget&    target,
     const QPointF local = local_position(target, global);
     QMouseEvent   event(type, local, local, global, button, buttons, modifiers);
     return QCoreApplication::sendEvent(target.object(), &event);
+}
+
+bool is_qt_fuzz_denied_command(const std::string& id)
+{
+    static constexpr std::array<const char*, 12> kDenied = {
+        "figure.close",
+        "app.quit",
+        "file.save_figure",
+        "file.load_figure",
+        "file.export_png",
+        "file.export_svg",
+        "file.copy_to_clipboard",
+        "file.save_workspace",
+        "file.load_workspace",
+        "help.show",
+        "accessibility.sonify_series",
+        "data.export_html_table",
+    };
+    return std::ranges::any_of(kDenied, [&id](const char* denied) { return id == denied; });
 }
 
 void focus_pointer_target(const InputTarget& target)
@@ -650,6 +671,415 @@ bool QtAutomationAdapter::handle_input_request(AutomationRequest& request)
     return true;
 }
 
+bool QtAutomationAdapter::handle_fuzz_request(AutomationRequest& request)
+{
+    if (request.method == "list_fuzz_actions")
+    {
+        std::ostringstream result;
+        result << R"({"actions":[)";
+        for (size_t i = 0; i < automation::kFuzzActionWeights.size(); ++i)
+        {
+            if (i > 0)
+                result << ',';
+            const auto& entry = automation::kFuzzActionWeights[i];
+            result << R"({"action":")" << automation::fuzz_action_name(entry.action)
+                   << R"(","weight":)" << entry.weight << '}';
+        }
+        result << "]}";
+        request.response_json = json_ok(request.id, result.str());
+        return true;
+    }
+
+    if (request.method == "fuzz_reset")
+    {
+        fuzz_step_index_ = 0;
+        if (json_has_key(request.params_json, "seed"))
+        {
+            fuzz_base_seed_ = static_cast<uint64_t>(json_get_int(request.params_json, "seed", 0));
+            fuzz_rng_       = std::mt19937(static_cast<uint32_t>(fuzz_base_seed_));
+            fuzz_seed_explicit_ = true;
+        }
+        else
+        {
+            fuzz_rng_           = std::mt19937(std::random_device{}());
+            fuzz_seed_explicit_ = false;
+        }
+        request.response_json =
+            json_ok(request.id,
+                    R"({"reset":true,"seed":)" + std::to_string(fuzz_base_seed_)
+                        + R"(,"seed_explicit":)" + (fuzz_seed_explicit_ ? "true" : "false") + '}');
+        return true;
+    }
+
+    if (request.method != "fuzz_step")
+        return false;
+
+    if (json_has_key(request.params_json, "seed"))
+    {
+        fuzz_base_seed_     = static_cast<uint64_t>(json_get_int(request.params_json, "seed", 0));
+        fuzz_rng_           = std::mt19937(static_cast<uint32_t>(fuzz_base_seed_));
+        fuzz_seed_explicit_ = true;
+        fuzz_step_index_    = 0;
+    }
+
+    automation::FuzzAction action = automation::pick_weighted_fuzz_action(fuzz_rng_);
+    const std::string      forced = json_get_string(request.params_json, "action");
+    if (!forced.empty() && !automation::parse_fuzz_action(forced, action))
+    {
+        request.response_json = json_error(request.id, "Unknown fuzz action: " + forced);
+        return true;
+    }
+
+    int               pump_frames = 1;
+    const std::string details     = run_fuzz_action(action, pump_frames);
+    ++fuzz_step_index_;
+
+    std::ostringstream result;
+    result << R"({"action":")" << automation::fuzz_action_name(action) << R"(","step":)"
+           << fuzz_step_index_ << R"(,"seed":)" << (fuzz_seed_explicit_ ? fuzz_base_seed_ : 0)
+           << R"(,"details":)" << details << R"(,"pump_frames":)" << pump_frames << '}';
+    request.response_json = json_ok(request.id, result.str());
+    return true;
+}
+
+std::string QtAutomationAdapter::run_fuzz_action(automation::FuzzAction action, int& pump_frames)
+{
+    using automation::FuzzAction;
+    pump_frames = 1;
+    std::ostringstream details;
+    details << '{';
+
+    const auto execute_command = [this](const std::string& id)
+    {
+        if (!services_)
+            return false;
+        return execute_cmd_fn_ ? execute_cmd_fn_(id) : services_->commands().execute(id);
+    };
+    const auto window_size = [this]()
+    {
+        if (input_root_ && input_root_->width() > 0 && input_root_->height() > 0)
+            return std::pair{input_root_->width(), input_root_->height()};
+        if (get_size_fn_)
+        {
+            const auto [width, height] = get_size_fn_();
+            if (width > 0 && height > 0)
+                return std::pair{static_cast<int>(width), static_cast<int>(height)};
+        }
+        return std::pair{1280, 720};
+    };
+    const auto send_fuzz_input = [this](const std::string& method, std::string params)
+    {
+        AutomationRequest input;
+        input.method      = method;
+        input.params_json = std::move(params);
+        return handle_input_request(input)
+               && input.response_json.find(R"("isError":true)") == std::string::npos;
+    };
+
+    switch (action)
+    {
+        case FuzzAction::ExecuteCommand:
+        {
+            if (!services_)
+            {
+                details << R"("skipped":"services_unavailable")";
+                break;
+            }
+            std::vector<std::string> command_ids;
+            for (const auto* command : services_->commands().all_commands())
+                if (command)
+                    command_ids.push_back(command->id);
+            if (command_ids.empty())
+            {
+                details << R"("skipped":"no_commands")";
+                break;
+            }
+            std::uniform_int_distribution<size_t> pick(0, command_ids.size() - 1);
+            const std::string&                    id = command_ids[pick(fuzz_rng_)];
+            if (is_qt_fuzz_denied_command(id))
+                details << R"("skipped_command":")" << json_escape(id) << '"';
+            else
+                details << R"("command_id":")" << json_escape(id) << R"(","executed":)"
+                        << (execute_command(id) ? "true" : "false");
+            break;
+        }
+        case FuzzAction::MouseClick:
+        {
+            const auto [width, height] = window_size();
+            std::uniform_real_distribution<double> x(0.0, std::max(0, width - 1));
+            std::uniform_real_distribution<double> y(0.0, std::max(0, height - 1));
+            std::uniform_int_distribution<int>     button(0, 1);
+            const double                           px = x(fuzz_rng_);
+            const double                           py = y(fuzz_rng_);
+            const int                              b  = button(fuzz_rng_);
+            std::ostringstream                     params;
+            params << R"({"x":)" << px << R"(,"y":)" << py << R"(,"button":)" << b << '}';
+            details << R"("x":)" << px << R"(,"y":)" << py << R"(,"button":)" << b
+                    << R"(,"dispatched":)"
+                    << (send_fuzz_input("mouse_click", params.str()) ? "true" : "false");
+            break;
+        }
+        case FuzzAction::MouseDrag:
+        {
+            const auto [width, height] = window_size();
+            std::uniform_real_distribution<double> x(0.0, std::max(0, width - 1));
+            std::uniform_real_distribution<double> y(0.0, std::max(0, height - 1));
+            const double                           x1 = x(fuzz_rng_);
+            const double                           y1 = y(fuzz_rng_);
+            const double                           x2 = x(fuzz_rng_);
+            const double                           y2 = y(fuzz_rng_);
+            std::ostringstream                     params;
+            params << R"({"x1":)" << x1 << R"(,"y1":)" << y1 << R"(,"x2":)" << x2 << R"(,"y2":)"
+                   << y2 << R"(,"steps":5})";
+            details << R"("x1":)" << x1 << R"(,"y1":)" << y1 << R"(,"x2":)" << x2 << R"(,"y2":)"
+                    << y2 << R"(,"dispatched":)"
+                    << (send_fuzz_input("mouse_drag", params.str()) ? "true" : "false");
+            break;
+        }
+        case FuzzAction::MouseScroll:
+        {
+            const auto [width, height] = window_size();
+            std::uniform_real_distribution<double> x(0.0, std::max(0, width - 1));
+            std::uniform_real_distribution<double> y(0.0, std::max(0, height - 1));
+            std::uniform_real_distribution<double> delta(-3.0, 3.0);
+            const double                           px = x(fuzz_rng_);
+            const double                           py = y(fuzz_rng_);
+            const double                           dy = delta(fuzz_rng_);
+            std::ostringstream                     params;
+            params << R"({"x":)" << px << R"(,"y":)" << py << R"(,"dy":)" << dy << '}';
+            details << R"("x":)" << px << R"(,"y":)" << py << R"(,"dy":)" << dy
+                    << R"(,"dispatched":)"
+                    << (send_fuzz_input("scroll", params.str()) ? "true" : "false");
+            break;
+        }
+        case FuzzAction::KeyPress:
+        {
+            std::uniform_int_distribution<int> key(32, 126);
+            const int                          value = key(fuzz_rng_);
+            details << R"("key":)" << value << R"(,"dispatched":)"
+                    << (send_fuzz_input("key_press", "{\"key\":" + std::to_string(value) + '}')
+                            ? "true"
+                            : "false");
+            break;
+        }
+        case FuzzAction::CreateFigure:
+        {
+            if (!services_ || !create_figure_fn_ || services_->figures().all_ids().size() >= 20)
+            {
+                details << R"("skipped":"max_figures_or_unavailable")";
+                break;
+            }
+            std::uniform_int_distribution<int> size(640, 1600);
+            const FigureId id     = create_figure_fn_(static_cast<uint32_t>(size(fuzz_rng_)),
+                                                  static_cast<uint32_t>(size(fuzz_rng_)));
+            Figure*        figure = services_->figures().get(id);
+            if (!figure)
+            {
+                details << R"("created":false)";
+                break;
+            }
+            auto&                                 axes = figure->subplot(1, 1, 1);
+            std::uniform_int_distribution<int>    points(20, 200);
+            std::uniform_real_distribution<float> value(-10.0f, 10.0f);
+            const int                             count = points(fuzz_rng_);
+            std::vector<float>                    xs(static_cast<size_t>(count));
+            std::vector<float>                    ys(static_cast<size_t>(count));
+            for (int i = 0; i < count; ++i)
+            {
+                xs[static_cast<size_t>(i)] = static_cast<float>(i);
+                ys[static_cast<size_t>(i)] = value(fuzz_rng_);
+            }
+            axes.line(xs, ys);
+            details << R"("created":true,"figure_id":)" << id << R"(,"points":)" << count;
+            break;
+        }
+        case FuzzAction::CloseFigure:
+        {
+            const auto ids = services_ ? services_->figures().all_ids() : std::vector<FigureId>{};
+            if (ids.size() <= 1 || !switch_figure_fn_)
+            {
+                details << R"("skipped":"insufficient_figures_or_unavailable")";
+                break;
+            }
+            std::uniform_int_distribution<size_t> pick(0, ids.size() - 1);
+            const FigureId                        id       = ids[pick(fuzz_rng_)];
+            const bool                            switched = switch_figure_fn_(id);
+            const bool                            closed =
+                switched
+                && (close_figure_fn_ ? close_figure_fn_(id) : execute_command("figure.close"));
+            details << R"("figure_id":)" << id << R"(,"closed":)" << (closed ? "true" : "false");
+            break;
+        }
+        case FuzzAction::SwitchTab:
+        {
+            const auto ids = services_ ? services_->figures().all_ids() : std::vector<FigureId>{};
+            if (ids.empty() || !switch_figure_fn_)
+            {
+                details << R"("skipped":"no_figures_or_unavailable")";
+                break;
+            }
+            std::uniform_int_distribution<size_t> pick(0, ids.size() - 1);
+            const FigureId                        id = ids[pick(fuzz_rng_)];
+            details << R"("figure_id":)" << id << R"(,"switched":)"
+                    << (switch_figure_fn_(id) ? "true" : "false");
+            break;
+        }
+        case FuzzAction::AddSeries:
+        {
+            const auto ids = services_ ? services_->figures().all_ids() : std::vector<FigureId>{};
+            if (ids.empty())
+            {
+                details << R"("skipped":"no_figures")";
+                break;
+            }
+            std::uniform_int_distribution<size_t> figure_pick(0, ids.size() - 1);
+            const FigureId                        id     = ids[figure_pick(fuzz_rng_)];
+            Figure*                               figure = services_->figures().get(id);
+            if (!figure)
+            {
+                details << R"("skipped":"figure_missing")";
+                break;
+            }
+            auto&                                 axes = figure->subplot(1, 1, 1);
+            std::uniform_int_distribution<int>    points(10, 200);
+            std::uniform_real_distribution<float> value(-50.0f, 50.0f);
+            const int                             count = points(fuzz_rng_);
+            std::vector<float>                    xs(static_cast<size_t>(count));
+            std::vector<float>                    ys(static_cast<size_t>(count));
+            for (int i = 0; i < count; ++i)
+            {
+                xs[static_cast<size_t>(i)] = static_cast<float>(i);
+                ys[static_cast<size_t>(i)] = value(fuzz_rng_);
+            }
+            std::uniform_int_distribution<int> type(0, 1);
+            if (type(fuzz_rng_) == 0)
+                axes.line(xs, ys);
+            else
+                axes.scatter(xs, ys);
+            details << R"("figure_id":)" << id << R"(,"points":)" << count;
+            break;
+        }
+        case FuzzAction::UpdateData:
+        {
+            const auto ids = services_ ? services_->figures().all_ids() : std::vector<FigureId>{};
+            if (ids.empty())
+            {
+                details << R"("skipped":"no_figures")";
+                break;
+            }
+            std::uniform_int_distribution<size_t> pick(0, ids.size() - 1);
+            Figure*     figure = services_->figures().get(ids[pick(fuzz_rng_)]);
+            LineSeries* line   = nullptr;
+            if (figure && !figure->axes().empty() && !figure->axes()[0]->series().empty())
+                line = dynamic_cast<LineSeries*>(figure->axes_mut()[0]->series_mut()[0].get());
+            if (!line)
+            {
+                details << R"("skipped":"no_line_series")";
+                break;
+            }
+            std::vector<float>                    ys(line->x_data().size());
+            std::uniform_real_distribution<float> value(-50.0f, 50.0f);
+            for (float& item : ys)
+                item = value(fuzz_rng_);
+            line->set_y(ys);
+            details << R"("points":)" << ys.size();
+            break;
+        }
+        case FuzzAction::LargeDataset:
+        {
+            const auto ids = services_ ? services_->figures().all_ids() : std::vector<FigureId>{};
+            if (ids.empty())
+            {
+                details << R"("skipped":"no_figures")";
+                break;
+            }
+            std::uniform_int_distribution<size_t> pick(0, ids.size() - 1);
+            Figure* figure = services_->figures().get(ids[pick(fuzz_rng_)]);
+            if (!figure)
+            {
+                details << R"("skipped":"figure_missing")";
+                break;
+            }
+            std::uniform_int_distribution<int> points(100000, 500000);
+            const int                          count = points(fuzz_rng_);
+            std::vector<float>                 xs(static_cast<size_t>(count));
+            std::vector<float>                 ys(static_cast<size_t>(count));
+            for (int i = 0; i < count; ++i)
+            {
+                xs[static_cast<size_t>(i)] = static_cast<float>(i);
+                ys[static_cast<size_t>(i)] = std::sin(static_cast<float>(i) * 0.001f);
+            }
+            figure->subplot(1, 1, 1).line(xs, ys);
+            details << R"("points":)" << count;
+            break;
+        }
+        case FuzzAction::SplitDock:
+        {
+            std::uniform_int_distribution<int> direction(0, 1);
+            const std::string                  command =
+                direction(fuzz_rng_) == 0 ? "view.split_right" : "view.split_down";
+            details << R"("command_id":")" << command << R"(","executed":)"
+                    << (execute_command(command) ? "true" : "false");
+            break;
+        }
+        case FuzzAction::WaitFrames:
+        {
+            std::uniform_int_distribution<int> frames(1, 10);
+            pump_frames = frames(fuzz_rng_);
+            details << R"("requested_frames":)" << pump_frames;
+            break;
+        }
+        case FuzzAction::WindowResize:
+        {
+            std::uniform_int_distribution<int> dimension(200, 1920);
+            const int                          width  = dimension(fuzz_rng_);
+            const int                          height = dimension(fuzz_rng_);
+            if (resize_fn_)
+                resize_fn_(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+            details << R"("width":)" << width << R"(,"height":)" << height << R"(,"resized":)"
+                    << (resize_fn_ ? "true" : "false");
+            break;
+        }
+        case FuzzAction::WindowDrag:
+        {
+            std::uniform_int_distribution<int> x(0, 1600);
+            std::uniform_int_distribution<int> y(0, 900);
+            const int                          px = x(fuzz_rng_);
+            const int                          py = y(fuzz_rng_);
+            if (input_root_)
+                input_root_->move(px, py);
+            details << R"("x":)" << px << R"(,"y":)" << py << R"(,"moved":)"
+                    << (input_root_ ? "true" : "false");
+            break;
+        }
+        case FuzzAction::TabDetach:
+        {
+            const auto ids = services_ ? services_->figures().all_ids() : std::vector<FigureId>{};
+            if (ids.size() < 2 || !switch_figure_fn_)
+            {
+                details << R"("skipped":"insufficient_figures_or_unavailable")";
+                break;
+            }
+            std::uniform_int_distribution<size_t> pick(0, ids.size() - 1);
+            const FigureId                        id       = ids[pick(fuzz_rng_)];
+            const bool                            switched = switch_figure_fn_(id);
+            const bool                            detached = switched
+                                  && (detach_figure_fn_ ? detach_figure_fn_(id)
+                                                        : execute_command("figure.move_to_window"));
+            details << R"("figure_id":)" << id << R"(,"detached":)"
+                    << (detached ? "true" : "false");
+            break;
+        }
+    }
+
+    if (services_ && services_->redraw_request())
+        services_->redraw_request()->request_redraw();
+    while (QWidget* popup = QApplication::activePopupWidget())
+        popup->close();
+    details << '}';
+    return details.str();
+}
+
 void QtAutomationAdapter::handle_request(AutomationRequest& request)
 {
     if (request.method == "ping")
@@ -950,6 +1380,9 @@ void QtAutomationAdapter::handle_request(AutomationRequest& request)
     }
 
     if (handle_input_request(request))
+        return;
+
+    if (handle_fuzz_request(request))
         return;
 
     request.response_json =

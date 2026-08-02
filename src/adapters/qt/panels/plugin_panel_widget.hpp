@@ -11,10 +11,16 @@
 
 #include <QDockWidget>
 
+#include <string>
+#include <vector>
+
+class QFormLayout;
+
 namespace spectra
 {
 class PluginUIRegistry;
 struct PluginUISchema;
+struct PluginUIElement;
 }
 
 namespace spectra::adapters::qt
@@ -32,7 +38,13 @@ class QtPluginPanelWidget : public QDockWidget
     void refresh();
 
    private:
-    void build_schema_widget(const spectra::PluginUISchema& schema);
+    void build_schema_widget(const std::string& schema_id, const spectra::PluginUISchema& schema);
+    void build_element_widget(const std::string&             schema_id,
+                              const spectra::PluginUISchema& schema,
+                              size_t                         element_index,
+                              QFormLayout*                   form,
+                              QWidget*                       parent,
+                              std::vector<size_t>&           ancestry);
 
     PluginUIRegistry* registry_ = nullptr;
     QWidget*          scroll_content_ = nullptr;

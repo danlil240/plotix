@@ -11,6 +11,7 @@
 #include <spectra/series.hpp>
 #include <spectra/series3d.hpp>
 #include <spectra/series_stats.hpp>
+#include <sstream>
 
 #include "overlay_snapshot.hpp"
 
@@ -23,7 +24,7 @@ namespace spectra
 
 // ─── Binary format constants ────────────────────────────────────────────────
 static constexpr uint32_t MAGIC   = 0x53504346;   // "SPCF" — Spectra Figure
-static constexpr uint32_t VERSION = 5;
+static constexpr uint32_t VERSION = 6;
 
 // Chunk tags
 enum ChunkTag : uint16_t
@@ -48,9 +49,10 @@ enum ChunkTag : uint16_t
     TAG_SERIES_BAR     = 0x0029,
     TAG_SERIES_BAND    = 0x002A,
 
-    TAG_ANNOTATION     = 0x0040,
-    TAG_MARKER         = 0x0041,
-    TAG_OVERLAY_CONFIG = 0x0042,
+    TAG_ANNOTATION        = 0x0040,
+    TAG_MARKER            = 0x0041,
+    TAG_OVERLAY_CONFIG    = 0x0042,
+    TAG_INTERACTION_STATE = 0x0043,
 
     TAG_END = 0xFFFF,
 };
@@ -59,12 +61,13 @@ enum ChunkTag : uint16_t
 class BinaryWriter
 {
    public:
-    explicit BinaryWriter(std::ofstream& f) : f_(f) {}
+    explicit BinaryWriter(std::ostream& f) : f_(f) {}
 
     void write_u16(uint16_t v) { f_.write(reinterpret_cast<const char*>(&v), 2); }
     void write_u32(uint32_t v) { f_.write(reinterpret_cast<const char*>(&v), 4); }
     void write_i32(int32_t v) { f_.write(reinterpret_cast<const char*>(&v), 4); }
     void write_f32(float v) { f_.write(reinterpret_cast<const char*>(&v), 4); }
+    void write_f64(double v) { f_.write(reinterpret_cast<const char*>(&v), 8); }
     void write_u8(uint8_t v) { f_.write(reinterpret_cast<const char*>(&v), 1); }
 
     void write_color(const Color& c)
@@ -135,14 +138,14 @@ class BinaryWriter
     [[nodiscard]] bool good() const { return f_.good(); }
 
    private:
-    std::ofstream& f_;
+    std::ostream& f_;
 };
 
 // ─── Reader helper ──────────────────────────────────────────────────────────
 class BinaryReader
 {
    public:
-    explicit BinaryReader(std::ifstream& f) : f_(f) {}
+    explicit BinaryReader(std::istream& f) : f_(f) {}
 
     uint16_t read_u16()
     {
@@ -166,6 +169,12 @@ class BinaryReader
     {
         float v = 0.0f;
         f_.read(reinterpret_cast<char*>(&v), 4);
+        return v;
+    }
+    double read_f64()
+    {
+        double v = 0.0;
+        f_.read(reinterpret_cast<char*>(&v), 8);
         return v;
     }
     uint8_t read_u8()
@@ -225,7 +234,7 @@ class BinaryReader
     [[nodiscard]] bool good() const { return f_.good(); }
 
    private:
-    std::ifstream& f_;
+    std::istream& f_;
 };
 
 // ─── Save implementation ────────────────────────────────────────────────────
@@ -272,6 +281,7 @@ static void write_axes_2d(BinaryWriter& w, const Axes& axes, int axes_index)
             w.write_f32(ls->width());
             w.write_floats(ls->x_data());
             w.write_floats(ls->y_data());
+            w.write_f64(ls->x_offset());
             w.end_chunk(spos);
         }
         else if (auto* ss = dynamic_cast<ScatterSeries*>(sp.get()))
@@ -287,6 +297,7 @@ static void write_axes_2d(BinaryWriter& w, const Axes& axes, int axes_index)
             w.write_f32(ss->colormap_max());
             w.write_u8(static_cast<uint8_t>(ss->colormap_range_set()));
             w.write_floats(ss->color_values_data());
+            w.write_f64(ss->x_offset());
             w.end_chunk(spos);
         }
         else if (auto* band = dynamic_cast<BandSeries*>(sp.get()))
@@ -448,6 +459,7 @@ static void write_axes_3d(BinaryWriter& w, const Axes3D& axes, int axes_index)
             w.write_floats(ls->x_data());
             w.write_floats(ls->y_data());
             w.write_floats(ls->z_data());
+            w.write_f64(ls->x_offset());
             w.end_chunk(spos);
         }
         else if (auto* ss = dynamic_cast<ScatterSeries3D*>(sp.get()))
@@ -460,6 +472,7 @@ static void write_axes_3d(BinaryWriter& w, const Axes3D& axes, int axes_index)
             w.write_floats(ss->x_data());
             w.write_floats(ss->y_data());
             w.write_floats(ss->z_data());
+            w.write_f64(ss->x_offset());
             w.end_chunk(spos);
         }
         else if (auto* surf = dynamic_cast<SurfaceSeries*>(sp.get()))
@@ -510,6 +523,24 @@ bool FigureSerializer::save(const std::string&     path,
     if (!f.is_open())
         return false;
 
+    return save_stream(f, figure, overlay);
+}
+
+bool FigureSerializer::serialize(const Figure&          figure,
+                                 std::string&           bytes,
+                                 const OverlaySnapshot* overlay)
+{
+    std::ostringstream stream(std::ios::out | std::ios::binary);
+    if (!save_stream(stream, figure, overlay))
+        return false;
+    bytes = stream.str();
+    return true;
+}
+
+bool FigureSerializer::save_stream(std::ostream&          f,
+                                   const Figure&          figure,
+                                   const OverlaySnapshot* overlay)
+{
     BinaryWriter w(f);
 
     // Header
@@ -628,6 +659,24 @@ bool FigureSerializer::save(const std::string&     path,
             w.write_i32(static_cast<int32_t>(ann.axes_index));
             w.end_chunk(apos);
         }
+
+        {
+            auto ipos = w.begin_chunk(TAG_INTERACTION_STATE);
+            w.write_u8(overlay->tool_mode);
+            w.write_u8(overlay->region.valid ? 1 : 0);
+            w.write_i32(static_cast<int32_t>(overlay->region.axes_index));
+            w.write_f32(overlay->region.x_min);
+            w.write_f32(overlay->region.x_max);
+            w.write_f32(overlay->region.y_min);
+            w.write_f32(overlay->region.y_max);
+            w.write_u8(overlay->measurement.valid ? 1 : 0);
+            w.write_i32(static_cast<int32_t>(overlay->measurement.axes_index));
+            w.write_f64(overlay->measurement.start_data_x);
+            w.write_f64(overlay->measurement.start_data_y);
+            w.write_f64(overlay->measurement.end_data_x);
+            w.write_f64(overlay->measurement.end_data_y);
+            w.end_chunk(ipos);
+        }
     }
 
     // End marker
@@ -645,6 +694,17 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
     if (!f.is_open())
         return false;
 
+    return load_stream(f, figure, overlay);
+}
+
+bool FigureSerializer::deserialize(std::string_view bytes, Figure& figure, OverlaySnapshot* overlay)
+{
+    std::istringstream stream(std::string(bytes), std::ios::in | std::ios::binary);
+    return load_stream(stream, figure, overlay);
+}
+
+bool FigureSerializer::load_stream(std::istream& f, Figure& figure, OverlaySnapshot* overlay)
+{
     BinaryReader r(f);
 
     // Verify header
@@ -881,9 +941,11 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
 
                 x_data = r.read_floats();
                 y_data = r.read_floats();
+                const double x_offset = version >= 6 ? r.read_f64() : 0.0;
 
                 auto& s = axes->line(x_data, y_data);
                 s.label(lbl).color(col).visible(vis);
+                s.x_offset(x_offset);
                 s.line_style(ls_e).marker_style(ms_e).marker_size(msz).opacity(opac);
                 s.width(width);
                 s.set_excluded_from_autoscale(excl);
@@ -939,9 +1001,11 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                     cmap_explicit = r.read_u8() != 0;
                     color_values  = r.read_floats();
                 }
+                const double x_offset = version >= 6 ? r.read_f64() : 0.0;
 
                 auto& s = axes->scatter(x_data, y_data);
                 s.label(lbl).color(col).visible(vis);
+                s.x_offset(x_offset);
                 s.line_style(ls_e).marker_style(ms_e).marker_size(msz).opacity(opac);
                 s.size(sz);
                 s.set_excluded_from_autoscale(excl);
@@ -1243,9 +1307,11 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                 auto x = r.read_floats();
                 auto y = r.read_floats();
                 auto z = r.read_floats();
+                const double x_offset = version >= 6 ? r.read_f64() : 0.0;
 
                 auto& s = axes->line3d(x, y, z);
                 s.label(lbl).color(col).visible(vis);
+                s.x_offset(x_offset);
                 s.line_style(ls_e).marker_style(ms_e).marker_size(msz).opacity(opac);
                 s.width(wid).blend_mode(bm);
                 s.set_excluded_from_autoscale(excl);
@@ -1290,9 +1356,11 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                 auto x = r.read_floats();
                 auto y = r.read_floats();
                 auto z = r.read_floats();
+                const double x_offset = version >= 6 ? r.read_f64() : 0.0;
 
                 auto& s = axes->scatter3d(x, y, z);
                 s.label(lbl).color(col).visible(vis);
+                s.x_offset(x_offset);
                 s.line_style(ls_e).marker_style(ms_e).marker_size(msz).opacity(opac);
                 s.size(sz).blend_mode(bm);
                 s.set_excluded_from_autoscale(excl);
@@ -1466,6 +1534,35 @@ bool FigureSerializer::load(const std::string& path, Figure& figure, OverlaySnap
                 {
                     overlay->crosshair_enabled = r.read_u8() != 0;
                     overlay->tooltip_enabled   = r.read_u8() != 0;
+                }
+                else
+                {
+                    r.skip(len);
+                }
+                break;
+            }
+
+            case TAG_INTERACTION_STATE:
+            {
+                if (overlay)
+                {
+                    overlay->tool_mode    = r.read_u8();
+                    overlay->region.valid = r.read_u8() != 0;
+                    int32_t region_axes   = r.read_i32();
+                    overlay->region.axes_index =
+                        region_axes >= 0 ? static_cast<size_t>(region_axes) : 0;
+                    overlay->region.x_min      = r.read_f32();
+                    overlay->region.x_max      = r.read_f32();
+                    overlay->region.y_min      = r.read_f32();
+                    overlay->region.y_max      = r.read_f32();
+                    overlay->measurement.valid = r.read_u8() != 0;
+                    int32_t measure_axes       = r.read_i32();
+                    overlay->measurement.axes_index =
+                        measure_axes >= 0 ? static_cast<size_t>(measure_axes) : 0;
+                    overlay->measurement.start_data_x = r.read_f64();
+                    overlay->measurement.start_data_y = r.read_f64();
+                    overlay->measurement.end_data_x   = r.read_f64();
+                    overlay->measurement.end_data_y   = r.read_f64();
                 }
                 else
                 {

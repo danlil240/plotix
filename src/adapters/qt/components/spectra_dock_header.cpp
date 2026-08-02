@@ -26,13 +26,12 @@ SpectraDockHeader::SpectraDockHeader(const QString& title, QWidget* parent)
     btn_chevron_->setFixedSize(16, 16);
     btn_chevron_->setFlat(true);
     btn_chevron_->setCursor(Qt::PointingHandCursor);
-    btn_chevron_->setFocusPolicy(Qt::NoFocus);
+    btn_chevron_->setFocusPolicy(Qt::StrongFocus);
+    btn_chevron_->setAccessibleName(QString("Collapse or expand %1").arg(title_));
     btn_chevron_->setStyleSheet(
-        "QPushButton { background: transparent; border: none; color: #8A909C; }"
-        "QPushButton:hover { color: #E8ECF1; }");
+        "QPushButton { background: transparent; border: none; padding: 0; }");
     btn_chevron_->setText(QStringLiteral("\u25B8"));
-    connect(btn_chevron_, &QPushButton::clicked,
-            this, &SpectraDockHeader::toggle_collapsed);
+    connect(btn_chevron_, &QPushButton::clicked, this, &SpectraDockHeader::toggle_collapsed);
     layout->addWidget(btn_chevron_);
 
     // Title
@@ -44,13 +43,11 @@ SpectraDockHeader::SpectraDockHeader(const QString& title, QWidget* parent)
     btn_close_->setFixedSize(16, 16);
     btn_close_->setFlat(true);
     btn_close_->setCursor(Qt::PointingHandCursor);
-    btn_close_->setFocusPolicy(Qt::NoFocus);
-    btn_close_->setStyleSheet(
-        "QPushButton { background: transparent; border: none; color: #8A909C; }"
-        "QPushButton:hover { color: #E8ECF1; }");
+    btn_close_->setFocusPolicy(Qt::StrongFocus);
+    btn_close_->setAccessibleName(QString("Close %1").arg(title_));
+    btn_close_->setStyleSheet("QPushButton { background: transparent; border: none; padding: 0; }");
     btn_close_->setText(QStringLiteral("\u2715"));
-    connect(btn_close_, &QPushButton::clicked,
-            this, &SpectraDockHeader::close_requested);
+    connect(btn_close_, &QPushButton::clicked, this, &SpectraDockHeader::close_requested);
 
     layout->addStretch();
     layout->addWidget(btn_close_);
@@ -59,6 +56,8 @@ SpectraDockHeader::SpectraDockHeader(const QString& title, QWidget* parent)
 void SpectraDockHeader::set_title(const QString& title)
 {
     title_ = title;
+    btn_chevron_->setAccessibleName(QString("Collapse or expand %1").arg(title_));
+    btn_close_->setAccessibleName(QString("Close %1").arg(title_));
     update();
 }
 
@@ -77,8 +76,7 @@ void SpectraDockHeader::set_collapsible(bool collapsible)
 void SpectraDockHeader::set_collapsed(bool collapsed)
 {
     collapsed_ = collapsed;
-    btn_chevron_->setText(collapsed ? QStringLiteral("\u25B8") :
-                           QStringLiteral("\u25BE"));
+    btn_chevron_->setText(collapsed ? QStringLiteral("\u25B8") : QStringLiteral("\u25BE"));
 }
 
 void SpectraDockHeader::paintEvent(QPaintEvent*)
@@ -86,8 +84,8 @@ void SpectraDockHeader::paintEvent(QPaintEvent*)
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing, true);
 
-    const auto& c = spectra_colors();
-    auto& fm = SpectraFontManager::instance();
+    const auto& c  = spectra_colors();
+    auto&       fm = SpectraFontManager::instance();
 
     // Background
     p.fillRect(rect(), c.panel_surface);

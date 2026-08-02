@@ -6,6 +6,7 @@
 
 #include <filesystem>
 #include <gtest/gtest.h>
+#include <spectra/figure.hpp>
 
 #include "ui/workspace/workspace.hpp"
 
@@ -48,11 +49,14 @@ static WorkspaceData make_v5_workspace()
     data.figures.push_back(fig);
 
     // v5 desktop layout
-    data.desktop_layout.provider                   = "native";
-    data.desktop_layout.provider_version           = "1.0";
-    data.desktop_layout.main_window_state_base64   = "AAAAAQAAAA==";
+    data.desktop_layout.provider                    = "native";
+    data.desktop_layout.provider_version            = "1.0";
+    data.desktop_layout.main_window_state_base64    = "AAAAAQAAAA==";
     data.desktop_layout.main_window_geometry_base64 = "AAAAAQAAAABkAAABAA==";
-    data.desktop_layout.provider_layout            = "{}";
+    data.desktop_layout.main_window_split_layout =
+        R"({"active":7,"root":{"leaf":true,"figure":7}})";
+    data.desktop_layout.main_window_figure_ids = {7, 8};
+    data.desktop_layout.provider_layout        = "{}";
 
     // Two detached windows
     {
@@ -60,6 +64,8 @@ static WorkspaceData make_v5_workspace()
         w.state_base64    = "AAAAAQAAABg=";
         w.geometry_base64 = "AAAAAQAAABgAAAABAA==";
         w.title           = "Detached Figure 1";
+        w.split_layout    = R"({"active":9,"root":{"leaf":true,"figure":9}})";
+        w.figure_ids      = {9};
         data.desktop_layout.windows.push_back(w);
     }
     {
@@ -100,12 +106,18 @@ TEST(WorkspaceV5, RoundTrip)
     EXPECT_EQ(loaded.desktop_layout.provider_version, "1.0");
     EXPECT_EQ(loaded.desktop_layout.main_window_state_base64, "AAAAAQAAAA==");
     EXPECT_EQ(loaded.desktop_layout.main_window_geometry_base64, "AAAAAQAAAABkAAABAA==");
+    EXPECT_EQ(loaded.desktop_layout.main_window_split_layout,
+              R"({"active":7,"root":{"leaf":true,"figure":7}})");
+    EXPECT_EQ(loaded.desktop_layout.main_window_figure_ids, (std::vector<FigureId>{7, 8}));
     EXPECT_EQ(loaded.desktop_layout.provider_layout, "{}");
 
     // Detached windows
     ASSERT_EQ(loaded.desktop_layout.windows.size(), 2u);
     EXPECT_EQ(loaded.desktop_layout.windows[0].title, "Detached Figure 1");
     EXPECT_EQ(loaded.desktop_layout.windows[0].state_base64, "AAAAAQAAABg=");
+    EXPECT_EQ(loaded.desktop_layout.windows[0].figure_ids, (std::vector<FigureId>{9}));
+    EXPECT_EQ(loaded.desktop_layout.windows[0].split_layout,
+              R"({"active":9,"root":{"leaf":true,"figure":9}})");
     EXPECT_EQ(loaded.desktop_layout.windows[1].title, "Detached Figure 2");
     EXPECT_EQ(loaded.desktop_layout.windows[1].geometry_base64, "AAAAAQAAABwAAAABAA==");
 
@@ -151,8 +163,8 @@ TEST(WorkspaceV5, V4BackwardCompat)
 
     // Create a v4 workspace (no desktop_layout)
     WorkspaceData v4data;
-    v4data.version             = 4;
-    v4data.theme_name          = "dark";
+    v4data.version               = 4;
+    v4data.theme_name            = "dark";
     v4data.mode_transition_state = "idle";
 
     WorkspaceData::FigureState fig;
@@ -209,8 +221,8 @@ TEST(WorkspaceV5, MultiWindowRoundTrip)
     fig.title = "Main";
     data.figures.push_back(fig);
 
-    data.desktop_layout.provider = "native";
-    data.desktop_layout.main_window_state_base64 = "state_main";
+    data.desktop_layout.provider                    = "native";
+    data.desktop_layout.main_window_state_base64    = "state_main";
     data.desktop_layout.main_window_geometry_base64 = "geom_main";
 
     // Simulate 5 detached windows
@@ -253,10 +265,10 @@ TEST(WorkspaceV5, ProviderPreserved)
     std::filesystem::remove(path);
 
     WorkspaceData data;
-    data.version                          = 5;
-    data.desktop_layout.provider          = "kddockwidgets";
-    data.desktop_layout.provider_version  = "2.1.0";
-    data.desktop_layout.provider_layout   = "{\"layout\":\"complex\"}";
+    data.version                         = 5;
+    data.desktop_layout.provider         = "kddockwidgets";
+    data.desktop_layout.provider_version = "2.1.0";
+    data.desktop_layout.provider_layout  = "{\"layout\":\"complex\"}";
 
     WorkspaceData::FigureState fig;
     fig.title = "Test";
@@ -272,4 +284,125 @@ TEST(WorkspaceV5, ProviderPreserved)
     EXPECT_EQ(loaded.desktop_layout.provider_layout, "{\"layout\":\"complex\"}");
 
     std::filesystem::remove(path);
+}
+
+TEST(WorkspaceV5, PerFigureTimelinePayloadRoundTrips)
+{
+    WorkspaceData data;
+    data.figures.resize(2);
+    data.figures[0].figure_id = 11;
+    data.figures[0].timeline_json =
+        R"({"duration":4,"tracks":[{"id":1,"name":"X","keyframes":[{"t":1}]}]})";
+    data.figures[1].figure_id = 22;
+    data.figures[1].timeline_json =
+        R"({"duration":8,"tracks":[{"id":2,"name":"Y","keyframes":[{"t":2}]}]})";
+
+    const auto path = std::filesystem::temp_directory_path() / "spectra_timeline_workspace.spectra";
+    ASSERT_TRUE(Workspace::save(path.string(), data));
+    WorkspaceData restored;
+    ASSERT_TRUE(Workspace::load(path.string(), restored));
+    std::filesystem::remove(path);
+    ASSERT_EQ(restored.figures.size(), 2u);
+    EXPECT_EQ(restored.figures[0].timeline_json, data.figures[0].timeline_json);
+    EXPECT_EQ(restored.figures[1].timeline_json, data.figures[1].timeline_json);
+}
+
+TEST(WorkspaceV5, PopulatedFigureSnapshotSurvivesSaveLoadAndRecreation)
+{
+    Figure source({777, 555});
+    source.set_tab_title("Recovered data");
+    auto&                    axes = source.subplot(1, 1, 1);
+    const std::vector<float> x    = {1.0f, 2.0f, 3.0f};
+    const std::vector<float> y    = {9.0f, 7.0f, 5.0f};
+    axes.scatter(x, y).label("persisted samples").size(11.0f);
+
+    auto data = Workspace::capture({&source}, 0, "night", true, 320.0f, false);
+    ASSERT_EQ(data.figures.size(), 1u);
+    data.figures[0].figure_id = 42;
+    ASSERT_FALSE(data.figures[0].snapshot_base64.empty());
+
+    auto path = std::filesystem::temp_directory_path() / "spectra_populated_workspace.spectra";
+    ASSERT_TRUE(Workspace::save(path.string(), data));
+    WorkspaceData loaded;
+    ASSERT_TRUE(Workspace::load(path.string(), loaded));
+    std::filesystem::remove(path);
+
+    ASSERT_EQ(loaded.figures.size(), 1u);
+    EXPECT_EQ(loaded.figures[0].figure_id, 42u);
+    std::vector<std::unique_ptr<Figure>> restored;
+    ASSERT_TRUE(Workspace::restore_figures(loaded, restored));
+    ASSERT_EQ(restored.size(), 1u);
+    EXPECT_EQ(restored[0]->tab_title(), "Recovered data");
+    EXPECT_EQ(restored[0]->width(), 777u);
+    ASSERT_EQ(restored[0]->axes().size(), 1u);
+    ASSERT_EQ(restored[0]->axes()[0]->series().size(), 1u);
+    auto* scatter = dynamic_cast<ScatterSeries*>(restored[0]->axes()[0]->series()[0].get());
+    ASSERT_NE(scatter, nullptr);
+    EXPECT_EQ(std::vector<float>(scatter->x_data().begin(), scatter->x_data().end()), x);
+    EXPECT_EQ(std::vector<float>(scatter->y_data().begin(), scatter->y_data().end()), y);
+    EXPECT_FLOAT_EQ(scatter->size(), 11.0f);
+}
+
+TEST(WorkspaceV5, CorruptSnapshotDoesNotPartiallyReplaceFigures)
+{
+    WorkspaceData              data;
+    WorkspaceData::FigureState state;
+    state.snapshot_base64 = "not-base64";
+    data.figures.push_back(state);
+
+    std::vector<std::unique_ptr<Figure>> figures;
+    figures.push_back(std::make_unique<Figure>());
+    std::vector<OverlaySnapshot> overlays(1);
+    overlays[0].crosshair_enabled = true;
+    auto* original                = figures[0].get();
+    EXPECT_FALSE(Workspace::restore_figures(data, figures, &overlays));
+    ASSERT_EQ(figures.size(), 1u);
+    EXPECT_EQ(figures[0].get(), original);
+    ASSERT_EQ(overlays.size(), 1u);
+    EXPECT_TRUE(overlays[0].crosshair_enabled);
+}
+
+TEST(WorkspaceV5, PerFigureOverlaysSurviveSnapshotRecreation)
+{
+    Figure                   first;
+    const std::vector<float> x        = {0.0f, 1.0f};
+    const std::vector<float> first_y  = {2.0f, 3.0f};
+    const std::vector<float> second_y = {4.0f, 5.0f};
+    first.subplot(1, 1, 1).plot(x, first_y).label("first line");
+    Figure second;
+    second.subplot(1, 1, 1).plot(x, second_y).label("second line");
+
+    std::vector<OverlaySnapshot> overlays(2);
+    overlays[0].crosshair_enabled = true;
+    overlays[0].tooltip_enabled   = false;
+    overlays[0].tool_mode         = 3;
+    overlays[0].markers.push_back({0.0f, 2.0f, "first line", 0, 0});
+    overlays[0].annotations.push_back(
+        {1.0f, 3.0f, "remember me", {0.2f, 0.4f, 0.6f, 1.0f}, 7.0f, -12.0f, 0});
+    overlays[0].region      = {true, 0.1f, 0.9f, 2.1f, 2.9f, 0};
+    overlays[0].measurement = {true, 0.0, 2.0, 1.0, 3.0, 0};
+
+    const auto data =
+        Workspace::capture({&first, &second}, 0, "night", true, 320.0f, false, &overlays);
+    std::vector<std::unique_ptr<Figure>> restored;
+    std::vector<OverlaySnapshot>         restored_overlays;
+    ASSERT_TRUE(Workspace::restore_figures(data, restored, &restored_overlays));
+    ASSERT_EQ(restored.size(), 2u);
+    ASSERT_EQ(restored_overlays.size(), 2u);
+    EXPECT_TRUE(restored_overlays[0].crosshair_enabled);
+    EXPECT_FALSE(restored_overlays[0].tooltip_enabled);
+    EXPECT_EQ(restored_overlays[0].tool_mode, 3);
+    ASSERT_EQ(restored_overlays[0].markers.size(), 1u);
+    EXPECT_EQ(restored_overlays[0].markers[0].series_label, "first line");
+    ASSERT_EQ(restored_overlays[0].annotations.size(), 1u);
+    EXPECT_EQ(restored_overlays[0].annotations[0].text, "remember me");
+    EXPECT_FLOAT_EQ(restored_overlays[0].annotations[0].offset_x, 7.0f);
+    EXPECT_TRUE(restored_overlays[0].region.valid);
+    EXPECT_FLOAT_EQ(restored_overlays[0].region.x_min, 0.1f);
+    EXPECT_FLOAT_EQ(restored_overlays[0].region.y_max, 2.9f);
+    EXPECT_TRUE(restored_overlays[0].measurement.valid);
+    EXPECT_DOUBLE_EQ(restored_overlays[0].measurement.start_data_x, 0.0);
+    EXPECT_DOUBLE_EQ(restored_overlays[0].measurement.end_data_y, 3.0);
+    EXPECT_TRUE(restored_overlays[1].markers.empty());
+    EXPECT_TRUE(restored_overlays[1].annotations.empty());
 }

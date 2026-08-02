@@ -248,6 +248,11 @@ struct EditableSeriesData
 {
     std::vector<float> x;
     std::vector<float> y;
+    std::vector<float> z;
+    bool               has_z    = false;
+    double             x_offset = 0.0;
+
+    bool is_3d() const { return has_z; }
 };
 
 inline bool capture_editable_series_data(const Series& series, EditableSeriesData& data)
@@ -256,12 +261,32 @@ inline bool capture_editable_series_data(const Series& series, EditableSeriesDat
     {
         data.x.assign(line->x_data().begin(), line->x_data().end());
         data.y.assign(line->y_data().begin(), line->y_data().end());
+        data.x_offset = line->x_offset();
         return true;
     }
     if (const auto* scatter = dynamic_cast<const ScatterSeries*>(&series))
     {
         data.x.assign(scatter->x_data().begin(), scatter->x_data().end());
         data.y.assign(scatter->y_data().begin(), scatter->y_data().end());
+        data.x_offset = scatter->x_offset();
+        return true;
+    }
+    if (const auto* line = dynamic_cast<const LineSeries3D*>(&series))
+    {
+        data.x.assign(line->x_data().begin(), line->x_data().end());
+        data.y.assign(line->y_data().begin(), line->y_data().end());
+        data.z.assign(line->z_data().begin(), line->z_data().end());
+        data.has_z    = true;
+        data.x_offset = line->x_offset();
+        return true;
+    }
+    if (const auto* scatter = dynamic_cast<const ScatterSeries3D*>(&series))
+    {
+        data.x.assign(scatter->x_data().begin(), scatter->x_data().end());
+        data.y.assign(scatter->y_data().begin(), scatter->y_data().end());
+        data.z.assign(scatter->z_data().begin(), scatter->z_data().end());
+        data.has_z    = true;
+        data.x_offset = scatter->x_offset();
         return true;
     }
     return false;
@@ -271,12 +296,26 @@ inline bool restore_editable_series_data(Series& series, const EditableSeriesDat
 {
     if (auto* line = dynamic_cast<LineSeries*>(&series))
     {
-        line->set_x(data.x).set_y(data.y);
+        line->set_x(data.x).set_y(data.y).x_offset(data.x_offset);
         return true;
     }
     if (auto* scatter = dynamic_cast<ScatterSeries*>(&series))
     {
-        scatter->set_x(data.x).set_y(data.y);
+        scatter->set_x(data.x).set_y(data.y).x_offset(data.x_offset);
+        return true;
+    }
+    if (auto* line = dynamic_cast<LineSeries3D*>(&series))
+    {
+        if (!data.has_z)
+            return false;
+        line->set_x(data.x).set_y(data.y).set_z(data.z).x_offset(data.x_offset);
+        return true;
+    }
+    if (auto* scatter = dynamic_cast<ScatterSeries3D*>(&series))
+    {
+        if (!data.has_z)
+            return false;
+        scatter->set_x(data.x).set_y(data.y).set_z(data.z).x_offset(data.x_offset);
         return true;
     }
     return false;
@@ -423,7 +462,8 @@ inline bool undoable_set_series_data(UndoManager*          mgr,
 
     EditableSeriesData before;
     if (!capture_editable_series_data(*series, before)
-        || (before.x == after.x && before.y == after.y))
+        || (before.x == after.x && before.y == after.y && before.z == after.z
+            && before.has_z == after.has_z && before.x_offset == after.x_offset))
         return false;
 
     if (!restore_editable_series_data(*series, after))

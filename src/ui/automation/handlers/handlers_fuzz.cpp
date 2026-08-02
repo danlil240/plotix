@@ -2,6 +2,7 @@
 // Mirrors the fuzz action table in tests/qa/qa_agent.cpp.
 
 #include "../automation_dispatch.hpp"
+#include "../automation_fuzz_catalog.hpp"
 #include "../automation_handler.hpp"
 #include "../automation_imgui_input.hpp"
 #include "../automation_json.hpp"
@@ -40,108 +41,16 @@ namespace spectra
 namespace
 {
 
-std::mt19937  g_fuzz_rng{std::random_device{}()};
-uint64_t      g_fuzz_step_index = 0;
-uint64_t      g_fuzz_base_seed  = 0;
-bool          g_fuzz_seed_set   = false;
+std::mt19937 g_fuzz_rng{std::random_device{}()};
+uint64_t     g_fuzz_step_index = 0;
+uint64_t     g_fuzz_base_seed  = 0;
+bool         g_fuzz_seed_set   = false;
 
-enum class FuzzAction
-{
-    ExecuteCommand,
-    MouseClick,
-    MouseDrag,
-    MouseScroll,
-    KeyPress,
-    CreateFigure,
-    CloseFigure,
-    SwitchTab,
-    AddSeries,
-    UpdateData,
-    LargeDataset,
-    SplitDock,
-    WaitFrames,
-    WindowResize,
-    WindowDrag,
-    TabDetach,
-};
-
-struct ActionWeight
-{
-    FuzzAction action;
-    int        weight;
-};
-
-constexpr ActionWeight kFuzzWeights[] = {
-    {FuzzAction::ExecuteCommand, 15},
-    {FuzzAction::MouseClick, 15},
-    {FuzzAction::MouseDrag, 10},
-    {FuzzAction::MouseScroll, 10},
-    {FuzzAction::KeyPress, 10},
-    {FuzzAction::CreateFigure, 5},
-    {FuzzAction::CloseFigure, 3},
-    {FuzzAction::SwitchTab, 8},
-    {FuzzAction::AddSeries, 8},
-    {FuzzAction::UpdateData, 5},
-    {FuzzAction::LargeDataset, 1},
-    {FuzzAction::SplitDock, 3},
-    {FuzzAction::WaitFrames, 7},
-    {FuzzAction::WindowResize, 3},
-    {FuzzAction::WindowDrag, 3},
-    {FuzzAction::TabDetach, 2},
-};
-
-const char* fuzz_action_name(FuzzAction action)
-{
-    switch (action)
-    {
-        case FuzzAction::ExecuteCommand:
-            return "ExecuteCommand";
-        case FuzzAction::MouseClick:
-            return "MouseClick";
-        case FuzzAction::MouseDrag:
-            return "MouseDrag";
-        case FuzzAction::MouseScroll:
-            return "MouseScroll";
-        case FuzzAction::KeyPress:
-            return "KeyPress";
-        case FuzzAction::CreateFigure:
-            return "CreateFigure";
-        case FuzzAction::CloseFigure:
-            return "CloseFigure";
-        case FuzzAction::SwitchTab:
-            return "SwitchTab";
-        case FuzzAction::AddSeries:
-            return "AddSeries";
-        case FuzzAction::UpdateData:
-            return "UpdateData";
-        case FuzzAction::LargeDataset:
-            return "LargeDataset";
-        case FuzzAction::SplitDock:
-            return "SplitDock";
-        case FuzzAction::WaitFrames:
-            return "WaitFrames";
-        case FuzzAction::WindowResize:
-            return "WindowResize";
-        case FuzzAction::WindowDrag:
-            return "WindowDrag";
-        case FuzzAction::TabDetach:
-            return "TabDetach";
-    }
-    return "Unknown";
-}
-
-bool parse_fuzz_action(const std::string& name, FuzzAction& out)
-{
-    for (const auto& entry : kFuzzWeights)
-    {
-        if (name == fuzz_action_name(entry.action))
-        {
-            out = entry.action;
-            return true;
-        }
-    }
-    return false;
-}
+using automation::FuzzAction;
+using automation::fuzz_action_name;
+using automation::kFuzzActionWeights;
+using automation::parse_fuzz_action;
+using automation::pick_weighted_fuzz_action;
 
 bool is_fuzz_denied_command(const std::string& id)
 {
@@ -162,40 +71,9 @@ bool is_fuzz_denied_command(const std::string& id)
         if (id == denied)
             return true;
     }
-    if (native_dialogs_enabled()
-        && (id == "file.save_workspace" || id == "file.load_workspace"))
+    if (native_dialogs_enabled() && (id == "file.save_workspace" || id == "file.load_workspace"))
         return true;
     return false;
-}
-
-FuzzAction pick_weighted_action(std::mt19937& rng)
-{
-    const bool skip_drag = std::getenv("SPECTRA_FUZZ_SKIP_DRAG") != nullptr;
-
-    int total = 0;
-    for (const auto& w : kFuzzWeights)
-    {
-        if (skip_drag
-            && (w.action == FuzzAction::TabDetach || w.action == FuzzAction::WindowDrag))
-            continue;
-        total += w.weight;
-    }
-    if (total <= 0)
-        return FuzzAction::WaitFrames;
-
-    std::uniform_int_distribution<int> dist(0, total - 1);
-    const int                          roll = dist(rng);
-    int                                cumulative = 0;
-    for (const auto& w : kFuzzWeights)
-    {
-        if (skip_drag
-            && (w.action == FuzzAction::TabDetach || w.action == FuzzAction::WindowDrag))
-            continue;
-        cumulative += w.weight;
-        if (roll < cumulative)
-            return w.action;
-    }
-    return FuzzAction::WaitFrames;
 }
 
 void mark_dirty(App* app, const char* reason)
@@ -240,8 +118,8 @@ Figure& create_random_figure(App* app, std::mt19937& rng)
     return fig;
 }
 
-std::string run_fuzz_action(FuzzAction action,
-                            App*        app,
+std::string run_fuzz_action(FuzzAction       action,
+                            App*             app,
                             WindowUIContext* ui_ctx,
                             std::mt19937&    rng,
                             int&             pump_frames)
@@ -265,7 +143,7 @@ std::string run_fuzz_action(FuzzAction action,
             if (cmds.empty())
                 break;
             std::uniform_int_distribution<size_t> dist(0, cmds.size() - 1);
-            const std::string& id = cmds[dist(rng)];
+            const std::string&                    id = cmds[dist(rng)];
             if (!is_fuzz_denied_command(id))
             {
                 ui_ctx->cmd_registry.execute(id);
@@ -292,10 +170,10 @@ std::string run_fuzz_action(FuzzAction action,
             get_window_dims(app, w, h);
             std::uniform_real_distribution<double> px(0, w);
             std::uniform_real_distribution<double> py(0, h);
-            std::uniform_int_distribution<int>       btn(0, 1);
-            const double                             mx = px(rng);
-            const double                             my = py(rng);
-            const int                                b  = btn(rng);
+            std::uniform_int_distribution<int>     btn(0, 1);
+            const double                           mx = px(rng);
+            const double                           my = py(rng);
+            const int                              b  = btn(rng);
 #ifdef SPECTRA_USE_IMGUI
             automation::inject_mouse_click(ui_ctx, mx, my, b);
 #endif
@@ -323,10 +201,10 @@ std::string run_fuzz_action(FuzzAction action,
             get_window_dims(app, w, h);
             std::uniform_real_distribution<double> px(0, w);
             std::uniform_real_distribution<double> py(0, h);
-            const double                             x1 = px(rng);
-            const double                             y1 = py(rng);
-            const double                             x2 = px(rng);
-            const double                             y2 = py(rng);
+            const double                           x1 = px(rng);
+            const double                           y1 = py(rng);
+            const double                           x2 = px(rng);
+            const double                           y2 = py(rng);
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
             ui_ctx->input_handler.on_mouse_button(0, 1, 0, x1, y1);
             for (int s = 1; s <= 5; ++s)
@@ -353,9 +231,9 @@ std::string run_fuzz_action(FuzzAction action,
             std::uniform_real_distribution<double> px(0, w);
             std::uniform_real_distribution<double> py(0, h);
             std::uniform_real_distribution<double> scroll(-3.0, 3.0);
-            const double                             x  = px(rng);
-            const double                             y  = py(rng);
-            const double                             dy = scroll(rng);
+            const double                           x  = px(rng);
+            const double                           y  = py(rng);
+            const double                           dy = scroll(rng);
 #ifdef SPECTRA_USE_IMGUI
             automation::inject_scroll(ui_ctx, x, y, 0.0, dy);
 #endif
@@ -456,7 +334,7 @@ std::string run_fuzz_action(FuzzAction action,
             if (ids.empty())
                 break;
             std::uniform_int_distribution<size_t> fig_dist(0, ids.size() - 1);
-            Figure*                               fig = app->figure_registry().get(ids[fig_dist(rng)]);
+            Figure* fig = app->figure_registry().get(ids[fig_dist(rng)]);
             if (!fig || fig->axes().empty())
                 break;
 
@@ -521,9 +399,9 @@ std::string run_fuzz_action(FuzzAction action,
                 break;
 
             std::uniform_int_distribution<int> n_dist(100000, 500000);
-            const int                            n = n_dist(rng);
-            std::vector<float>                   x(static_cast<size_t>(n));
-            std::vector<float>                   y(static_cast<size_t>(n));
+            const int                          n = n_dist(rng);
+            std::vector<float>                 x(static_cast<size_t>(n));
+            std::vector<float>                 y(static_cast<size_t>(n));
             for (int i = 0; i < n; ++i)
             {
                 x[static_cast<size_t>(i)] = static_cast<float>(i);
@@ -541,7 +419,7 @@ std::string run_fuzz_action(FuzzAction action,
             if (!ui_ctx)
                 break;
             std::uniform_int_distribution<int> dir(0, 1);
-            const char*                        cmd = dir(rng) == 0 ? "view.split_right" : "view.split_down";
+            const char* cmd = dir(rng) == 0 ? "view.split_right" : "view.split_down";
             ui_ctx->cmd_registry.execute(cmd);
             mark_dirty(app, "fuzz_split_dock");
             details << R"("command_id":")" << cmd << '"';
@@ -676,7 +554,7 @@ std::vector<AutomationHandlerEntry> make_fuzz_handlers()
                 g_fuzz_step_index = 0;
             }
 
-            FuzzAction action = pick_weighted_action(g_fuzz_rng);
+            FuzzAction        action = pick_weighted_fuzz_action(g_fuzz_rng);
             const std::string forced = json_get_string(req.params_json, "action");
             if (!forced.empty())
             {
@@ -695,9 +573,10 @@ std::vector<AutomationHandlerEntry> make_fuzz_handlers()
             ++g_fuzz_step_index;
 
             std::ostringstream oss;
-            oss << "{\"action\":\"" << fuzz_action_name(action) << "\",\"step\":" << g_fuzz_step_index
-                << ",\"seed\":" << (g_fuzz_seed_set ? g_fuzz_base_seed : 0) << ",\"details\":"
-                << details << ",\"pump_frames\":" << pump_frames << "}";
+            oss << "{\"action\":\"" << fuzz_action_name(action)
+                << "\",\"step\":" << g_fuzz_step_index
+                << ",\"seed\":" << (g_fuzz_seed_set ? g_fuzz_base_seed : 0)
+                << ",\"details\":" << details << ",\"pump_frames\":" << pump_frames << "}";
             req.response_json = json_ok(req.id, oss.str());
         }));
 
@@ -720,10 +599,10 @@ std::vector<AutomationHandlerEntry> make_fuzz_handlers()
                 g_fuzz_rng      = std::mt19937(std::random_device{}());
                 g_fuzz_seed_set = false;
             }
-            req.response_json = json_ok(req.id,
-                                        "{\"reset\":true,\"seed\":" + std::to_string(g_fuzz_base_seed)
-                                            + ",\"seed_explicit\":"
-                                            + (g_fuzz_seed_set ? "true" : "false") + "}");
+            req.response_json =
+                json_ok(req.id,
+                        "{\"reset\":true,\"seed\":" + std::to_string(g_fuzz_base_seed)
+                            + ",\"seed_explicit\":" + (g_fuzz_seed_set ? "true" : "false") + "}");
         }));
 
     entries.push_back(automation_handler(
@@ -735,12 +614,12 @@ std::vector<AutomationHandlerEntry> make_fuzz_handlers()
         {
             std::ostringstream oss;
             oss << "[";
-            for (size_t i = 0; i < sizeof(kFuzzWeights) / sizeof(kFuzzWeights[0]); ++i)
+            for (size_t i = 0; i < kFuzzActionWeights.size(); ++i)
             {
                 if (i > 0)
                     oss << ",";
-                oss << R"({"action":")" << fuzz_action_name(kFuzzWeights[i].action)
-                    << R"(","weight":)" << kFuzzWeights[i].weight << "}";
+                oss << R"({"action":")" << fuzz_action_name(kFuzzActionWeights[i].action)
+                    << R"(","weight":)" << kFuzzActionWeights[i].weight << "}";
             }
             oss << "]";
             req.response_json = json_ok(req.id, "{\"actions\":" + oss.str() + "}");

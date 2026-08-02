@@ -7,6 +7,8 @@
 #include <spectra/series.hpp>
 
 #include "ui/overlay/axes3d_pick.hpp"
+#include "ui/overlay/data_interaction.hpp"
+#include "ui/theme/theme.hpp"
 #include "data/sorted_x_query.hpp"
 
 // DataInteraction and its components are ImGui-guarded.
@@ -15,6 +17,65 @@
 // data structures directly.
 
 using namespace spectra;
+
+TEST(DataInteractionSnapshot, RestoresMarkerAndAnnotationAxesOwnership)
+{
+    ui::ThemeManager theme;
+    ui::ThemeManager::set_current(&theme);
+    Figure                   figure;
+    auto&                    first  = figure.subplot(1, 2, 1);
+    auto&                    second = figure.subplot(1, 2, 2);
+    const std::vector<float> x      = {0.0f, 1.0f};
+    const std::vector<float> y      = {2.0f, 3.0f};
+    second.plot(x, y).label("second axes");
+
+    OverlaySnapshot snapshot;
+    snapshot.crosshair_enabled = true;
+    snapshot.tooltip_enabled   = false;
+    snapshot.markers.push_back({1.0f, 3.0f, "second axes", 1, 1});
+    snapshot.annotations.push_back(
+        {0.5f, 2.5f, "on second", {0.3f, 0.4f, 0.5f, 1.0f}, 4.0f, -8.0f, 1});
+    snapshot.region = {true, 0.25f, 0.75f, 2.25f, 2.75f, 1};
+
+    DataInteraction interaction;
+    interaction.set_theme_manager(&theme);
+    interaction.restore_overlay_snapshot(snapshot, figure);
+    const OverlaySnapshot restored = interaction.capture_overlay_snapshot(figure);
+
+    ASSERT_EQ(restored.markers.size(), 1u);
+    EXPECT_EQ(restored.markers[0].axes_index, 1u);
+    EXPECT_EQ(restored.markers[0].series_label, "second axes");
+    ASSERT_EQ(restored.annotations.size(), 1u);
+    EXPECT_EQ(restored.annotations[0].axes_index, 1u);
+    EXPECT_EQ(restored.annotations[0].text, "on second");
+    EXPECT_TRUE(restored.region.valid);
+    EXPECT_EQ(restored.region.axes_index, 1u);
+    EXPECT_FLOAT_EQ(restored.region.x_min, 0.25f);
+    EXPECT_FLOAT_EQ(restored.region.y_max, 2.75f);
+    EXPECT_TRUE(restored.crosshair_enabled);
+    EXPECT_FALSE(restored.tooltip_enabled);
+    ui::ThemeManager::set_current(nullptr);
+    (void)first;
+}
+
+TEST(InputHandlerSnapshot, RestoresCompletedMeasurementWithoutDragging)
+{
+    Figure       figure;
+    auto&        axes = figure.subplot(1, 1, 1);
+    InputHandler input;
+    input.set_figure(&figure);
+    input.set_tool_mode(ToolMode::Measure);
+    input.restore_measure_result(&axes, 1.25, 2.5, 4.75, 8.0);
+
+    EXPECT_EQ(input.tool_mode(), ToolMode::Measure);
+    EXPECT_TRUE(input.has_measure_result());
+    EXPECT_FALSE(input.is_measure_dragging());
+    EXPECT_EQ(input.measure_axes(), &axes);
+    EXPECT_DOUBLE_EQ(input.measure_start_data_x(), 1.25);
+    EXPECT_DOUBLE_EQ(input.measure_start_data_y(), 2.5);
+    EXPECT_DOUBLE_EQ(input.measure_end_data_x(), 4.75);
+    EXPECT_DOUBLE_EQ(input.measure_end_data_y(), 8.0);
+}
 
 TEST(SortedXQuery, NarrowsMillionPointInteractionToVisibleCandidates)
 {

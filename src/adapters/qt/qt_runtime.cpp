@@ -1,6 +1,7 @@
 #include "qt_runtime.hpp"
 
 #include "qt_surface_host.hpp"
+#include "spectra_vulkan_window.hpp"
 
 #include "render/renderer.hpp"
 #include "render/vulkan/vk_backend.hpp"
@@ -128,6 +129,10 @@ bool QtRuntime::init()
 
     // Register the Qt-owned ThemeManager as the active instance.
     ui::ThemeManager::set_current(&theme_mgr_);
+
+    // Make sure the default theme map (night/dark/light) exists before trying
+    // to select one.
+    theme_mgr_.ensure_initialized();
 
     // Apply dark theme by default
     theme_mgr_.set_theme("night");
@@ -298,6 +303,60 @@ bool QtRuntime::attach_window(QWindow* window, uint32_t width, uint32_t height)
             state->imgui_ui->set_input_handler(state->input_handler);
             state->input_handler->set_data_interaction(state->data_interaction.get());
         }
+
+        auto* imgui_raw      = state->imgui_ui.get();
+        auto  sync_selection = [window, imgui_raw]()
+        {
+            auto* canvas = dynamic_cast<SpectraVulkanWindow*>(window);
+            if (!canvas || !imgui_raw)
+                return;
+            std::vector<SpectraVulkanWindow::SeriesSelection> selection;
+            const auto& context = imgui_raw->selection_context();
+            selection.reserve(context.selected_series.size());
+            for (const auto& entry : context.selected_series)
+            {
+                selection.push_back(
+                    {entry.axes_base ? entry.axes_base : static_cast<AxesBase*>(entry.axes),
+                     entry.axes,
+                     entry.series,
+                     entry.axes_index,
+                     entry.series_index});
+            }
+            canvas->setSeriesSelection(std::move(selection));
+        };
+        state->data_interaction->set_on_series_selected(
+            [imgui_raw, sync_selection](Figure* figure,
+                                        Axes*   axes,
+                                        int     axes_index,
+                                        Series* series,
+                                        int     series_index)
+            {
+                imgui_raw->select_series(figure, axes, axes_index, series, series_index);
+                sync_selection();
+            });
+        state->data_interaction->set_on_series_right_click_selected(
+            [imgui_raw, sync_selection](Figure* figure,
+                                        Axes*   axes,
+                                        int     axes_index,
+                                        Series* series,
+                                        int     series_index)
+            {
+                imgui_raw->select_series_no_toggle(figure, axes, axes_index, series, series_index);
+                sync_selection();
+            });
+        state->data_interaction->set_on_series_deselected(
+            [imgui_raw, sync_selection]()
+            {
+                imgui_raw->deselect_series();
+                sync_selection();
+            });
+        state->data_interaction->set_on_rect_series_selected(
+            [imgui_raw,
+             sync_selection](const std::vector<DataInteraction::RectSelectedEntry>& entries)
+            {
+                imgui_raw->select_series_in_rect(entries);
+                sync_selection();
+            });
 
         // Qt owns the application shell — suppress all legacy ImGui chrome.
         // Only plot overlays (legends, tooltips, data interaction) remain.
@@ -732,6 +791,11 @@ void QtRuntime::render_figure(QWindow* window, Figure& figure)
         }
     }
 
+    if (state->selected_series.empty())
+        renderer_->clear_selected_series();
+    else
+        renderer_->set_selected_series(state->selected_series);
+
     // render_figure_content() already calls render_plot_text() and
     // render_plot_geometry() internally — do NOT call them again here.
     renderer_->begin_render_pass();
@@ -826,6 +890,178 @@ void QtRuntime::set_input_handler(QWindow* window, InputHandler* input)
 void QtRuntime::set_input_handler(InputHandler* input)
 {
     set_input_handler(primary_window_, input);
+}
+
+bool QtRuntime::set_crosshair(QWindow* window, bool enabled)
+{
+#ifdef SPECTRA_USE_IMGUI
+    auto* state = find_window_state(window);
+    if (!state || !state->data_interaction)
+        return false;
+    state->data_interaction->set_crosshair(enabled);
+    return true;
+#else
+    (void)window;
+    (void)enabled;
+    return false;
+#endif
+}
+
+bool QtRuntime::capture_overlay_snapshot(QWindow*         window,
+                                         const Figure&    figure,
+                                         OverlaySnapshot& snapshot) const
+{
+#ifdef SPECTRA_USE_IMGUI
+    const auto* state = find_window_state(window);
+    if (!state || !state->data_interaction)
+        return false;
+    snapshot = state->data_interaction->capture_overlay_snapshot(figure);
+    if (state->input_handler)
+    {
+        snapshot.tool_mode = static_cast<uint8_t>(state->input_handler->tool_mode());
+        if (state->input_handler->has_measure_result() && state->input_handler->measure_axes())
+        {
+            snapshot.measurement.valid        = true;
+            snapshot.measurement.start_data_x = state->input_handler->measure_start_data_x();
+            snapshot.measurement.start_data_y = state->input_handler->measure_start_data_y();
+            snapshot.measurement.end_data_x   = state->input_handler->measure_end_data_x();
+            snapshot.measurement.end_data_y   = state->input_handler->measure_end_data_y();
+            for (size_t i = 0; i < figure.axes().size(); ++i)
+            {
+                if (figure.axes()[i].get() == state->input_handler->measure_axes())
+                {
+                    snapshot.measurement.axes_index = i;
+                    break;
+                }
+            }
+        }
+    }
+    return true;
+#else
+    (void)window;
+    (void)figure;
+    (void)snapshot;
+    return false;
+#endif
+}
+
+bool QtRuntime::restore_overlay_snapshot(QWindow*               window,
+                                         Figure&                figure,
+                                         const OverlaySnapshot& snapshot)
+{
+#ifdef SPECTRA_USE_IMGUI
+    auto* state = find_window_state(window);
+    if (!state || !state->data_interaction)
+        return false;
+    if (state->input_handler && state->input_handler->tool_mode() != ToolMode::Pan)
+        state->input_handler->set_tool_mode(ToolMode::Pan);
+    state->data_interaction->restore_overlay_snapshot(snapshot, figure);
+    if (state->input_handler)
+    {
+        const auto max_tool = static_cast<uint8_t>(ToolMode::ROI);
+        const auto tool = snapshot.tool_mode <= max_tool ? static_cast<ToolMode>(snapshot.tool_mode)
+                                                         : ToolMode::Pan;
+        state->input_handler->set_tool_mode(tool);
+        Axes* measure_axes = nullptr;
+        if (snapshot.measurement.valid
+            && snapshot.measurement.axes_index < figure.axes_mut().size())
+        {
+            measure_axes = figure.axes_mut()[snapshot.measurement.axes_index].get();
+        }
+        state->input_handler->restore_measure_result(measure_axes,
+                                                     snapshot.measurement.start_data_x,
+                                                     snapshot.measurement.start_data_y,
+                                                     snapshot.measurement.end_data_x,
+                                                     snapshot.measurement.end_data_y);
+    }
+    return true;
+#else
+    (void)window;
+    (void)figure;
+    (void)snapshot;
+    return false;
+#endif
+}
+
+size_t QtRuntime::marker_count(QWindow* window) const
+{
+#ifdef SPECTRA_USE_IMGUI
+    const auto* state = find_window_state(window);
+    return state && state->data_interaction ? state->data_interaction->markers().size() : 0;
+#else
+    (void)window;
+    return 0;
+#endif
+}
+
+bool QtRuntime::clear_markers(QWindow* window)
+{
+#ifdef SPECTRA_USE_IMGUI
+    auto* state = find_window_state(window);
+    if (!state || !state->data_interaction || state->data_interaction->markers().empty())
+        return false;
+    state->data_interaction->clear_markers();
+    return true;
+#else
+    (void)window;
+    return false;
+#endif
+}
+
+void QtRuntime::set_series_selection(QWindow*                                   window,
+                                     const std::vector<QtSeriesSelectionEntry>& selected)
+{
+    auto* state = find_window_state(window);
+    if (!state)
+        return;
+
+    state->selected_series.clear();
+    state->selected_series.reserve(selected.size());
+    for (const auto& entry : selected)
+    {
+        if (entry.series)
+            state->selected_series.push_back(entry.series);
+    }
+
+#ifdef SPECTRA_USE_IMGUI
+    if (state->imgui_ui)
+    {
+        auto& context = state->imgui_ui->selection_context();
+        context.clear();
+        for (const auto& entry : selected)
+        {
+            if (!entry.figure || !entry.owner || !entry.series)
+                continue;
+            context.add_series(entry.figure,
+                               entry.axes,
+                               entry.owner,
+                               entry.axes_index,
+                               entry.series,
+                               entry.series_index);
+        }
+        if (!context.selected_series.empty())
+            state->imgui_ui->set_inspector_section_series();
+    }
+#endif
+}
+
+void QtRuntime::notify_series_removed(QWindow* window, const Series* series)
+{
+    if (!series)
+        return;
+    if (renderer_)
+        renderer_->notify_series_removed(series);
+
+    auto* state = find_window_state(window);
+    if (!state)
+        return;
+    std::erase(state->selected_series, series);
+#ifdef SPECTRA_USE_IMGUI
+    if (state->data_interaction)
+        state->data_interaction->notify_series_removed(series);
+    if (state->imgui_ui)
+        state->imgui_ui->notify_series_removed(series);
+#endif
 }
 
 WindowContext* QtRuntime::window_context(QWindow* window) const

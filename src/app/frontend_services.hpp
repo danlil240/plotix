@@ -57,6 +57,24 @@ class DialogService
     virtual std::optional<Color> color_picker(
         const std::string& title,
         const Color&       initial) = 0;
+
+    // Prompt for a floating-point value. Frontends that do not provide a
+    // numeric dialog may keep the default cancellation result.
+    virtual std::optional<double> number_input(const std::string& title,
+                                               const std::string& label,
+                                               double             initial,
+                                               double             minimum,
+                                               double             maximum,
+                                               int                decimals)
+    {
+        (void)title;
+        (void)label;
+        (void)initial;
+        (void)minimum;
+        (void)maximum;
+        (void)decimals;
+        return std::nullopt;
+    }
 };
 
 // ─── ClipboardService ────────────────────────────────────────────────────────

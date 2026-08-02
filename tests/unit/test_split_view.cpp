@@ -607,6 +607,51 @@ TEST(SplitViewManagerSerialization, EmptyStringFails)
     EXPECT_FALSE(mgr.deserialize(""));
 }
 
+TEST(SplitViewManagerSerialization, PreservesPaneTabsActiveTabAndRemapsIds)
+{
+    SplitViewManager manager;
+    auto*            root = manager.root();
+    ASSERT_NE(root, nullptr);
+    root->set_figure_index(10);
+    root->add_figure(11);
+    root->add_figure(12);
+    root->set_active_local_index(1);
+    ASSERT_NE(root->split(SplitDirection::Horizontal, 20, 0.4f), nullptr);
+    root->second()->add_figure(21);
+    root->second()->set_active_local_index(0);
+    manager.set_active_figure_index(11);
+
+    SplitViewManager restored;
+    ASSERT_TRUE(restored.deserialize(manager.serialize()));
+    ASSERT_TRUE(restored.root()->is_split());
+    EXPECT_EQ(restored.root()->first()->figure_indices(), (std::vector<FigureId>{10, 11, 12}));
+    EXPECT_EQ(restored.root()->first()->active_local_index(), 1u);
+    EXPECT_EQ(restored.root()->first()->figure_index(), 11u);
+    EXPECT_EQ(restored.root()->second()->figure_indices(), (std::vector<FigureId>{20, 21}));
+
+    restored.remap_figure_ids([](FigureId old_id) { return old_id + 100; });
+    EXPECT_EQ(restored.active_figure_index(), 111u);
+    EXPECT_EQ(restored.root()->first()->figure_indices(), (std::vector<FigureId>{110, 111, 112}));
+    EXPECT_EQ(restored.root()->first()->figure_index(), 111u);
+    EXPECT_EQ(restored.root()->second()->figure_indices(), (std::vector<FigureId>{120, 121}));
+}
+
+TEST(SplitViewManagerSerialization, MalformedNumbersFailWithoutReplacingTree)
+{
+    SplitViewManager manager;
+    manager.root()->set_figure_index(55);
+    manager.set_active_figure_index(55);
+
+    EXPECT_FALSE(manager.deserialize(R"({"active":oops,"root":{"leaf":true,"figure":1}})"));
+    EXPECT_EQ(manager.active_figure_index(), 55u);
+    EXPECT_EQ(manager.root()->figure_index(), 55u);
+
+    EXPECT_FALSE(manager.deserialize(
+        R"({"active":1,"root":{"leaf":false,"dir":"h","ratio":oops,"first":{"leaf":true,"figure":1},"second":{"leaf":true,"figure":2}}})"));
+    EXPECT_EQ(manager.active_figure_index(), 55u);
+    EXPECT_EQ(manager.root()->figure_index(), 55u);
+}
+
 // ─── SplitViewManager Callbacks ──────────────────────────────────────────────
 
 TEST(SplitViewManagerCallbacks, OnSplit)

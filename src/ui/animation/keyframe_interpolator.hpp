@@ -212,6 +212,11 @@ class KeyframeInterpolator
     // Create a new animation channel. Returns channel ID.
     uint32_t add_channel(const std::string& name, float default_value = 0.0f);
 
+    // Create or replace a channel with a caller-owned stable ID.
+    uint32_t add_channel_with_id(uint32_t           channel_id,
+                                 const std::string& name,
+                                 float              default_value = 0.0f);
+
     // Remove a channel by ID.
     void remove_channel(uint32_t channel_id);
 

@@ -499,16 +499,20 @@ if(SPECTRA_USE_QT)
         src/adapters/qt/qt_action_bridge.cpp
         src/adapters/qt/qt_main_window.cpp
         src/adapters/qt/qt_application.cpp
+        src/adapters/qt/qt_series_commands.cpp
         src/adapters/qt/qt_workspace_bridge.cpp
         src/adapters/qt/qt_automation_adapter.cpp
         src/adapters/qt/qt_ipc_client.cpp
         src/adapters/qt/docking/native_qt_docking_host.cpp
         src/adapters/qt/docking/main_window_registry.cpp
         src/adapters/qt/panels/command_palette_dialog.cpp
+        src/adapters/qt/panels/function_plot_dialog.cpp
         src/adapters/qt/panels/inspector_widget.cpp
         src/adapters/qt/panels/settings_widget.cpp
         src/adapters/qt/panels/topics_widget.cpp
         src/adapters/qt/panels/timeline_widget.cpp
+        src/adapters/qt/panels/timeline_property_binding.cpp
+        src/adapters/qt/panels/curve_editor_widget.cpp
         src/adapters/qt/panels/export_widget.cpp
         src/adapters/qt/panels/shortcut_widget.cpp
         src/adapters/qt/panels/transform_widget.cpp

@@ -8,6 +8,7 @@
 #include "ui/input/input.hpp"
 
 #include <QVBoxLayout>
+#include <QEvent>
 
 namespace spectra::adapters::qt
 {
@@ -35,11 +36,21 @@ FigureCanvasWidget::FigureCanvasWidget(QtRuntime*     runtime,
     auto* container = QWidget::createWindowContainer(window_, this);
     container->setMinimumSize(400, 300);
     container->setFocusPolicy(Qt::StrongFocus);
+    container->installEventFilter(this);
+    window_->installEventFilter(this);
 
     // Layout: container fills the widget
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(container);
+}
+
+bool FigureCanvasWidget::eventFilter(QObject* watched, QEvent* event)
+{
+    if ((watched == window_ || watched->parent() == this)
+        && (event->type() == QEvent::FocusIn || event->type() == QEvent::MouseButtonPress))
+        emit activated();
+    return QWidget::eventFilter(watched, event);
 }
 
 void FigureCanvasWidget::setFigure(Figure* fig)

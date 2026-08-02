@@ -3,10 +3,18 @@
 #include "spectra_document_tab_bar.hpp"
 #include "spectra_design_tokens.hpp"
 
+#include <QApplication>
+#include <QDrag>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QFontMetrics>
+#include <QKeyEvent>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
+#include <QPixmap>
 
 namespace spectra::adapters::qt
 {
@@ -19,6 +27,10 @@ SpectraDocumentTabBar::SpectraDocumentTabBar(QWidget* parent) : QWidget(parent)
     setFixedHeight(spectra_geometry().tab_bar_height);
     setMouseTracking(true);
     setCursor(Qt::ArrowCursor);
+    setFocusPolicy(Qt::StrongFocus);
+    setAcceptDrops(true);
+    setAccessibleName("Document tabs");
+    update_accessibility();
 }
 
 void SpectraDocumentTabBar::add_tab(const QString& title, int id)
@@ -29,6 +41,7 @@ void SpectraDocumentTabBar::add_tab(const QString& title, int id)
         {
             existing.title = title;
             active_id_     = id;
+            update_accessibility();
             update();
             return;
         }
@@ -42,6 +55,7 @@ void SpectraDocumentTabBar::add_tab(const QString& title, int id)
     if (active_id_ < 0)
         active_id_ = id;
 
+    update_accessibility();
     update();
 }
 
@@ -59,12 +73,14 @@ void SpectraDocumentTabBar::remove_tab(int id)
             break;
         }
     }
+    update_accessibility();
     update();
 }
 
 void SpectraDocumentTabBar::set_active_tab(int id)
 {
     active_id_ = id;
+    update_accessibility();
     update();
 }
 
@@ -78,6 +94,7 @@ void SpectraDocumentTabBar::set_tab_title(int id, const QString& title)
             break;
         }
     }
+    update_accessibility();
     update();
 }
 
@@ -94,9 +111,29 @@ void SpectraDocumentTabBar::set_tab_modified(int id, bool modified)
     update();
 }
 
+QString SpectraDocumentTabBar::tab_title(int id) const
+{
+    for (const auto& tab : tabs_)
+    {
+        if (tab.id == id)
+            return tab.title;
+    }
+    return {};
+}
+
 int SpectraDocumentTabBar::height_hint() const
 {
     return spectra_geometry().tab_bar_height;
+}
+
+void SpectraDocumentTabBar::update_accessibility()
+{
+    const QString active = tab_title(active_id_);
+    setAccessibleDescription(
+        QString("%1 document tabs. Active: %2. Use Left and Right arrows to select, Delete to "
+                "close, Insert to add, and Ctrl+Shift+D to detach.")
+            .arg(tabs_.size())
+            .arg(active.isEmpty() ? QStringLiteral("none") : active));
 }
 
 void SpectraDocumentTabBar::update_layout()
@@ -190,6 +227,13 @@ void SpectraDocumentTabBar::paintEvent(QPaintEvent*)
             p.setBrush(active_bg);
             p.setPen(QPen(c.border_default, 1));
             p.drawRoundedRect(QRectF(tl.rect).adjusted(0.5, 1.5, -0.5, 0.5), 4, 4);
+            if (hasFocus())
+            {
+                QPen focus_pen(c.cyan_accent, 1, Qt::DashLine);
+                p.setBrush(Qt::NoBrush);
+                p.setPen(focus_pen);
+                p.drawRoundedRect(QRectF(tl.rect).adjusted(2.5, 3.5, -2.5, -2.5), 3, 3);
+            }
         }
         else if (is_hover)
         {
@@ -282,14 +326,51 @@ void SpectraDocumentTabBar::mouseMoveEvent(QMouseEvent* event)
         update();
     }
 
-    // Check for detach drag
+    // Start a real OS drag when the user pulls a tab beyond Qt's drag distance.
+    // The shared MIME payload lets pane tab bars and other header tab bars
+    // receive the drop; if no Spectra target accepts it, the original detach
+    // behavior is preserved.
     if (drag_tab_ >= 0 && (event->buttons() & Qt::LeftButton))
     {
         int distance = (pos - drag_start_).manhattanLength();
-        if (distance > 40)
+        if (distance > QApplication::startDragDistance())
         {
-            emit tab_detach_requested(tabs_[drag_tab_].id);
-            drag_tab_ = -1;
+            const int dragged_id = tabs_[drag_tab_].id;
+            drag_tab_            = -1;
+
+            auto* mime = new QMimeData;
+            mime->setData(QStringLiteral("application/x-spectra-figure-id"),
+                          QByteArray::number(static_cast<quint64>(dragged_id)));
+
+            QDrag drag(this);
+            drag.setMimeData(mime);
+
+            // Build a lightweight visual proxy of the dragged tab.
+            QPixmap pixmap(120, height());
+            pixmap.fill(Qt::transparent);
+            QPainter p(&pixmap);
+            p.setRenderHint(QPainter::Antialiasing, true);
+            const auto& c = spectra_colors();
+            p.fillRect(pixmap.rect(), c.elevated_surface);
+            p.setPen(QPen(c.border_default, 1));
+            p.drawRoundedRect(pixmap.rect().adjusted(2, 2, -2, -2), 4, 4);
+            QFont f = SpectraFontManager::instance().font_base();
+            f.setPixelSize(13);
+            p.setFont(f);
+            p.setPen(c.text_primary);
+            p.drawText(pixmap.rect().adjusted(8, 0, -8, 0),
+                       Qt::AlignLeft | Qt::AlignVCenter,
+                       tab_title(dragged_id));
+
+            drag.setPixmap(pixmap);
+            drag.setHotSpot(QPoint(pixmap.width() / 2, pixmap.height() / 2));
+
+            if (drag.exec(Qt::MoveAction) == Qt::IgnoreAction)
+            {
+                // No Spectra drop target accepted the drag; fall back to the
+                // previous detach gesture and create a new window for it.
+                emit tab_detach_requested(dragged_id);
+            }
         }
     }
 }
@@ -297,6 +378,104 @@ void SpectraDocumentTabBar::mouseMoveEvent(QMouseEvent* event)
 void SpectraDocumentTabBar::mouseReleaseEvent(QMouseEvent*)
 {
     drag_tab_ = -1;
+}
+
+namespace
+{
+constexpr auto kFigureTabMime = "application/x-spectra-figure-id";
+}   // namespace
+
+void SpectraDocumentTabBar::dragEnterEvent(QDragEnterEvent* event)
+{
+    if (event->mimeData()->hasFormat(kFigureTabMime))
+        event->acceptProposedAction();
+    else
+        QWidget::dragEnterEvent(event);
+}
+
+void SpectraDocumentTabBar::dragMoveEvent(QDragMoveEvent* event)
+{
+    if (event->mimeData()->hasFormat(kFigureTabMime))
+        event->acceptProposedAction();
+    else
+        QWidget::dragMoveEvent(event);
+}
+
+void SpectraDocumentTabBar::dropEvent(QDropEvent* event)
+{
+    bool      ok = false;
+    const int dropped_id =
+        static_cast<int>(event->mimeData()->data(kFigureTabMime).toULongLong(&ok));
+    if (!ok || dropped_id < 0)
+    {
+        QWidget::dropEvent(event);
+        return;
+    }
+
+    int before_id = -1;
+    if (const int idx = tab_at(event->position().toPoint()); idx >= 0 && idx < tabs_.size())
+        before_id = tabs_[idx].id;
+
+    emit figure_dropped(dropped_id, before_id);
+    event->acceptProposedAction();
+}
+
+void SpectraDocumentTabBar::keyPressEvent(QKeyEvent* event)
+{
+    if (tabs_.isEmpty())
+    {
+        if (event->key() == Qt::Key_Insert || event->key() == Qt::Key_Plus)
+        {
+            emit tab_add_requested();
+            event->accept();
+            return;
+        }
+        QWidget::keyPressEvent(event);
+        return;
+    }
+
+    int active_index = 0;
+    for (int i = 0; i < tabs_.size(); ++i)
+        if (tabs_[i].id == active_id_)
+            active_index = i;
+
+    int target_index = -1;
+    if (event->key() == Qt::Key_Left)
+        target_index = (active_index + tabs_.size() - 1) % tabs_.size();
+    else if (event->key() == Qt::Key_Right)
+        target_index = (active_index + 1) % tabs_.size();
+    else if (event->key() == Qt::Key_Home)
+        target_index = 0;
+    else if (event->key() == Qt::Key_End)
+        target_index = tabs_.size() - 1;
+
+    if (target_index >= 0)
+    {
+        set_active_tab(tabs_[target_index].id);
+        emit tab_selected(active_id_);
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Delete)
+    {
+        emit tab_closed(active_id_);
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Insert || event->key() == Qt::Key_Plus)
+    {
+        emit tab_add_requested();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_D
+        && event->modifiers() == (Qt::ControlModifier | Qt::ShiftModifier))
+    {
+        emit tab_detach_requested(active_id_);
+        event->accept();
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 
 }   // namespace spectra::adapters::qt

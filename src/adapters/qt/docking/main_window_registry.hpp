@@ -20,6 +20,8 @@ namespace spectra
 {
 class FigureRegistry;
 class ApplicationServices;
+class TimelineEditor;
+class AxisLinkManager;
 }   // namespace spectra
 
 namespace spectra::adapters::qt
@@ -33,10 +35,12 @@ class NativeQtDockingHost;
 class MainWindowRegistry
 {
    public:
-    MainWindowRegistry(QtRuntime*           runtime,
-                       FigureRegistry*      registry,
-                       QtActionBridge*      action_bridge,
-                       ApplicationServices* services);
+    MainWindowRegistry(QtRuntime*                               runtime,
+                       FigureRegistry*                          registry,
+                       QtActionBridge*                          action_bridge,
+                       ApplicationServices*                     services,
+                       AxisLinkManager*                         axis_link_manager = nullptr,
+                       std::function<TimelineEditor*(FigureId)> timeline_resolver = {});
     ~MainWindowRegistry();
 
     MainWindowRegistry(const MainWindowRegistry&)            = delete;
@@ -73,6 +77,10 @@ class MainWindowRegistry
     // Create a detached host and transactionally move the document into it.
     HostId detach_document(FigureId fid, HostId source_host);
 
+    // Move a detached document back to the stable primary host through the
+    // same destination-first rollback-safe transaction.
+    bool redock_document(FigureId fid, HostId source_host);
+
     // Notify persistence after a successful document lifecycle mutation.
     void set_document_changed_callback(std::function<void()> callback)
     {
@@ -81,6 +89,7 @@ class MainWindowRegistry
 
     // Get all registered hosts.
     std::vector<HostId> all_hosts() const;
+    HostId              primary_host_id() const { return primary_host_id_; }
 
     // Number of registered windows.
     size_t window_count() const { return hosts_.size(); }
@@ -91,12 +100,19 @@ class MainWindowRegistry
    private:
     void wire_window(HostId id, SpectraMainWindow* window);
 
-    QtRuntime*           runtime_       = nullptr;
-    FigureRegistry*      registry_      = nullptr;
-    QtActionBridge*      action_bridge_ = nullptr;
-    ApplicationServices* services_      = nullptr;
+    // Schedule a deferred close for an owned (detached) host that no longer
+    // holds any documents. Primary and other non-owned hosts are never closed.
+    void maybe_retire_empty_host(HostId id);
 
-    HostId next_host_id_ = 1;
+    QtRuntime*                               runtime_           = nullptr;
+    FigureRegistry*                          registry_          = nullptr;
+    QtActionBridge*                          action_bridge_     = nullptr;
+    ApplicationServices*                     services_          = nullptr;
+    AxisLinkManager*                         axis_link_manager_ = nullptr;
+    std::function<TimelineEditor*(FigureId)> timeline_resolver_;
+
+    HostId next_host_id_    = 1;
+    HostId primary_host_id_ = INVALID_HOST_ID;
 
     struct HostEntry
     {

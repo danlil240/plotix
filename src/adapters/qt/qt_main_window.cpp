@@ -11,6 +11,7 @@
 #include "panels/settings_widget.hpp"
 #include "panels/shortcut_widget.hpp"
 #include "panels/timeline_widget.hpp"
+#include "panels/curve_editor_widget.hpp"
 #include "panels/topics_widget.hpp"
 #include "panels/transform_widget.hpp"
 #include "panels/accessibility_widget.hpp"
@@ -30,16 +31,29 @@
 #include "spectra_icon_embedded.hpp"
 
 #include "app/application_services.hpp"
+#include "io/export_registry.hpp"
+#include "ui/animation/timeline_editor.hpp"
+#include "ui/data/axis_link.hpp"
+#include "math/data_transform.hpp"
 #include "ui/automation/automation_json.hpp"
 #include "ui/input/input.hpp"
 #include "ui/settings/settings_store.hpp"
+#include "ui/theme/theme.hpp"
+#include "ui/workspace/workspace.hpp"
 
+#include <spectra/export.hpp>
+#include <spectra/axes3d.hpp>
 #include <spectra/figure.hpp>
 #include <spectra/figure_registry.hpp>
+#include <spectra/frame.hpp>
 #include <spectra/logger.hpp>
+#include <spectra/series.hpp>
 
 #include <QAction>
 #include <QApplication>
+#include <QDebug>
+#include <QDir>
+#include <QFileInfo>
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QKeySequence>
@@ -48,8 +62,10 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QPoint>
+#include <QPainter>
 #include <QPixmap>
 #include <QResizeEvent>
+#include <QUrl>
 #include <QSignalBlocker>
 #include <QShortcut>
 #include <QStatusBar>
@@ -58,6 +74,10 @@
 #include <QWidget>
 
 #include <array>
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <span>
 #include <sstream>
 #include <utility>
 
@@ -160,6 +180,81 @@ bool tool_mode_for_nav_index(int nav_index, ToolMode& tool)
     }
 }
 
+QString css_color(const QColor& color)
+{
+    return color.name(QColor::HexRgb);
+}
+
+QColor composite_color(const ui::Color& foreground, const ui::Color& background)
+{
+    const float alpha = std::clamp(foreground.a, 0.0f, 1.0f);
+    return QColor::fromRgbF(foreground.r * alpha + background.r * (1.0f - alpha),
+                            foreground.g * alpha + background.g * (1.0f - alpha),
+                            foreground.b * alpha + background.b * (1.0f - alpha));
+}
+
+QString icon_image_url(uint32_t codepoint, const QColor& color, int size, const QString& name)
+{
+    QPixmap pixmap(size, size);
+    pixmap.fill(Qt::transparent);
+
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+    painter.setPen(color);
+    painter.setFont(SpectraFontManager::instance().font_icon(qMax(size - 4, 10)));
+    painter.drawText(pixmap.rect(), Qt::AlignCenter, SpectraFontManager::icon_codepoint(codepoint));
+    painter.end();
+
+    const QString filename = QStringLiteral("spectra_%1_%2_%3x%3_%4.png")
+                                 .arg(name)
+                                 .arg(color.name(QColor::HexArgb))
+                                 .arg(size)
+                                 .arg(QCoreApplication::applicationPid());
+    const QString dir = QDir(QDir::temp()).filePath(QStringLiteral("spectra_theme_icons"));
+    QDir().mkpath(dir);
+
+    const QString path = QDir(dir).absoluteFilePath(filename);
+    if (!pixmap.save(path))
+    {
+        qWarning() << "Failed to write theme icon:" << path;
+        return {};
+    }
+    return QUrl::fromLocalFile(path).toString();
+}
+
+double figure_zoom_level(const Figure& figure)
+{
+    if (figure.axes().empty() || !figure.axes()[0])
+        return 1.0;
+
+    const Axes& axes       = *figure.axes()[0];
+    const auto  x_limits   = axes.x_limits();
+    const auto  view_range = x_limits.max - x_limits.min;
+    if (!(view_range > 0.0))
+        return 1.0;
+
+    double data_min = x_limits.max;
+    double data_max = x_limits.min;
+    for (const auto& series : axes.series())
+    {
+        if (!series)
+            continue;
+        std::span<const float> x_data;
+        if (const auto* line = dynamic_cast<const LineSeries*>(series.get()))
+            x_data = line->x_data();
+        else if (const auto* scatter = dynamic_cast<const ScatterSeries*>(series.get()))
+            x_data = scatter->x_data();
+        if (x_data.empty())
+            continue;
+        const auto [minimum, maximum] = std::minmax_element(x_data.begin(), x_data.end());
+        data_min                      = std::min(data_min, static_cast<double>(*minimum));
+        data_max                      = std::max(data_max, static_cast<double>(*maximum));
+    }
+
+    const double data_range = data_max - data_min;
+    return data_range > 0.0 ? data_range / view_range : 1.0;
+}
+
 }   // namespace
 
 SpectraMainWindow::~SpectraMainWindow() = default;
@@ -168,9 +263,10 @@ SpectraMainWindow::SpectraMainWindow(QtRuntime*           runtime,
                                      FigureRegistry*      registry,
                                      QtActionBridge*      action_bridge,
                                      ApplicationServices* services,
+                                     TimelineResolver     timeline_resolver,
                                      QWidget*             parent)
     : QMainWindow(parent), runtime_(runtime), registry_(registry), action_bridge_(action_bridge),
-      services_(services)
+      services_(services), timeline_resolver_(std::move(timeline_resolver))
 {
     setWindowTitle("Spectra");
     QPixmap app_icon;
@@ -206,16 +302,7 @@ SpectraMainWindow::SpectraMainWindow(QtRuntime*           runtime,
                 if (doc_tab_bar_)
                     doc_tab_bar_->set_active_tab(static_cast<int>(id));
                 emit figure_activated(id);
-                if (inspector_panel_)
-                    inspector_panel_->set_active_figure(id);
-                if (export_panel_)
-                    export_panel_->set_active_figure(id);
-                if (transform_panel_)
-                    transform_panel_->set_active_figure(id);
-                if (data_editor_panel_)
-                    data_editor_panel_->set_active_figure(id);
-                if (accessibility_panel_)
-                    accessibility_panel_->set_active_figure(id);
+                sync_active_figure_panels(id);
                 sync_active_tool_ui();
             });
     connect(central_view_,
@@ -223,13 +310,37 @@ SpectraMainWindow::SpectraMainWindow(QtRuntime*           runtime,
             this,
             &SpectraMainWindow::figure_detach_requested);
     connect(central_view_,
+            &QtSplitViewContainer::figure_redock_requested,
+            this,
+            &SpectraMainWindow::figure_redock_requested);
+    connect(central_view_,
+            &QtSplitViewContainer::split_layout_changed,
+            this,
+            &SpectraMainWindow::workspace_state_changed);
+    connect(central_view_,
+            &QtSplitViewContainer::external_figure_drop_requested,
+            this,
+            &SpectraMainWindow::figure_move_to_pane_requested);
+    connect(central_view_,
             &QtSplitViewContainer::canvas_created,
             this,
-            [this](FigureId, FigureCanvasWidget* canvas)
+            [this](FigureId id, FigureCanvasWidget* canvas)
             {
                 if (!canvas || !canvas->vulkanWindow())
                     return;
                 auto* vw = canvas->vulkanWindow();
+                connect(vw,
+                        &SpectraVulkanWindow::persistentStateChanged,
+                        this,
+                        &SpectraMainWindow::workspace_state_changed);
+                connect(vw,
+                        &SpectraVulkanWindow::persistentStateChanged,
+                        this,
+                        [this, id]()
+                        {
+                            if (active_figure_id() == id)
+                                sync_active_tool_ui();
+                        });
                 vw->setInspectorToggleCallbacks(
                     [this]()
                     {
@@ -238,22 +349,82 @@ SpectraMainWindow::SpectraMainWindow(QtRuntime*           runtime,
                     },
                     [this]() { return spectra_inspector_ && spectra_inspector_->is_open(); });
 
-                // Wire cursor and frame stats to the status bar
+                // Status belongs to the active canvas. Background tabs and
+                // split panes can keep rendering without replacing it.
                 if (spectra_status_)
                 {
                     connect(vw,
                             &SpectraVulkanWindow::cursorMoved,
-                            spectra_status_,
-                            &SpectraStatusBar::set_cursor_coords);
+                            this,
+                            [this, id](double x, double y, bool valid)
+                            {
+                                if (!spectra_status_ || active_figure_id() != id)
+                                    return;
+                                if (valid)
+                                    spectra_status_->set_cursor_coords(x, y);
+                                else
+                                    spectra_status_->clear_cursor_coords();
+                            });
                     connect(vw,
                             &SpectraVulkanWindow::frameStats,
-                            spectra_status_,
-                            [this](int fps, double gpu_ms)
+                            this,
+                            [this, id](int fps, double gpu_ms)
                             {
+                                if (!spectra_status_ || active_figure_id() != id)
+                                    return;
                                 spectra_status_->set_fps(fps);
                                 spectra_status_->set_gpu_frame_time(gpu_ms);
+                                sync_active_zoom(id);
                             });
                 }
+                connect(vw,
+                        &SpectraVulkanWindow::frameStats,
+                        this,
+                        [this, id](int, double)
+                        {
+                            if (active_figure_id() != id)
+                                return;
+                            if (inspector_panel_)
+                                inspector_panel_->sync_from_model();
+                            sync_document_title(id);
+                        });
+                TimelineEditor* timeline = timeline_resolver_ ? timeline_resolver_(id) : nullptr;
+                canvas->setAnimationTick(
+                    [this, id, timeline, last_playhead = std::numeric_limits<float>::quiet_NaN()](
+                        float dt) mutable
+                    {
+                        Figure* figure = registry_ ? registry_->get(id) : nullptr;
+                        if (!figure || !timeline)
+                            return;
+
+                        const PlaybackState state_before = timeline->playback_state();
+                        if (state_before == PlaybackState::Playing)
+                            timeline->advance(dt);
+
+                        const float playhead = timeline->playhead();
+                        if (state_before != PlaybackState::Playing && std::isfinite(last_playhead)
+                            && std::abs(playhead - last_playhead) < 0.0001f)
+                            return;
+
+                        if (state_before != PlaybackState::Playing)
+                            timeline->evaluate_at_playhead();
+
+                        figure->anim_.fps      = timeline->fps();
+                        figure->anim_.duration = timeline->duration();
+                        figure->anim_.loop     = timeline->loop_mode() != LoopMode::None;
+                        figure->anim_.time     = playhead;
+
+                        if (figure->anim_.on_frame)
+                        {
+                            Frame frame;
+                            frame.elapsed_sec = playhead;
+                            frame.dt          = state_before == PlaybackState::Playing ? dt : 0.0f;
+                            frame.number      = timeline->current_frame();
+                            frame.paused = timeline->playback_state() != PlaybackState::Playing;
+                            figure->anim_.on_frame(frame);
+                        }
+                        last_playhead = playhead;
+                    });
             });
 
     // Build menus (still needed for QMenu popups used by custom menu strip)
@@ -264,8 +435,7 @@ SpectraMainWindow::SpectraMainWindow(QtRuntime*           runtime,
     // Build the new Spectra custom UI (title bar, header, nav rail, etc.)
     build_spectra_ui();
 
-    // Apply Spectra dark theme stylesheet
-    apply_spectra_style();
+    refresh_theme();
 
     // Invalidate any saved dock state — start with clean default layout
     setDockNestingEnabled(true);
@@ -275,6 +445,52 @@ SpectraMainWindow::SpectraMainWindow(QtRuntime*           runtime,
 }
 
 // ── Figure tab management ─────────────────────────────────────────────────────
+
+void SpectraMainWindow::sync_active_figure_panels(FigureId id)
+{
+    if (inspector_panel_)
+        inspector_panel_->set_active_figure(id);
+    if (export_panel_)
+        export_panel_->set_active_figure(id);
+    if (transform_panel_)
+        transform_panel_->set_active_figure(id);
+    if (data_editor_panel_)
+        data_editor_panel_->set_active_figure(id);
+    if (accessibility_panel_)
+        accessibility_panel_->set_active_figure(id);
+    if (timeline_panel_)
+    {
+        timeline_panel_->set_timeline(timeline_resolver_ ? timeline_resolver_(id) : nullptr);
+        timeline_panel_->set_figure(registry_ ? registry_->get(id) : nullptr);
+    }
+    if (curve_editor_panel_)
+        curve_editor_panel_->set_timeline(timeline_resolver_ ? timeline_resolver_(id) : nullptr);
+    sync_document_title(id);
+    sync_active_zoom(id);
+}
+
+void SpectraMainWindow::sync_document_title(FigureId id)
+{
+    Figure* figure = registry_ && id != INVALID_FIGURE_ID ? registry_->get(id) : nullptr;
+    if (!figure)
+        return;
+
+    std::string title = figure->tab_title();
+    if (title.empty())
+        title = "Figure " + std::to_string(id);
+    const QString visible_title = QString::fromStdString(title);
+    if (doc_tab_bar_)
+        doc_tab_bar_->set_tab_title(static_cast<int>(id), visible_title);
+    if (central_view_)
+        central_view_->set_figure_title(id, visible_title);
+}
+
+void SpectraMainWindow::sync_active_zoom(FigureId id)
+{
+    Figure* figure = registry_ && id != INVALID_FIGURE_ID ? registry_->get(id) : nullptr;
+    if (spectra_status_)
+        spectra_status_->set_zoom(figure ? figure_zoom_level(*figure) : 1.0);
+}
 
 int SpectraMainWindow::add_figure_tab(FigureId id)
 {
@@ -295,6 +511,11 @@ int SpectraMainWindow::add_figure_tab(FigureId id)
                 doc_tab_bar_->set_active_tab(static_cast<int>(id));
             }
         }
+        // QTabWidget emits currentChanged while the first tab is still being
+        // inserted, before the split container has recorded its FigureId.
+        // Activate explicitly so every model-backed panel receives the first
+        // document as well as later tab switches.
+        central_view_->activate_figure(id);
         sync_active_tool_ui();
         SPECTRA_LOG_INFO("qt_main_window", "Added figure tab: id=" + std::to_string(id));
     }
@@ -310,6 +531,7 @@ bool SpectraMainWindow::close_figure_tab(FigureId id)
 
     if (central_view_->figure_tab_count() == 0)
         show_welcome_page();
+    sync_active_figure_panels(active_figure_id());
     SPECTRA_LOG_INFO("qt_main_window", "Closed figure tab: id=" + std::to_string(id));
     return true;
 }
@@ -323,6 +545,7 @@ bool SpectraMainWindow::release_figure_tab(FigureId id)
         doc_tab_bar_->remove_tab(static_cast<int>(id));
     if (central_view_->figure_tab_count() == 0)
         show_welcome_page();
+    sync_active_figure_panels(active_figure_id());
     SPECTRA_LOG_INFO("qt_main_window", "Released figure tab: id=" + std::to_string(id));
     return true;
 }
@@ -347,6 +570,17 @@ std::vector<FigureId> SpectraMainWindow::open_figure_ids() const
     return central_view_ ? central_view_->open_figure_ids() : std::vector<FigureId>{};
 }
 
+std::string SpectraMainWindow::serialize_split_layout() const
+{
+    return central_view_ ? central_view_->serialize_split_layout() : std::string{};
+}
+
+bool SpectraMainWindow::restore_split_layout(const std::string&                            layout,
+                                             const std::unordered_map<FigureId, FigureId>& id_map)
+{
+    return central_view_ && central_view_->restore_split_layout(layout, id_map);
+}
+
 std::string SpectraMainWindow::automation_menu_state() const
 {
     const std::array<std::pair<const char*, QMenu*>, 9> menus = {{
@@ -367,6 +601,8 @@ std::string SpectraMainWindow::automation_menu_state() const
     for (const auto& [name, menu] : menus)
     {
         if (!menu)
+            continue;
+        if ((menu == menu_axes_ || menu == menu_transforms_) && menu->actions().isEmpty())
             continue;
         if (!first_menu)
             result << ',';
@@ -416,17 +652,159 @@ void SpectraMainWindow::set_status(const std::string& message)
 
 void SpectraMainWindow::set_active_tool(ToolMode tool)
 {
+    const ToolMode before = central_view_ ? central_view_->active_tool() : ToolMode::Pan;
     if (central_view_)
         central_view_->set_active_tool(tool);
     sync_active_tool_ui();
+    if (before != tool)
+        emit workspace_state_changed();
+}
+
+void SpectraMainWindow::set_detached_host(bool detached)
+{
+    if (central_view_)
+        central_view_->set_detached_host(detached);
+}
+
+void SpectraMainWindow::set_axis_link_manager(AxisLinkManager* manager)
+{
+    axis_link_manager_ = manager;
+    if (central_view_)
+        central_view_->set_axis_link_manager(manager);
+}
+
+bool SpectraMainWindow::autofit_active_axes()
+{
+    if (!central_view_)
+        return false;
+    InputHandler* input = central_view_->input_handler_for(active_figure_id());
+    AxesBase*     axes  = input ? input->active_axes_base() : nullptr;
+    if (auto* axes2d = dynamic_cast<Axes*>(axes))
+        axes2d->auto_fit();
+    else if (auto* axes3d = dynamic_cast<Axes3D*>(axes))
+        axes3d->auto_fit();
+    else
+        return false;
+
+    if (FigureCanvasWidget* canvas = canvas_for(active_figure_id()))
+        if (canvas->vulkanWindow())
+            canvas->vulkanWindow()->requestFrame();
+    set_status("Auto-fit active axes");
+    emit workspace_state_changed();
+    return true;
+}
+
+void SpectraMainWindow::toggle_canvas_fullscreen()
+{
+    const bool show_chrome = !is_nav_rail_visible() && !is_inspector_open();
+    set_nav_rail_visible(show_chrome);
+    on_toggle_inspector(show_chrome);
+    set_status(show_chrome ? "Canvas chrome restored" : "Canvas fullscreen");
+}
+
+bool SpectraMainWindow::link_active_axes(LinkAxis axis)
+{
+    Figure* figure = registry_ ? registry_->get(active_figure_id()) : nullptr;
+    if (!axis_link_manager_ || !figure)
+        return false;
+
+    bool changed = false;
+    if (axis != LinkAxis::Z)
+    {
+        std::vector<Axes*> axes2d;
+        for (auto& axes : figure->axes_mut())
+            if (axes)
+                axes2d.push_back(axes.get());
+        if (axes2d.size() >= 2)
+        {
+            const LinkAxis    axes2d_mode = axis == LinkAxis::All ? LinkAxis::Both : axis;
+            const LinkGroupId group =
+                axis_link_manager_->create_group(axes2d_mode == LinkAxis::X   ? "X Link"
+                                                 : axes2d_mode == LinkAxis::Y ? "Y Link"
+                                                                              : "XY Link",
+                                                 axes2d_mode);
+            for (Axes* axes : axes2d)
+                axis_link_manager_->add_to_group(group, axes);
+            changed = true;
+        }
+    }
+
+    std::vector<Axes3D*> axes3d;
+    for (auto& axes : figure->all_axes_mut())
+        if (auto* candidate = dynamic_cast<Axes3D*>(axes.get()))
+            axes3d.push_back(candidate);
+    if (axes3d.size() >= 2)
+    {
+        for (size_t index = 1; index < axes3d.size(); ++index)
+            axis_link_manager_->link_3d(axes3d.front(), axes3d[index], axis);
+        changed = true;
+    }
+
+    if (changed)
+    {
+        emit workspace_state_changed();
+        set_status("Linked active figure axes");
+    }
+    return changed;
+}
+
+bool SpectraMainWindow::unlink_all_axes()
+{
+    if (!axis_link_manager_)
+        return false;
+    const bool changed =
+        axis_link_manager_->group_count() > 0 || axis_link_manager_->group_3d_count() > 0;
+    axis_link_manager_->clear();
+    if (changed)
+    {
+        emit workspace_state_changed();
+        set_status("Unlinked all axes");
+    }
+    return changed;
+}
+
+bool SpectraMainWindow::toggle_active_crosshair()
+{
+    FigureCanvasWidget* canvas = canvas_for(active_figure_id());
+    if (!canvas || !canvas->vulkanWindow())
+        return false;
+    canvas->vulkanWindow()->toggleCrosshair();
+    return true;
+}
+
+bool SpectraMainWindow::clear_active_markers()
+{
+    FigureCanvasWidget* canvas = canvas_for(active_figure_id());
+    if (!canvas || !canvas->vulkanWindow() || !canvas->vulkanWindow()->clearMarkers())
+        return false;
+    sync_active_tool_ui();
+    set_status("Cleared data markers");
+    return true;
 }
 
 void SpectraMainWindow::set_nav_rail_visible(bool visible)
 {
+    set_nav_rail_visible_internal(visible, /*notify=*/true);
+}
+
+void SpectraMainWindow::set_nav_rail_visible_internal(bool visible, bool notify)
+{
+    const bool changed = is_nav_rail_visible() != visible;
+    if (!in_welcome_state_)
+        nav_rail_user_pref_ = visible;
     if (nav_rail_)
         nav_rail_->setVisible(visible);
+    if (auto* action =
+            action_bridge_ ? action_bridge_->action_for("panel.toggle_nav_rail") : nullptr)
+    {
+        action->setCheckable(true);
+        const QSignalBlocker blocker(action);
+        action->setChecked(visible);
+    }
     if (settings_panel_)
         settings_panel_->set_nav_rail_visible(visible);
+    if (changed && notify)
+        emit workspace_state_changed();
 }
 
 bool SpectraMainWindow::is_nav_rail_visible() const
@@ -434,12 +812,34 @@ bool SpectraMainWindow::is_nav_rail_visible() const
     return nav_rail_ && !nav_rail_->isHidden();
 }
 
+void SpectraMainWindow::on_welcome_page_visible(bool visible)
+{
+    in_welcome_state_ = visible;
+
+    // Welcome-state chrome transitions are derived from the document model, not
+    // direct user workspace edits, so they must not mark persistence dirty.
+    if (nav_rail_)
+        set_nav_rail_visible_internal(nav_rail_user_pref_, /*notify=*/false);
+    if (doc_tab_bar_)
+        doc_tab_bar_->setVisible(!visible);
+    if (spectra_status_)
+        spectra_status_->setVisible(!visible);
+    if (canvas_frame_)
+        canvas_frame_->setVisible(true);
+}
+
 void SpectraMainWindow::sync_active_tool_ui()
 {
     const ToolUiState state =
         tool_ui_state(central_view_ ? central_view_->active_tool() : ToolMode::Pan);
     if (nav_rail_)
+    {
         nav_rail_->set_active_tool(state.nav_index);
+        FigureCanvasWidget* canvas = canvas_for(active_figure_id());
+        nav_rail_->set_button_active(
+            6,
+            canvas && canvas->vulkanWindow() && canvas->vulkanWindow()->markerCount() > 0);
+    }
     if (spectra_status_)
         spectra_status_->set_active_tool(QString::fromUtf8(state.name));
 }
@@ -448,7 +848,8 @@ void SpectraMainWindow::set_timeline_visible(bool visible)
 {
     if (timeline_panel_)
         timeline_panel_->setHidden(!visible);
-    if (auto* action = findChild<QAction*>("view_toggle_timeline"))
+    if (auto* action =
+            action_bridge_ ? action_bridge_->action_for("panel.toggle_timeline") : nullptr)
     {
         const QSignalBlocker blocker(action);
         action->setChecked(visible);
@@ -575,6 +976,48 @@ void SpectraMainWindow::build_menus()
         }
     }
 
+    auto add_axis_action = [this](const char* object_name, const char* label, LinkAxis axis)
+    {
+        auto* action = menu_axes_->addAction(label);
+        action->setObjectName(object_name);
+        connect(action, &QAction::triggered, this, [this, axis]() { link_active_axes(axis); });
+        return action;
+    };
+    QAction* link_x   = add_axis_action("axes_link_x", "Link X Axes", LinkAxis::X);
+    QAction* link_y   = add_axis_action("axes_link_y", "Link Y Axes", LinkAxis::Y);
+    QAction* link_z   = add_axis_action("axes_link_z", "Link Z Axes", LinkAxis::Z);
+    QAction* link_all = add_axis_action("axes_link_all", "Link All Axes", LinkAxis::All);
+    menu_axes_->addSeparator();
+    QAction* unlink_all = menu_axes_->addAction("Unlink All");
+    unlink_all->setObjectName("axes_unlink_all");
+    connect(unlink_all, &QAction::triggered, this, [this]() { unlink_all_axes(); });
+    connect(menu_axes_,
+            &QMenu::aboutToShow,
+            this,
+            [this, link_x, link_y, link_z, link_all, unlink_all]()
+            {
+                Figure*      figure = registry_ ? registry_->get(active_figure_id()) : nullptr;
+                const size_t axes2d = figure ? figure->axes().size() : 0;
+                size_t       axes3d = 0;
+                if (figure)
+                    for (const auto& axes : figure->all_axes())
+                        axes3d += dynamic_cast<Axes3D*>(axes.get()) ? 1 : 0;
+                const bool xy_available = axis_link_manager_ && (axes2d >= 2 || axes3d >= 2);
+                link_x->setEnabled(xy_available);
+                link_y->setEnabled(xy_available);
+                link_z->setEnabled(axis_link_manager_ && axes3d >= 2);
+                link_all->setEnabled(xy_available);
+                unlink_all->setEnabled(axis_link_manager_
+                                       && (axis_link_manager_->group_count() > 0
+                                           || axis_link_manager_->group_3d_count() > 0));
+            });
+
+    rebuild_transform_menu();
+    connect(menu_transforms_,
+            &QMenu::aboutToShow,
+            this,
+            &SpectraMainWindow::rebuild_transform_menu);
+
     // Add submenus to their parents (only if non-empty).
     if (!menu_tools_theme_->actions().isEmpty())
     {
@@ -586,6 +1029,50 @@ void SpectraMainWindow::build_menus()
         menu_tools_->addSeparator();
         menu_tools_->addMenu(menu_tools_anim_);
     }
+    if (!menu_view_panels_->actions().isEmpty())
+    {
+        menu_view_->addSeparator();
+        menu_view_->addMenu(menu_view_panels_);
+    }
+    if (!menu_view_splits_->actions().isEmpty())
+    {
+        menu_view_->addSeparator();
+        menu_view_->addMenu(menu_view_splits_);
+    }
+}
+
+void SpectraMainWindow::rebuild_transform_menu()
+{
+    if (!menu_transforms_)
+        return;
+    menu_transforms_->clear();
+    for (const auto& name : TransformRegistry::instance().available_transforms())
+    {
+        auto* action = menu_transforms_->addAction(QString::fromStdString(name));
+        action->setObjectName(QString("transform_%1").arg(QString::fromStdString(name)));
+        connect(action,
+                &QAction::triggered,
+                this,
+                [this, name]()
+                {
+                    if (!transform_panel_)
+                        return;
+                    transform_panel_->show();
+                    transform_panel_->raise();
+                    transform_panel_->apply_named_transform(name);
+                });
+    }
+    menu_transforms_->addSeparator();
+    auto* formula = menu_transforms_->addAction("Custom Formula...");
+    formula->setObjectName("transform_custom_formula");
+    connect(formula,
+            &QAction::triggered,
+            this,
+            [this]()
+            {
+                if (transform_panel_)
+                    transform_panel_->focus_custom_formula();
+            });
 }
 
 QMenu* SpectraMainWindow::get_or_create_menu(const std::string& path)
@@ -669,27 +1156,106 @@ void SpectraMainWindow::build_panels()
             &QtSettingsWidget::timeline_visibility_changed,
             this,
             &SpectraMainWindow::set_timeline_visible);
+    connect(settings_panel_,
+            &QtSettingsWidget::settings_changed,
+            this,
+            &SpectraMainWindow::refresh_theme);
 
     // Timeline panel (hidden by default)
-    timeline_panel_ = new QtTimelineWidget(nullptr, this);
+    timeline_panel_ =
+        new QtTimelineWidget(timeline_resolver_ ? timeline_resolver_(active_figure_id()) : nullptr,
+                             this);
     timeline_panel_->setObjectName("timeline_dock");
+    timeline_panel_->set_undo_manager(&services_->undo());
+    timeline_panel_->set_figure(registry_ ? registry_->get(active_figure_id()) : nullptr);
     addDockWidget(Qt::BottomDockWidgetArea, timeline_panel_);
     timeline_panel_->hide();
+    connect(timeline_panel_,
+            &QtTimelineWidget::timeline_changed,
+            this,
+            &SpectraMainWindow::workspace_state_changed);
+
+    // Curve editor (hidden by default) shares the active figure's exact
+    // TimelineEditor/KeyframeInterpolator with the Timeline panel.
+    curve_editor_panel_ = new QtCurveEditorWidget(
+        timeline_resolver_ ? timeline_resolver_(active_figure_id()) : nullptr,
+        this);
+    curve_editor_panel_->setObjectName("curve_editor_dock");
+    curve_editor_panel_->set_undo_manager(&services_->undo());
+    addDockWidget(Qt::BottomDockWidgetArea, curve_editor_panel_);
+    curve_editor_panel_->hide();
+    connect(curve_editor_panel_,
+            &QtCurveEditorWidget::timeline_changed,
+            this,
+            [this]()
+            {
+                if (timeline_panel_)
+                    timeline_panel_->refresh();
+                emit workspace_state_changed();
+            });
 
     // Export panel (hidden by default)
     export_panel_ = new QtExportWidget(&services_->export_formats(),
                                        registry_,
                                        services_->dialog_service(),
                                        this);
+    export_panel_->set_export_callback(
+        [this](FigureId           id,
+               const std::string& format,
+               const std::string& path,
+               uint32_t           width,
+               uint32_t           height)
+        {
+            FigureCanvasWidget*  canvas_widget = canvas_for(id);
+            SpectraVulkanWindow* canvas = canvas_widget ? canvas_widget->vulkanWindow() : nullptr;
+            Figure*              figure = registry_ ? registry_->get(id) : nullptr;
+            if (!canvas || !figure)
+                return false;
+            if (format == "png_builtin")
+                return canvas->savePng(path, width, height);
+
+            std::vector<uint8_t> pixels;
+            uint32_t             captured_width  = 0;
+            uint32_t             captured_height = 0;
+            if (!canvas->captureRgba(pixels, captured_width, captured_height, width, height))
+                return false;
+
+            OverlaySnapshot              overlay;
+            const bool                   has_overlay = canvas->captureOverlaySnapshot(overlay);
+            std::vector<OverlaySnapshot> overlays;
+            if (has_overlay)
+                overlays.push_back(overlay);
+            const auto workspace = Workspace::capture({figure},
+                                                      0,
+                                                      services_->theme().current_theme_name(),
+                                                      false,
+                                                      0.0f,
+                                                      false,
+                                                      has_overlay ? &overlays : nullptr);
+            return services_->export_formats().export_figure(format,
+                                                             Workspace::serialize_json(workspace),
+                                                             pixels.data(),
+                                                             captured_width,
+                                                             captured_height,
+                                                             path);
+        });
     export_panel_->setObjectName("export_dock");
     addDockWidget(Qt::RightDockWidgetArea, export_panel_);
     export_panel_->hide();
 
     // Shortcut editor panel (hidden by default)
-    shortcut_panel_ = new QtShortcutWidget(&services_->shortcuts(), this);
+    shortcut_panel_ = new QtShortcutWidget(&services_->shortcuts(), action_bridge_, this);
     shortcut_panel_->setObjectName("shortcut_dock");
     addDockWidget(Qt::LeftDockWidgetArea, shortcut_panel_);
     shortcut_panel_->hide();
+    connect(shortcut_panel_,
+            &QtShortcutWidget::shortcuts_changed,
+            this,
+            &SpectraMainWindow::workspace_state_changed);
+    connect(settings_panel_,
+            &QtSettingsWidget::settings_changed,
+            this,
+            &SpectraMainWindow::workspace_state_changed);
 
     // Transform panel (hidden by default)
     transform_panel_ =
@@ -697,16 +1263,28 @@ void SpectraMainWindow::build_panels()
     transform_panel_->setObjectName("transform_dock");
     addDockWidget(Qt::RightDockWidgetArea, transform_panel_);
     transform_panel_->hide();
+    connect(transform_panel_,
+            &QtTransformWidget::data_changed,
+            this,
+            &SpectraMainWindow::workspace_state_changed);
 
     // Data editor panel (hidden by default)
-    data_editor_panel_ =
-        new QtDataEditorWidget(registry_, &services_->undo(), services_->redraw_request(), this);
+    data_editor_panel_ = new QtDataEditorWidget(registry_,
+                                                &services_->undo(),
+                                                services_->redraw_request(),
+                                                services_->clipboard_service(),
+                                                services_->dialog_service(),
+                                                this);
     data_editor_panel_->setObjectName("data_editor_dock");
     addDockWidget(Qt::RightDockWidgetArea, data_editor_panel_);
     data_editor_panel_->hide();
+    connect(data_editor_panel_,
+            &QtDataEditorWidget::data_changed,
+            this,
+            &SpectraMainWindow::workspace_state_changed);
 
     // Accessibility panel (hidden by default)
-    accessibility_panel_ = new QtAccessibilityWidget(registry_, this);
+    accessibility_panel_ = new QtAccessibilityWidget(registry_, services_->dialog_service(), this);
     accessibility_panel_->setObjectName("accessibility_dock");
     addDockWidget(Qt::LeftDockWidgetArea, accessibility_panel_);
     accessibility_panel_->hide();
@@ -718,141 +1296,68 @@ void SpectraMainWindow::build_panels()
     plugin_panel_->hide();
 
     // Plugins management panel (hidden by default)
-    plugins_panel_ = new QtPluginsWidget(&services_->plugins(), &services_->plugin_ui(), this);
+    plugins_panel_ = new QtPluginsWidget(&services_->plugins(),
+                                         &services_->plugin_ui(),
+                                         services_->dialog_service(),
+                                         this);
     plugins_panel_->setObjectName("plugins_mgmt_dock");
     addDockWidget(Qt::LeftDockWidgetArea, plugins_panel_);
     plugins_panel_->hide();
 
-    // Add panel toggle actions to the Panels submenu (not directly to View)
-    if (menu_view_panels_)
+    // Native docking changes are workspace mutations even when they happen by
+    // direct pointer interaction instead of a registered panel command.
+    for (QDockWidget* dock : findChildren<QDockWidget*>(QString(), Qt::FindDirectChildrenOnly))
     {
-        inspector_toggle_action_ = menu_view_panels_->addAction("Inspector");
-        inspector_toggle_action_->setObjectName("view_toggle_inspector");
+        connect(dock,
+                &QDockWidget::visibilityChanged,
+                this,
+                &SpectraMainWindow::workspace_state_changed);
+        connect(dock,
+                &QDockWidget::topLevelChanged,
+                this,
+                &SpectraMainWindow::workspace_state_changed);
+        connect(dock,
+                &QDockWidget::dockLocationChanged,
+                this,
+                &SpectraMainWindow::workspace_state_changed);
+    }
+
+    // Menu entries use the same QAction instances as the command palette,
+    // shortcuts, and automation. Keep their check state synchronized with
+    // the authoritative panel surface without adding a second local action.
+    auto bind_panel_action = [this](const char* command_id, QDockWidget* panel)
+    {
+        QAction* action = action_bridge_ ? action_bridge_->action_for(command_id) : nullptr;
+        if (!action || !panel)
+            return;
+        action->setCheckable(true);
+        {
+            const QSignalBlocker blocker(action);
+            action->setChecked(panel->isVisible());
+        }
+        connect(panel,
+                &QDockWidget::visibilityChanged,
+                action,
+                [action](bool visible)
+                {
+                    const QSignalBlocker blocker(action);
+                    action->setChecked(visible);
+                });
+    };
+
+    inspector_toggle_action_ =
+        action_bridge_ ? action_bridge_->action_for("panel.toggle_inspector") : nullptr;
+    if (inspector_toggle_action_)
+    {
         inspector_toggle_action_->setCheckable(true);
         inspector_toggle_action_->setChecked(false);
-        connect(inspector_toggle_action_,
-                &QAction::toggled,
-                this,
-                &SpectraMainWindow::on_toggle_inspector);
-
-        auto* toggle_topics = menu_view_panels_->addAction("Data Sources");
-        toggle_topics->setObjectName("view_toggle_topics");
-        toggle_topics->setCheckable(true);
-        toggle_topics->setChecked(false);
-        connect(toggle_topics, &QAction::toggled, this, &SpectraMainWindow::on_toggle_topics);
-
-        auto* toggle_settings = menu_view_panels_->addAction("Settings");
-        toggle_settings->setObjectName("view_toggle_settings");
-        toggle_settings->setCheckable(true);
-        toggle_settings->setChecked(false);
-        connect(toggle_settings, &QAction::toggled, this, &SpectraMainWindow::on_toggle_settings);
-
-        auto* toggle_timeline = menu_view_panels_->addAction("Timeline");
-        toggle_timeline->setObjectName("view_toggle_timeline");
-        toggle_timeline->setCheckable(true);
-        toggle_timeline->setChecked(false);
-        connect(toggle_timeline, &QAction::toggled, this, &SpectraMainWindow::on_toggle_timeline);
-
-        auto* toggle_export = menu_view_panels_->addAction("Export");
-        toggle_export->setObjectName("view_toggle_export");
-        toggle_export->setCheckable(true);
-        toggle_export->setChecked(false);
-        connect(toggle_export, &QAction::toggled, this, &SpectraMainWindow::on_toggle_export);
-
-        auto* toggle_shortcuts = menu_view_panels_->addAction("Shortcuts");
-        toggle_shortcuts->setObjectName("view_toggle_shortcuts");
-        toggle_shortcuts->setCheckable(true);
-        toggle_shortcuts->setChecked(false);
-        connect(toggle_shortcuts, &QAction::toggled, this, &SpectraMainWindow::on_toggle_shortcuts);
-
-        auto* toggle_transform = menu_view_panels_->addAction("Transforms");
-        toggle_transform->setObjectName("view_toggle_transform");
-        toggle_transform->setCheckable(true);
-        toggle_transform->setChecked(false);
-        connect(toggle_transform, &QAction::toggled, this, &SpectraMainWindow::on_toggle_transform);
-
-        auto* toggle_data_editor = menu_view_panels_->addAction("Data Editor");
-        toggle_data_editor->setObjectName("view_toggle_data_editor");
-        toggle_data_editor->setCheckable(true);
-        toggle_data_editor->setChecked(false);
-        connect(toggle_data_editor,
-                &QAction::toggled,
-                this,
-                &SpectraMainWindow::on_toggle_data_editor);
-
-        auto* toggle_accessibility = menu_view_panels_->addAction("Accessibility");
-        toggle_accessibility->setObjectName("view_toggle_accessibility");
-        toggle_accessibility->setCheckable(true);
-        toggle_accessibility->setChecked(false);
-        connect(toggle_accessibility,
-                &QAction::toggled,
-                this,
-                &SpectraMainWindow::on_toggle_accessibility);
-
-        auto* toggle_plugin_panel = menu_view_panels_->addAction("Plugin Panels");
-        toggle_plugin_panel->setObjectName("view_toggle_plugin_panel");
-        toggle_plugin_panel->setCheckable(true);
-        toggle_plugin_panel->setChecked(false);
-        connect(toggle_plugin_panel,
-                &QAction::toggled,
-                this,
-                &SpectraMainWindow::on_toggle_plugin_panel);
-
-        auto* toggle_plugins = menu_view_panels_->addAction("Plugins");
-        toggle_plugins->setObjectName("view_toggle_plugins");
-        toggle_plugins->setCheckable(true);
-        toggle_plugins->setChecked(false);
-        connect(toggle_plugins, &QAction::toggled, this, &SpectraMainWindow::on_toggle_plugins);
     }
-
-    // Add split actions to the Splits submenu
-    if (menu_view_splits_)
-    {
-        auto* split_right_action = menu_view_splits_->addAction("Split Right");
-        split_right_action->setObjectName("view_split_right");
-        split_right_action->setShortcut(QKeySequence("Ctrl+\\"));
-        connect(split_right_action, &QAction::triggered, this, &SpectraMainWindow::on_split_right);
-
-        auto* split_down_action = menu_view_splits_->addAction("Split Down");
-        split_down_action->setObjectName("view_split_down");
-        split_down_action->setShortcut(QKeySequence("Ctrl+Shift+\\"));
-        connect(split_down_action, &QAction::triggered, this, &SpectraMainWindow::on_split_down);
-
-        auto* close_split_action = menu_view_splits_->addAction("Close Split Pane");
-        close_split_action->setObjectName("view_close_split");
-        connect(close_split_action, &QAction::triggered, this, &SpectraMainWindow::on_close_split);
-
-        auto* reset_splits_action = menu_view_splits_->addAction("Reset Splits");
-        reset_splits_action->setObjectName("view_reset_splits");
-        connect(reset_splits_action,
-                &QAction::triggered,
-                this,
-                &SpectraMainWindow::on_reset_splits);
-
-        menu_view_splits_->addSeparator();
-
-        auto* reset_layout_action = menu_view_splits_->addAction("Reset Layout");
-        reset_layout_action->setObjectName("view_reset_layout");
-        connect(reset_layout_action,
-                &QAction::triggered,
-                this,
-                &SpectraMainWindow::on_reset_layout);
-    }
-
-    // Add submenus to the View menu
-    if (menu_view_)
-    {
-        if (menu_view_panels_ && !menu_view_panels_->actions().isEmpty())
-        {
-            menu_view_->addSeparator();
-            menu_view_->addMenu(menu_view_panels_);
-        }
-        if (menu_view_splits_ && !menu_view_splits_->actions().isEmpty())
-        {
-            menu_view_->addSeparator();
-            menu_view_->addMenu(menu_view_splits_);
-        }
-    }
+    bind_panel_action("panel.toggle_topics", topics_panel_);
+    bind_panel_action("panel.open_settings", settings_panel_);
+    bind_panel_action("panel.toggle_timeline", timeline_panel_);
+    bind_panel_action("panel.toggle_curve_editor", curve_editor_panel_);
+    bind_panel_action("panel.toggle_data_editor", data_editor_panel_);
+    bind_panel_action("panel.toggle_plugins", plugins_panel_);
 }
 
 // ── Private: build command palette ──────────────────────────────────────────
@@ -893,6 +1398,32 @@ void SpectraMainWindow::open_command_palette()
         command_palette_->open_palette();
 }
 
+bool SpectraMainWindow::cancel_transient_ui()
+{
+    if (QWidget* popup = QApplication::activePopupWidget())
+    {
+        popup->close();
+        return true;
+    }
+
+    if (command_palette_ && command_palette_->isVisible())
+    {
+        command_palette_->close_palette();
+        return true;
+    }
+
+    const auto dialogs = findChildren<QDialog*>();
+    for (auto it = dialogs.crbegin(); it != dialogs.crend(); ++it)
+    {
+        if (*it && (*it)->isVisible())
+        {
+            (*it)->reject();
+            return true;
+        }
+    }
+    return false;
+}
+
 // ── Panel toggle slots ──────────────────────────────────────────────────────
 
 void SpectraMainWindow::toggle_inspector()
@@ -917,89 +1448,117 @@ void SpectraMainWindow::on_toggle_inspector(bool checked)
     }
     if (settings_panel_)
         settings_panel_->set_inspector_visible(checked);
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_topics()
 {
     if (topics_panel_)
         topics_panel_->setHidden(!topics_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_settings()
 {
     if (settings_panel_)
         settings_panel_->setHidden(!settings_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_timeline()
 {
     if (timeline_panel_)
         set_timeline_visible(timeline_panel_->isHidden());
+    emit workspace_state_changed();
+}
+
+void SpectraMainWindow::on_toggle_curve_editor()
+{
+    if (curve_editor_panel_)
+        curve_editor_panel_->setHidden(!curve_editor_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_export()
 {
     if (export_panel_)
         export_panel_->setHidden(!export_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_shortcuts()
 {
     if (shortcut_panel_)
         shortcut_panel_->setHidden(!shortcut_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_transform()
 {
     if (transform_panel_)
         transform_panel_->setHidden(!transform_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_data_editor()
 {
     if (data_editor_panel_)
         data_editor_panel_->setHidden(!data_editor_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_accessibility()
 {
     if (accessibility_panel_)
         accessibility_panel_->setHidden(!accessibility_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_plugin_panel()
 {
     if (plugin_panel_)
         plugin_panel_->setHidden(!plugin_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 void SpectraMainWindow::on_toggle_plugins()
 {
     if (plugins_panel_)
         plugins_panel_->setHidden(!plugins_panel_->isHidden());
+    emit workspace_state_changed();
 }
 
 // ── Split view ────────────────────────────────────────────────────────────────
 
 bool SpectraMainWindow::split_right()
 {
-    return central_view_ ? central_view_->split_right() : false;
+    const bool changed = central_view_ && central_view_->split_right();
+    if (changed)
+        emit workspace_state_changed();
+    return changed;
 }
 
 bool SpectraMainWindow::split_down()
 {
-    return central_view_ ? central_view_->split_down() : false;
+    const bool changed = central_view_ && central_view_->split_down();
+    if (changed)
+        emit workspace_state_changed();
+    return changed;
 }
 
 bool SpectraMainWindow::close_split()
 {
-    return central_view_ ? central_view_->close_split() : false;
+    const bool changed = central_view_ && central_view_->close_split();
+    if (changed)
+        emit workspace_state_changed();
+    return changed;
 }
 
 void SpectraMainWindow::reset_splits()
 {
     if (central_view_)
         central_view_->reset_splits();
+    emit workspace_state_changed();
 }
 
 bool SpectraMainWindow::is_split() const
@@ -1075,6 +1634,8 @@ void SpectraMainWindow::reset_layout()
         plugin_panel_->hide();
     if (timeline_panel_)
         timeline_panel_->hide();
+    if (curve_editor_panel_)
+        curve_editor_panel_->hide();
 
     // Show inspector (hidden by default per Vision.png)
     if (spectra_inspector_)
@@ -1103,6 +1664,7 @@ void SpectraMainWindow::reset_layout()
 
     // Restore the legacy desktop client size.
     resize(1280, 720);
+    emit workspace_state_changed();
 }
 
 // ── Build Spectra custom UI ───────────────────────────────────────────────────
@@ -1135,9 +1697,9 @@ void SpectraMainWindow::build_spectra_ui()
         app_header_->add_menu("Plot", menu_figure_);
     if (menu_data_)
         app_header_->add_menu("Data", menu_data_);
-    if (menu_axes_)
+    if (menu_axes_ && !menu_axes_->actions().isEmpty())
         app_header_->add_menu("Axes", menu_axes_);
-    if (menu_transforms_)
+    if (menu_transforms_ && !menu_transforms_->actions().isEmpty())
         app_header_->add_menu("Transforms", menu_transforms_);
     if (menu_help_)
         app_header_->add_menu("Help", menu_help_);
@@ -1164,62 +1726,84 @@ void SpectraMainWindow::build_spectra_ui()
     // Create navigation rail
     nav_rail_ = new SpectraNavRail(this);
     nav_rail_->setObjectName("spectra_nav_rail");
+    if (auto* action =
+            action_bridge_ ? action_bridge_->action_for("panel.toggle_nav_rail") : nullptr)
+    {
+        action->setCheckable(true);
+        action->setChecked(true);
+    }
     // Hide buttons that have no panel or command wired yet
-    nav_rail_->set_button_visible(6, false);    // Markers
-    nav_rail_->set_button_visible(10, false);   // Curve Editor
+    nav_rail_->set_button_visible(6, true);     // Markers
+    nav_rail_->set_button_visible(10, true);    // Curve Editor
     nav_rail_->set_button_visible(14, false);   // Help (accessible via menu)
-    connect(nav_rail_,
-            &SpectraNavRail::tool_selected,
-            this,
-            [this](int tool)
+    connect(
+        nav_rail_,
+        &SpectraNavRail::tool_selected,
+        this,
+        [this](int tool)
+        {
+            ToolMode requested_tool = ToolMode::Pan;
+            if (tool_mode_for_nav_index(tool, requested_tool))
             {
-                ToolMode requested_tool = ToolMode::Pan;
-                if (tool_mode_for_nav_index(tool, requested_tool))
+                const ToolUiState requested_state = tool_ui_state(requested_tool);
+                if (action_bridge_)
                 {
-                    const ToolUiState requested_state = tool_ui_state(requested_tool);
-                    if (action_bridge_)
+                    if (auto* action = action_bridge_->action_for(requested_state.command_id))
                     {
-                        if (auto* action = action_bridge_->action_for(requested_state.command_id))
-                        {
-                            action->trigger();
-                            sync_active_tool_ui();
-                            return;
-                        }
+                        action->trigger();
+                        sync_active_tool_ui();
+                        return;
                     }
-                    set_active_tool(requested_tool);
-                    return;
                 }
+                set_active_tool(requested_tool);
+                return;
+            }
 
-                switch (tool)
-                {
-                    case 7:
-                        if (transform_panel_)
-                            transform_panel_->show();
-                        break;
-                    case 8:
-                        if (spectra_inspector_)
-                            spectra_inspector_->toggle();
-                        break;
-                    case 9:
-                        if (timeline_panel_)
-                            timeline_panel_->show();
-                        break;
-                    case 11:
-                        if (plugins_panel_)
-                            plugins_panel_->show();
-                        break;
-                    case 12:
-                        if (topics_panel_)
-                            topics_panel_->show();
-                        break;
-                    case 13:
-                        if (settings_panel_)
-                            settings_panel_->show();
-                        break;
-                    default:
-                        break;
-                }
-            });
+            auto trigger_panel_command = [this](const char* command_id)
+            {
+                QAction* action = action_bridge_ ? action_bridge_->action_for(command_id) : nullptr;
+                if (!action)
+                    return false;
+                action->trigger();
+                return true;
+            };
+            switch (tool)
+            {
+                case 6:
+                    clear_active_markers();
+                    break;
+                case 7:
+                    if (transform_panel_)
+                        transform_panel_->show();
+                    break;
+                case 8:
+                    if (!trigger_panel_command("panel.toggle_inspector") && spectra_inspector_)
+                        spectra_inspector_->toggle();
+                    break;
+                case 9:
+                    if (!trigger_panel_command("panel.toggle_timeline") && timeline_panel_)
+                        timeline_panel_->show();
+                    break;
+                case 10:
+                    if (!trigger_panel_command("panel.toggle_curve_editor") && curve_editor_panel_)
+                        curve_editor_panel_->show();
+                    break;
+                case 11:
+                    if (!trigger_panel_command("panel.toggle_plugins") && plugins_panel_)
+                        plugins_panel_->show();
+                    break;
+                case 12:
+                    if (!trigger_panel_command("panel.toggle_topics") && topics_panel_)
+                        topics_panel_->show();
+                    break;
+                case 13:
+                    if (!trigger_panel_command("panel.open_settings") && settings_panel_)
+                        settings_panel_->show();
+                    break;
+                default:
+                    break;
+            }
+        });
 
     // Create document tab bar
     doc_tab_bar_ = new SpectraDocumentTabBar(this);
@@ -1260,6 +1844,14 @@ void SpectraMainWindow::build_spectra_ui()
             &SpectraDocumentTabBar::tab_detach_requested,
             this,
             [this](int id) { emit figure_detach_requested(static_cast<FigureId>(id)); });
+    connect(doc_tab_bar_,
+            &SpectraDocumentTabBar::figure_dropped,
+            this,
+            [this](int id, int)
+            {
+                if (id >= 0)
+                    emit figure_drop_requested(static_cast<FigureId>(id));
+            });
 
     // Create canvas frame wrapping the central view
     canvas_frame_ = new SpectraCanvasFrame(central_view_, this);
@@ -1268,6 +1860,22 @@ void SpectraMainWindow::build_spectra_ui()
     // Create custom status bar
     spectra_status_ = new SpectraStatusBar(this);
     spectra_status_->setObjectName("spectra_status_bar");
+
+    // Hide navigation/document/status chrome when the split view shows the
+    // welcome page, and restore the user's nav-rail preference when a figure
+    // is opened.
+    connect(central_view_,
+            &QtSplitViewContainer::welcome_page_visible,
+            this,
+            &SpectraMainWindow::on_welcome_page_visible);
+
+    if (inspector_panel_)
+    {
+        connect(inspector_panel_,
+                &QtInspectorWidget::figure_title_changed,
+                this,
+                [this](FigureId id, const QString&) { sync_document_title(id); });
+    }
 
     // Create inspector drawer (hidden by default)
     spectra_inspector_ = new SpectraInspectorDrawer(this);
@@ -1347,7 +1955,8 @@ void SpectraMainWindow::build_spectra_ui()
     if (services_)
     {
         const auto& settings = services_->settings().data();
-        set_nav_rail_visible(settings.nav_rail_visible);
+        nav_rail_user_pref_  = settings.nav_rail_visible;
+        set_nav_rail_visible(nav_rail_user_pref_);
         on_toggle_inspector(settings.inspector_visible);
         set_timeline_visible(settings.timeline_visible);
     }
@@ -1370,12 +1979,33 @@ void SpectraMainWindow::update_compact_mode()
 
 // ── Styling ────────────────────────────────────────────────────────────────────
 
-void SpectraMainWindow::apply_spectra_style()
+void SpectraMainWindow::refresh_theme()
 {
-    // Dark theme stylesheet matching Vision.png — suppresses default Qt/KDE styling
-    setStyleSheet(R"(
+    if (services_)
+    {
+        if (settings_panel_)
+            settings_panel_->set_theme_name(services_->theme().current_theme_name());
+        apply_theme(services_->theme().colors());
+        return;
+    }
+
+    ui::ThemeManager fallback;
+    fallback.ensure_initialized();
+    apply_theme(fallback.colors());
+}
+
+void SpectraMainWindow::apply_theme(const ui::ThemeColors& theme)
+{
+    set_spectra_colors(theme);
+
+    // The geometry and control-state rules stay stable while every color is
+    // substituted from the same ThemeManager palette used by the renderer.
+    QString style = QStringLiteral(R"(
         QMainWindow {
             background-color: #0A0F18;
+        }
+        QDialog {
+            background-color: #111827;
         }
         QMenuBar {
             background-color: #0A0F18;
@@ -1676,19 +2306,19 @@ void SpectraMainWindow::apply_spectra_style()
 
         /* ── QComboBox down-arrow ─────────────────────────────────── */
         QComboBox::down-arrow {
-            image: none;
-            border-left: 4px solid transparent;
-            border-right: 4px solid transparent;
-            border-top: 5px solid #8A909C;
-            width: 0;
-            height: 0;
+            image: url("{combobox_arrow}");
+            background-color: transparent;
+            border: none;
+            width: 16px;
+            height: 16px;
         }
         QComboBox::down-arrow:on {
-            border-top: none;
-            border-bottom: 5px solid #8A909C;
+            image: url("{combobox_arrow_on}");
+            border: none;
         }
         QComboBox::down-arrow:disabled {
-            border-top-color: #4A4D56;
+            image: url("{combobox_arrow_disabled}");
+            border: none;
         }
 
         /* ── QSpinBox / QDoubleSpinBox buttons ────────────────────── */
@@ -1703,27 +2333,36 @@ void SpectraMainWindow::apply_spectra_style()
             background-color: #23262E;
         }
         QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
-            image: none;
-            border-left: 3px solid transparent;
-            border-right: 3px solid transparent;
-            border-bottom: 4px solid #8A909C;
-            width: 0;
-            height: 0;
+            image: url("{spinbox_up}");
+            background-color: transparent;
+            border: none;
+            width: 16px;
+            height: 16px;
+        }
+        QSpinBox::up-arrow:disabled, QDoubleSpinBox::up-arrow:disabled {
+            image: url("{spinbox_up_disabled}");
+            border: none;
         }
         QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
-            image: none;
-            border-left: 3px solid transparent;
-            border-right: 3px solid transparent;
-            border-top: 4px solid #8A909C;
-            width: 0;
-            height: 0;
+            image: url("{spinbox_down}");
+            background-color: transparent;
+            border: none;
+            width: 16px;
+            height: 16px;
+        }
+        QSpinBox::down-arrow:disabled, QDoubleSpinBox::down-arrow:disabled {
+            image: url("{spinbox_down_disabled}");
+            border: none;
         }
 
         /* ── QCheckBox checkmark ──────────────────────────────────── */
         QCheckBox::indicator:checked {
             background-color: #7C5CFC;
             border-color: #7C5CFC;
-            image: none;
+            image: url("{checkbox_checked}");
+        }
+        QCheckBox::indicator:checked:disabled {
+            image: url("{checkbox_checked_disabled}");
         }
 
         /* ── QRadioButton ─────────────────────────────────────────── */
@@ -1850,6 +2489,74 @@ void SpectraMainWindow::apply_spectra_style()
             background-color: #0A0F18;
         }
     )");
+
+    const auto&  colors   = spectra_colors();
+    const QColor selected = composite_color(theme.accent_muted, theme.bg_secondary);
+    const QColor hovered  = composite_color(theme.hover_highlight, theme.bg_secondary);
+    const QColor disabled = composite_color(theme.text_tertiary, theme.bg_primary);
+
+    // Indicator icons are rendered from the icon font so they stay crisp across
+    // themes and DPR. The paths are written to a temp directory and then embedded
+    // into the stylesheet as image URLs.
+    const QString checkbox_checked_url =
+        icon_image_url(0xf00c, colors.text_primary, 16, "checkbox");
+    const QString checkbox_checked_disabled_url =
+        icon_image_url(0xf00c, disabled, 16, "checkbox_disabled");
+    const QString combobox_arrow_url =
+        icon_image_url(0xf078, colors.text_muted, 16, "combobox_arrow");
+    const QString combobox_arrow_on_url =
+        icon_image_url(0xf077, colors.text_muted, 16, "combobox_arrow_on");
+    const QString combobox_arrow_disabled_url =
+        icon_image_url(0xf078, disabled, 16, "combobox_arrow_disabled");
+    const QString spinbox_up_url = icon_image_url(0xf077, colors.text_muted, 16, "spinbox_up");
+    const QString spinbox_up_disabled_url =
+        icon_image_url(0xf077, disabled, 16, "spinbox_up_disabled");
+    const QString spinbox_down_url = icon_image_url(0xf078, colors.text_muted, 16, "spinbox_down");
+    const QString spinbox_down_disabled_url =
+        icon_image_url(0xf078, disabled, 16, "spinbox_down_disabled");
+
+    const std::array<std::pair<const char*, QColor>, 20> substitutions = {{
+        {"#0A0F18", colors.window_base},
+        {"#0D0E11", colors.bg_canvas},
+        {"#111316", colors.window_base},
+        {"#111827", colors.panel_surface},
+        {"#15171C", colors.panel_surface},
+        {"#1A1C22", hovered},
+        {"#1A2332", colors.input_surface},
+        {"#1F2229", selected},
+        {"#222D3F", colors.elevated_surface},
+        {"#23262E", colors.border_default},
+        {"#2A2D36", colors.elevated_surface},
+        {"#2E3D57", colors.border_subtle},
+        {"#3A3D46", colors.border_strong},
+        {"#4A4D56", disabled},
+        {"#7C5CFC", colors.cyan_accent},
+        {"#8C6CFF",
+         QColor::fromRgbF(theme.accent_hover.r, theme.accent_hover.g, theme.accent_hover.b)},
+        {"#8A909C", colors.text_muted},
+        {"#C7D6EB", colors.text_secondary},
+        {"#C8CDD6", colors.text_secondary},
+        {"#E8ECF1", colors.text_primary},
+    }};
+    for (const auto& [source, target] : substitutions)
+        style.replace(QLatin1String(source), css_color(target), Qt::CaseInsensitive);
+    style.replace(QLatin1String("#EDF0F7"), css_color(colors.text_primary), Qt::CaseInsensitive);
+
+    style.replace(QLatin1String("{checkbox_checked}"), checkbox_checked_url);
+    style.replace(QLatin1String("{checkbox_checked_disabled}"), checkbox_checked_disabled_url);
+    style.replace(QLatin1String("{combobox_arrow}"), combobox_arrow_url);
+    style.replace(QLatin1String("{combobox_arrow_on}"), combobox_arrow_on_url);
+    style.replace(QLatin1String("{combobox_arrow_disabled}"), combobox_arrow_disabled_url);
+    style.replace(QLatin1String("{spinbox_up}"), spinbox_up_url);
+    style.replace(QLatin1String("{spinbox_up_disabled}"), spinbox_up_disabled_url);
+    style.replace(QLatin1String("{spinbox_down}"), spinbox_down_url);
+    style.replace(QLatin1String("{spinbox_down_disabled}"), spinbox_down_disabled_url);
+
+    // Application scope covers detached windows and native popup/dialog
+    // surfaces. Custom-painted widgets read the synchronized token palette.
+    qApp->setStyleSheet(style);
+    for (QWidget* widget : QApplication::allWidgets())
+        widget->update();
 }
 
 void SpectraMainWindow::load_fonts()

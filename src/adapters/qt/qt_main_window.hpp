@@ -12,7 +12,9 @@
 
 #include <QMainWindow>
 
+#include <functional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <spectra/fwd.hpp>
@@ -29,7 +31,14 @@ class FigureRegistry;
 class InputHandler;
 class CommandRegistry;
 class ApplicationServices;
+class TimelineEditor;
+class AxisLinkManager;
+enum class LinkAxis : uint8_t;
 enum class ToolMode;
+namespace ui
+{
+struct ThemeColors;
+}
 }   // namespace spectra
 
 namespace spectra::adapters::qt
@@ -48,6 +57,7 @@ class QtTopicsWidget;
 class QtSettingsWidget;
 class QtCommandPaletteDialog;
 class QtTimelineWidget;
+class QtCurveEditorWidget;
 class QtExportWidget;
 class QtShortcutWidget;
 class QtTransformWidget;
@@ -71,11 +81,14 @@ class SpectraMainWindow : public QMainWindow
     Q_OBJECT
 
    public:
+    using TimelineResolver = std::function<TimelineEditor*(FigureId)>;
+
     SpectraMainWindow(QtRuntime*           runtime,
                       FigureRegistry*      registry,
                       QtActionBridge*      action_bridge,
-                      ApplicationServices* services = nullptr,
-                      QWidget*             parent   = nullptr);
+                      ApplicationServices* services          = nullptr,
+                      TimelineResolver     timeline_resolver = {},
+                      QWidget*             parent            = nullptr);
     ~SpectraMainWindow() override;
 
     SpectraMainWindow(const SpectraMainWindow&)            = delete;
@@ -107,6 +120,9 @@ class SpectraMainWindow : public QMainWindow
 
     // Get all FigureIds currently open as tabs in this window.
     std::vector<FigureId> open_figure_ids() const;
+    std::string           serialize_split_layout() const;
+    bool                  restore_split_layout(const std::string&                            layout,
+                                               const std::unordered_map<FigureId, FigureId>& id_map);
 
     // Snapshot the visible Qt menu hierarchy for automation.
     std::string automation_menu_state() const;
@@ -135,6 +151,12 @@ class SpectraMainWindow : public QMainWindow
 
     void set_status(const std::string& message);
     void set_active_tool(ToolMode tool);
+    void set_detached_host(bool detached);
+    void set_axis_link_manager(AxisLinkManager* manager);
+    bool autofit_active_axes();
+    void toggle_canvas_fullscreen();
+    bool clear_active_markers();
+    bool toggle_active_crosshair();
     void set_nav_rail_visible(bool visible);
     bool is_nav_rail_visible() const;
 
@@ -144,6 +166,7 @@ class SpectraMainWindow : public QMainWindow
     QtTopicsWidget*        topics_panel() { return topics_panel_; }
     QtSettingsWidget*      settings_panel() { return settings_panel_; }
     QtTimelineWidget*      timeline_panel() { return timeline_panel_; }
+    QtCurveEditorWidget*   curve_editor_panel() { return curve_editor_panel_; }
     QtExportWidget*        export_panel() { return export_panel_; }
     QtShortcutWidget*      shortcut_panel() { return shortcut_panel_; }
     QtTransformWidget*     transform_panel() { return transform_panel_; }
@@ -156,10 +179,23 @@ class SpectraMainWindow : public QMainWindow
 
     void open_command_palette();
 
+    // Close the topmost transient surface owned by this window. Returns true
+    // when a popup/dialog was dismissed.
+    bool cancel_transient_ui();
+
     // ── Layout reset ───────────────────────────────────────────────────────
 
     // Reset dock state, panel visibility, and window layout to defaults.
     void reset_layout();
+
+    // Rebind all native Qt chrome and custom-painted shell components to the
+    // shared application theme. The explicit overload is also useful to
+    // validate themes without constructing the Vulkan runtime.
+    void refresh_theme();
+    void apply_theme(const ui::ThemeColors& colors);
+
+    bool link_active_axes(LinkAxis axis);
+    bool unlink_all_axes();
 
    public slots:
     // Semantic no-argument toggle used by commands and shortcuts.
@@ -169,6 +205,15 @@ class SpectraMainWindow : public QMainWindow
     void figure_closed(FigureId id);
     void figure_activated(FigureId id);
     void figure_detach_requested(FigureId id);
+    void figure_redock_requested(FigureId id);
+    void figure_move_to_pane_requested(FigureId id, size_t target_pane_index);
+
+    // A figure was dropped on this window's document tab bar from another
+    // (or the same) Spectra window. The registry uses this to perform a
+    // destination-first cross-host move.
+    void figure_drop_requested(FigureId id);
+
+    void workspace_state_changed();
 
    private slots:
     void on_tab_changed(int index);
@@ -177,6 +222,7 @@ class SpectraMainWindow : public QMainWindow
     void on_toggle_topics();
     void on_toggle_settings();
     void on_toggle_timeline();
+    void on_toggle_curve_editor();
     void on_toggle_export();
     void on_toggle_shortcuts();
     void on_toggle_transform();
@@ -194,16 +240,21 @@ class SpectraMainWindow : public QMainWindow
 
    private:
     void build_menus();
+    void rebuild_transform_menu();
     void build_toolbar();
     void build_status_bar();
     void build_panels();
     void build_command_palette();
-    void apply_spectra_style();
     void load_fonts();
     void build_spectra_ui();
     void update_compact_mode();
+    void sync_active_figure_panels(FigureId id);
     void sync_active_tool_ui();
+    void sync_document_title(FigureId id);
+    void sync_active_zoom(FigureId id);
     void set_timeline_visible(bool visible);
+    void set_nav_rail_visible_internal(bool visible, bool notify);
+    void on_welcome_page_visible(bool visible);
 
    protected:
     void resizeEvent(QResizeEvent* event) override;
@@ -215,9 +266,11 @@ class SpectraMainWindow : public QMainWindow
     FigureRegistry*      registry_      = nullptr;
     QtActionBridge*      action_bridge_ = nullptr;
     ApplicationServices* services_      = nullptr;
+    TimelineResolver     timeline_resolver_;
 
-    QtSplitViewContainer* central_view_ = nullptr;
-    QLabel*               status_label_ = nullptr;
+    QtSplitViewContainer* central_view_      = nullptr;
+    AxisLinkManager*      axis_link_manager_ = nullptr;
+    QLabel*               status_label_      = nullptr;
 
     // New Spectra custom UI components
     SpectraTitleBar*        title_bar_         = nullptr;
@@ -228,6 +281,10 @@ class SpectraMainWindow : public QMainWindow
     SpectraInspectorDrawer* spectra_inspector_ = nullptr;
     SpectraCanvasFrame*     canvas_frame_      = nullptr;
     QWidget*                central_container_ = nullptr;
+
+    // Welcome state chrome visibility bookkeeping
+    bool in_welcome_state_   = false;
+    bool nav_rail_user_pref_ = true;
 
     // Menu bar
     QMenu*    menu_file_               = nullptr;
@@ -253,6 +310,7 @@ class SpectraMainWindow : public QMainWindow
     QtTopicsWidget*        topics_panel_        = nullptr;
     QtSettingsWidget*      settings_panel_      = nullptr;
     QtTimelineWidget*      timeline_panel_      = nullptr;
+    QtCurveEditorWidget*   curve_editor_panel_  = nullptr;
     QtExportWidget*        export_panel_        = nullptr;
     QtShortcutWidget*      shortcut_panel_      = nullptr;
     QtTransformWidget*     transform_panel_     = nullptr;

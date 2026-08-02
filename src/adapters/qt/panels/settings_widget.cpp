@@ -11,14 +11,15 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 namespace spectra::adapters::qt
 {
 
 QtSettingsWidget::QtSettingsWidget(ui::settings::SettingsStore* store,
-                                   ui::ThemeManager*           theme_mgr,
-                                   QWidget*                    parent)
+                                   ui::ThemeManager*            theme_mgr,
+                                   QWidget*                     parent)
     : QDockWidget("Settings", parent), store_(store), theme_mgr_(theme_mgr)
 {
     setObjectName("settings_panel");
@@ -33,7 +34,7 @@ QtSettingsWidget::QtSettingsWidget(ui::settings::SettingsStore* store,
 
     // ── Appearance group ──────────────────────────────────────────────
     auto* appearance_group = new QGroupBox("Appearance", content);
-    auto* form = new QFormLayout(appearance_group);
+    auto* form             = new QFormLayout(appearance_group);
 
     theme_combo_ = new QComboBox(appearance_group);
     theme_combo_->setObjectName("theme_combo");
@@ -42,14 +43,20 @@ QtSettingsWidget::QtSettingsWidget(ui::settings::SettingsStore* store,
 
     palette_combo_ = new QComboBox(appearance_group);
     palette_combo_->setObjectName("palette_combo");
-    palette_combo_->addItems({"default", "colorblind", "tol_bright", "tol_muted",
-                              "ibm", "wong", "viridis", "monochrome"});
+    palette_combo_->addItems({"default",
+                              "colorblind",
+                              "tol_bright",
+                              "tol_muted",
+                              "ibm",
+                              "wong",
+                              "viridis",
+                              "monochrome"});
     form->addRow("Data Palette", palette_combo_);
 
     layout->addWidget(appearance_group);
 
     // ── Panel visibility group ────────────────────────────────────────
-    auto* panels_group = new QGroupBox("Panel Visibility", content);
+    auto* panels_group  = new QGroupBox("Panel Visibility", content);
     auto* panels_layout = new QVBoxLayout(panels_group);
 
     inspector_check_ = new QCheckBox("Inspector", panels_group);
@@ -87,16 +94,17 @@ QtSettingsWidget::QtSettingsWidget(ui::settings::SettingsStore* store,
     }
 
     // ── Connections ───────────────────────────────────────────────────
-    connect(theme_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, &QtSettingsWidget::on_theme_changed);
-    connect(palette_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, &QtSettingsWidget::on_palette_changed);
-    connect(inspector_check_, &QCheckBox::toggled,
-            this, &QtSettingsWidget::on_inspector_toggled);
-    connect(nav_rail_check_, &QCheckBox::toggled,
-            this, &QtSettingsWidget::on_nav_rail_toggled);
-    connect(timeline_check_, &QCheckBox::toggled,
-            this, &QtSettingsWidget::on_timeline_toggled);
+    connect(theme_combo_,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            &QtSettingsWidget::on_theme_changed);
+    connect(palette_combo_,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            &QtSettingsWidget::on_palette_changed);
+    connect(inspector_check_, &QCheckBox::toggled, this, &QtSettingsWidget::on_inspector_toggled);
+    connect(nav_rail_check_, &QCheckBox::toggled, this, &QtSettingsWidget::on_nav_rail_toggled);
+    connect(timeline_check_, &QCheckBox::toggled, this, &QtSettingsWidget::on_timeline_toggled);
 }
 
 void QtSettingsWidget::on_theme_changed(int index)
@@ -104,8 +112,8 @@ void QtSettingsWidget::on_theme_changed(int index)
     if (!store_ || !theme_mgr_ || index < 0)
         return;
 
-    QString theme = theme_combo_->itemText(index);
-    auto& d       = store_->data_mut();
+    QString theme   = theme_combo_->itemText(index);
+    auto&   d       = store_->data_mut();
     d.default_theme = theme.toStdString();
     theme_mgr_->set_theme(d.default_theme);
     theme_mgr_->reset_glass_defaults();
@@ -119,8 +127,8 @@ void QtSettingsWidget::on_palette_changed(int index)
     if (!store_ || !theme_mgr_ || index < 0)
         return;
 
-    QString pal = palette_combo_->itemText(index);
-    auto& d     = store_->data_mut();
+    QString pal            = palette_combo_->itemText(index);
+    auto&   d              = store_->data_mut();
     d.default_data_palette = pal.toStdString();
     theme_mgr_->set_data_palette(d.default_data_palette);
     store_->notify_change();
@@ -170,6 +178,16 @@ void QtSettingsWidget::set_nav_rail_visible(bool visible)
 void QtSettingsWidget::set_timeline_visible(bool visible)
 {
     timeline_check_->setChecked(visible);
+}
+
+void QtSettingsWidget::set_theme_name(const std::string& name)
+{
+    const int index = theme_combo_->findText(QString::fromStdString(name));
+    if (index < 0 || index == theme_combo_->currentIndex())
+        return;
+
+    const QSignalBlocker blocker(theme_combo_);
+    theme_combo_->setCurrentIndex(index);
 }
 
 }   // namespace spectra::adapters::qt

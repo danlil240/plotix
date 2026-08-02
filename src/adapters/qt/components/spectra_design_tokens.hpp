@@ -10,6 +10,11 @@
 #include <QFont>
 #include <QString>
 
+namespace spectra::ui
+{
+struct ThemeColors;
+}
+
 namespace spectra::adapters::qt
 {
 
@@ -171,11 +176,11 @@ class SpectraFontManager
 
 // ─── Global Token Access ─────────────────────────────────────────────────────
 
-inline const SpectraColors& spectra_colors()
-{
-    static SpectraColors c;
-    return c;
-}
+// The Qt shell mirrors the process ThemeManager rather than owning a second
+// palette. The fallback values above remain useful before a runtime exists.
+const SpectraColors&          spectra_colors();
+SpectraColors                 spectra_colors_from_theme(const ui::ThemeColors& colors);
+void                          set_spectra_colors(const ui::ThemeColors& colors);
 inline const SpectraGeometry& spectra_geometry()
 {
     static SpectraGeometry g;

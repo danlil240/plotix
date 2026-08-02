@@ -1,6 +1,7 @@
 #pragma once
 
 #include <spectra/color.hpp>
+#include <cstdint>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -16,6 +17,9 @@ struct OverlaySnapshot
 {
     bool crosshair_enabled = false;
     bool tooltip_enabled   = true;
+    // Stored as the stable zero-based ToolMode value without depending on
+    // input.hpp from this plain-data serialization type.
+    uint8_t tool_mode = 0;
 
     struct MarkerEntry
     {
@@ -38,6 +42,26 @@ struct OverlaySnapshot
         size_t      axes_index = 0;
     };
     std::vector<AnnotationEntry> annotations;
+
+    struct RegionEntry
+    {
+        bool   valid      = false;
+        float  x_min      = 0.0f;
+        float  x_max      = 0.0f;
+        float  y_min      = 0.0f;
+        float  y_max      = 0.0f;
+        size_t axes_index = 0;
+    } region;
+
+    struct MeasurementEntry
+    {
+        bool   valid        = false;
+        double start_data_x = 0.0;
+        double start_data_y = 0.0;
+        double end_data_x   = 0.0;
+        double end_data_y   = 0.0;
+        size_t axes_index   = 0;
+    } measurement;
 };
 
 }   // namespace spectra

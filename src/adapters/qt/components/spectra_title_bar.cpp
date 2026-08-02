@@ -17,8 +17,7 @@ namespace spectra::adapters::qt
 
 SpectraTitleBar::~SpectraTitleBar() = default;
 
-SpectraTitleBar::SpectraTitleBar(QWidget* parent)
-    : QWidget(parent)
+SpectraTitleBar::SpectraTitleBar(QWidget* parent) : QWidget(parent)
 {
     setFixedHeight(spectra_geometry().title_bar_height);
     setAttribute(Qt::WA_StyledBackground, true);
@@ -49,7 +48,7 @@ void SpectraTitleBar::build_buttons()
         auto* btn = new QPushButton(text, this);
         btn->setFixedSize(btn_size, btn_size);
         btn->setFlat(true);
-        btn->setFocusPolicy(Qt::NoFocus);
+        btn->setFocusPolicy(Qt::StrongFocus);
         btn->setCursor(Qt::ArrowCursor);
         return btn;
     };
@@ -57,38 +56,36 @@ void SpectraTitleBar::build_buttons()
     btn_min_   = make_btn(QStringLiteral("\u2500"));   // horizontal bar
     btn_max_   = make_btn(QStringLiteral("\u25A1"));   // white square
     btn_close_ = make_btn(QStringLiteral("\u2715"));   // X mark
+    btn_min_->setObjectName("window_minimize_button");
+    btn_max_->setObjectName("window_maximize_button");
+    btn_close_->setObjectName("window_close_button");
+    btn_min_->setAccessibleName("Minimize window");
+    btn_max_->setAccessibleName("Maximize or restore window");
+    btn_close_->setAccessibleName("Close window");
 
     layout->addWidget(btn_min_);
     layout->addWidget(btn_max_);
     layout->addWidget(btn_close_);
 
-    connect(btn_min_,   &QPushButton::clicked, this, &SpectraTitleBar::on_minimize);
-    connect(btn_max_,   &QPushButton::clicked, this, &SpectraTitleBar::on_maximize);
+    connect(btn_min_, &QPushButton::clicked, this, &SpectraTitleBar::on_minimize);
+    connect(btn_max_, &QPushButton::clicked, this, &SpectraTitleBar::on_maximize);
     connect(btn_close_, &QPushButton::clicked, this, &SpectraTitleBar::on_close);
 
     // Style buttons
-    auto style_btn = [](QPushButton* btn, bool is_close = false)
+    auto style_btn = [](QPushButton* btn)
     {
-        QString bg = is_close ? "#E04848" : "transparent";
-        QString bg_hover = is_close ? "#D03030" : "#23262E";
-        btn->setStyleSheet(QString(
-            "QPushButton {"
-            "  background: %1;"
-            "  color: #8A909C;"
-            "  border: none;"
-            "  font-size: 11px;"
-            "  font-family: 'Inter';"
-            "}"
-            "QPushButton:hover {"
-            "  background: %2;"
-            "  color: #E8ECF1;"
-            "}"
-        ).arg(bg, bg_hover));
+        btn->setStyleSheet(QString("QPushButton {"
+                                   "  background: transparent;"
+                                   "  border: none;"
+                                   "  padding: 0;"
+                                   "  font-size: 11px;"
+                                   "  font-family: 'Inter';"
+                                   "}"));
     };
 
     style_btn(btn_min_);
     style_btn(btn_max_);
-    style_btn(btn_close_, true);
+    style_btn(btn_close_);
 }
 
 void SpectraTitleBar::set_title(const QString& title)

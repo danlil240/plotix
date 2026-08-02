@@ -9,6 +9,7 @@
 
 #include <spectra/fwd.hpp>
 #include <string>
+#include <unordered_map>
 
 namespace spectra
 {
@@ -35,7 +36,8 @@ class QtWorkspaceBridge
 
     // Apply a desktop layout from workspace data to the MainWindowRegistry.
     // Returns true if layout was applied (even partially).
-    bool apply_layout(const WorkspaceData& data) const;
+    bool apply_layout(const WorkspaceData&                          data,
+                      const std::unordered_map<FigureId, FigureId>& id_map = {}) const;
 
     // Set the provider name (e.g. "native", "kddockwidgets").
     void set_provider(const std::string& name) { provider_ = name; }

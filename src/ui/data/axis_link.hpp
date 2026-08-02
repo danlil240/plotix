@@ -115,6 +115,7 @@ class AxisLinkManager
 
     // Remove a group entirely (unlinks all members).
     void remove_group(LinkGroupId id);
+    void clear();
 
     // ── Membership ───────────────────────────────────────────────────
 
@@ -187,6 +188,7 @@ class AxisLinkManager
 
     // Total number of groups.
     size_t group_count() const;
+    size_t group_3d_count() const;
 
     // ── Serialization ────────────────────────────────────────────────
 
@@ -195,9 +197,13 @@ class AxisLinkManager
     // figure's axes vector — caller provides the mapping.
     using AxesToIndex = std::function<int(const Axes*)>;
     using IndexToAxes = std::function<Axes*(int)>;
+    using Axes3DToIndex = std::function<int(const Axes3D*)>;
+    using IndexToAxes3D = std::function<Axes3D*(int)>;
 
-    std::string serialize(const AxesToIndex& mapper) const;
-    void        deserialize(const std::string& json, const IndexToAxes& mapper);
+    std::string serialize(const AxesToIndex& mapper, const Axes3DToIndex& mapper_3d = {}) const;
+    void        deserialize(const std::string&   json,
+                            const IndexToAxes&   mapper,
+                            const IndexToAxes3D& mapper_3d = {});
 
     // ── Callbacks ────────────────────────────────────────────────────
 

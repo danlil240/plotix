@@ -15,7 +15,7 @@ SpectraNavButton::SpectraNavButton(const QString& icon_codepoint,
                                    const QString& label,
                                    const QString& shortcut_hint,
                                    QWidget*       parent)
-    : QPushButton(parent), icon_codepoint_(icon_codepoint), label_(label),
+    : QPushButton(label, parent), icon_codepoint_(icon_codepoint), label_(label),
       shortcut_hint_(shortcut_hint)
 {
     setAttribute(Qt::WA_StyledBackground, true);
@@ -25,6 +25,9 @@ SpectraNavButton::SpectraNavButton(const QString& icon_codepoint,
     setMinimumHeight(30);
     setMaximumHeight(64);
     setToolTip(label + (shortcut_hint.isEmpty() ? "" : " (" + shortcut_hint + ")"));
+    setAccessibleName(label);
+    setAccessibleDescription(shortcut_hint.isEmpty() ? QStringLiteral("Navigation control")
+                                                     : QString("Shortcut %1").arg(shortcut_hint));
 
     setStyleSheet(QString("QPushButton {"
                           "  background: transparent;"

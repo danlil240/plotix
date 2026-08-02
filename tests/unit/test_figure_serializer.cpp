@@ -2,7 +2,9 @@
 #include <cstdio>
 #include <filesystem>
 #include <gtest/gtest.h>
+#include <spectra/axes3d.hpp>
 #include <spectra/figure.hpp>
+#include <spectra/series3d.hpp>
 #include <spectra/series_stats.hpp>
 #include <vector>
 
@@ -104,4 +106,59 @@ TEST_F(FigureSerializerTest, RoundTripsScatterColormapAndUncertaintyBand)
     EXPECT_FLOAT_EQ(band->fill_opacity(), 0.35f);
     EXPECT_FLOAT_EQ(band->edge_width(), 2.0f);
     EXPECT_FALSE(band->show_edges());
+}
+
+TEST_F(FigureSerializerTest, InMemoryRoundTripPreservesPopulatedFigure)
+{
+    Figure src({913, 517});
+    src.set_tab_title("Restart-safe figure");
+    auto&                    axes = src.subplot(1, 1, 1);
+    const std::vector<float> x    = {0.0f, 1.0f, 2.0f};
+    const std::vector<float> y    = {4.0f, 5.0f, 8.0f};
+    axes.line(x, y).label("measurements").width(3.5f).x_offset(1783350621.752999);
+
+    std::string payload;
+    ASSERT_TRUE(FigureSerializer::serialize(src, payload));
+    ASSERT_FALSE(payload.empty());
+
+    Figure dst;
+    ASSERT_TRUE(FigureSerializer::deserialize(payload, dst));
+    EXPECT_EQ(dst.width(), 913u);
+    EXPECT_EQ(dst.height(), 517u);
+    ASSERT_EQ(dst.axes().size(), 1u);
+    ASSERT_EQ(dst.axes()[0]->series().size(), 1u);
+    auto* line = dynamic_cast<LineSeries*>(dst.axes()[0]->series()[0].get());
+    ASSERT_NE(line, nullptr);
+    EXPECT_EQ(line->label(), "measurements");
+    EXPECT_EQ(std::vector<float>(line->x_data().begin(), line->x_data().end()), x);
+    EXPECT_EQ(std::vector<float>(line->y_data().begin(), line->y_data().end()), y);
+    EXPECT_FLOAT_EQ(line->width(), 3.5f);
+    EXPECT_NEAR(line->x_offset(), 1783350621.752999, 1e-6);
+}
+
+TEST_F(FigureSerializerTest, InMemoryRoundTripPreservesThreeDimensionalXOffsets)
+{
+    Figure                   src;
+    auto&                    axes = src.subplot3d(1, 1, 1);
+    const std::vector<float> x{0.0f, 0.25f};
+    const std::vector<float> y{1.0f, 2.0f};
+    const std::vector<float> z{3.0f, 4.0f};
+    axes.line3d(x, y, z).x_offset(1783350621.752999);
+    axes.scatter3d(x, y, z).x_offset(1783350622.0);
+
+    std::string payload;
+    ASSERT_TRUE(FigureSerializer::serialize(src, payload));
+    Figure dst;
+    ASSERT_TRUE(FigureSerializer::deserialize(payload, dst));
+    Axes3D* loaded_axes = nullptr;
+    dst.for_each_axes(
+        [&loaded_axes](AxesBase* candidate)
+        {
+            if (!loaded_axes)
+                loaded_axes = dynamic_cast<Axes3D*>(candidate);
+        });
+    ASSERT_NE(loaded_axes, nullptr);
+    ASSERT_EQ(loaded_axes->series().size(), 2u);
+    EXPECT_NEAR(loaded_axes->series()[0]->x_offset(), 1783350621.752999, 1e-6);
+    EXPECT_DOUBLE_EQ(loaded_axes->series()[1]->x_offset(), 1783350622.0);
 }

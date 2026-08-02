@@ -22,6 +22,11 @@ class QPushButton;
 class QLabel;
 class QGroupBox;
 
+namespace spectra
+{
+class DialogService;
+}
+
 namespace spectra::adapters::qt
 {
 
@@ -30,7 +35,9 @@ class QtAccessibilityWidget : public QDockWidget
     Q_OBJECT
 
    public:
-    explicit QtAccessibilityWidget(FigureRegistry* registry, QWidget* parent = nullptr);
+    explicit QtAccessibilityWidget(FigureRegistry* registry,
+                                   DialogService*  dialogs,
+                                   QWidget*        parent = nullptr);
     ~QtAccessibilityWidget() override = default;
 
     QtAccessibilityWidget(const QtAccessibilityWidget&)            = delete;
@@ -48,6 +55,7 @@ class QtAccessibilityWidget : public QDockWidget
     void build_ui();
 
     FigureRegistry* registry_ = nullptr;
+    DialogService*  dialogs_   = nullptr;
     FigureId        active_id_ = INVALID_FIGURE_ID;
 
     // Sonification controls

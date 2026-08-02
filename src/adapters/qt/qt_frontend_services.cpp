@@ -4,6 +4,8 @@
 
 #include <spectra/logger.hpp>
 
+#include "ui/native_dialog_policy.hpp"
+
 #include <QApplication>
 #include <QClipboard>
 #include <QColorDialog>
@@ -11,12 +13,29 @@
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPixmap>
+#include <QInputDialog>
 
 #include <QString>
 #include <QStringList>
 
+#include <cstdlib>
+#include <cctype>
+
 namespace spectra::adapters::qt
 {
+namespace
+{
+
+std::string automation_key(const char* prefix, const std::string& title)
+{
+    std::string key(prefix);
+    key.reserve(key.size() + title.size());
+    for (const unsigned char c : title)
+        key.push_back(std::isalnum(c) ? static_cast<char>(std::toupper(c)) : '_');
+    return key;
+}
+
+}   // namespace
 
 // ─── QtDialogService ──────────────────────────────────────────────────────────
 
@@ -26,6 +45,20 @@ QtDialogService::file_dialog(FileType                       type,
                               const std::string&             default_path,
                               const std::vector<FileFilter>& filters)
 {
+    // Automation must never block on a native modal dialog. An explicit path
+    // provides a deterministic launched-process seam for artifact tests; with
+    // no path the operation is treated exactly like user cancellation.
+    if (!native_dialogs_enabled())
+    {
+        const std::string key = automation_key("SPECTRA_QT_DIALOG_", title);
+        if (const char* scripted = std::getenv(key.c_str()); scripted && *scripted)
+            return std::string(scripted);
+        if (const char* scripted = std::getenv("SPECTRA_QT_DIALOG_PATH"); scripted && *scripted)
+            return std::string(scripted);
+        SPECTRA_LOG_INFO("qt_dialog", "File dialog suppressed (automation mode)");
+        return std::nullopt;
+    }
+
     QString qt_title = QString::fromStdString(title);
     QString qt_path  = QString::fromStdString(default_path);
 
@@ -59,6 +92,9 @@ bool QtDialogService::message_box(const std::string& title,
                                    const std::string& message,
                                    bool               cancel_button)
 {
+    if (!native_dialogs_enabled())
+        return false;
+
     QMessageBox::StandardButtons buttons =
         cancel_button ? QMessageBox::Ok | QMessageBox::Cancel : QMessageBox::Ok;
 
@@ -75,6 +111,9 @@ bool QtDialogService::message_box(const std::string& title,
 std::optional<Color>
 QtDialogService::color_picker(const std::string& title, const Color& initial)
 {
+    if (!native_dialogs_enabled())
+        return std::nullopt;
+
     QColor initial_qt(
         static_cast<int>(initial.r * 255.0f),
         static_cast<int>(initial.g * 255.0f),
@@ -94,6 +133,40 @@ QtDialogService::color_picker(const std::string& title, const Color& initial)
     c.b = result.blueF();
     c.a = result.alphaF();
     return c;
+}
+
+std::optional<double> QtDialogService::number_input(const std::string& title,
+                                                    const std::string& label,
+                                                    double             initial,
+                                                    double             minimum,
+                                                    double             maximum,
+                                                    int                decimals)
+{
+    if (!native_dialogs_enabled())
+    {
+        const std::string key = automation_key("SPECTRA_QT_NUMBER_", title);
+        const char*       raw = std::getenv(key.c_str());
+        if (!raw || !*raw)
+            raw = std::getenv("SPECTRA_QT_NUMBER_INPUT");
+        if (!raw || !*raw)
+            return std::nullopt;
+        char*  end   = nullptr;
+        double value = std::strtod(raw, &end);
+        if (end == raw || *end != '\0' || value < minimum || value > maximum)
+            return std::nullopt;
+        return value;
+    }
+
+    bool         ok    = false;
+    const double value = QInputDialog::getDouble(nullptr,
+                                                 QString::fromStdString(title),
+                                                 QString::fromStdString(label),
+                                                 initial,
+                                                 minimum,
+                                                 maximum,
+                                                 decimals,
+                                                 &ok);
+    return ok ? std::optional<double>(value) : std::nullopt;
 }
 
 // ─── QtClipboardService ───────────────────────────────────────────────────────

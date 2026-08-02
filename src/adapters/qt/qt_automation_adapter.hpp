@@ -21,9 +21,12 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <random>
 #include <string>
 
 #include <spectra/fwd.hpp>
+
+#include "ui/automation/automation_fuzz_catalog.hpp"
 
 class QWidget;
 class QWindow;
@@ -65,6 +68,8 @@ class QtAutomationAdapter : public QObject
     using ExecuteCommandFn = std::function<bool(const std::string& command_id)>;
     using CreateFigureFn   = std::function<FigureId(uint32_t w, uint32_t h)>;
     using SwitchFigureFn   = std::function<bool(FigureId figure_id)>;
+    using CloseFigureFn    = std::function<bool(FigureId figure_id)>;
+    using DetachFigureFn   = std::function<bool(FigureId figure_id)>;
     using GetStateFn       = std::function<std::string()>;
     using ListMenusFn      = std::function<std::string()>;
     using CaptureSurfaceFn =
@@ -93,6 +98,8 @@ class QtAutomationAdapter : public QObject
     void set_execute_command(ExecuteCommandFn fn) { execute_cmd_fn_ = std::move(fn); }
     void set_create_figure(CreateFigureFn fn) { create_figure_fn_ = std::move(fn); }
     void set_switch_figure(SwitchFigureFn fn) { switch_figure_fn_ = std::move(fn); }
+    void set_close_figure(CloseFigureFn fn) { close_figure_fn_ = std::move(fn); }
+    void set_detach_figure(DetachFigureFn fn) { detach_figure_fn_ = std::move(fn); }
     void set_get_state(GetStateFn fn) { get_state_fn_ = std::move(fn); }
     void set_list_menus(ListMenusFn fn) { list_menus_fn_ = std::move(fn); }
     void set_capture_surface(CaptureSurfaceFn fn) { capture_fn_ = std::move(fn); }
@@ -109,8 +116,10 @@ class QtAutomationAdapter : public QObject
     void on_poll_timeout();
 
    private:
-    void handle_request(AutomationRequest& request);
-    bool handle_input_request(AutomationRequest& request);
+    void        handle_request(AutomationRequest& request);
+    bool        handle_input_request(AutomationRequest& request);
+    bool        handle_fuzz_request(AutomationRequest& request);
+    std::string run_fuzz_action(automation::FuzzAction action, int& pump_frames);
 
     ApplicationServices* services_   = nullptr;
     QTimer*              poll_timer_ = nullptr;
@@ -120,6 +129,8 @@ class QtAutomationAdapter : public QObject
     ExecuteCommandFn  execute_cmd_fn_;
     CreateFigureFn    create_figure_fn_;
     SwitchFigureFn    switch_figure_fn_;
+    CloseFigureFn     close_figure_fn_;
+    DetachFigureFn    detach_figure_fn_;
     GetStateFn        get_state_fn_;
     ListMenusFn       list_menus_fn_;
     CaptureSurfaceFn  capture_fn_;
@@ -130,6 +141,10 @@ class QtAutomationAdapter : public QObject
     uint64_t          last_frame_count_ = 0;
     QPointer<QWidget> input_root_;
     GetCanvasWindowFn canvas_window_fn_;
+    std::mt19937      fuzz_rng_{std::random_device{}()};
+    uint64_t          fuzz_step_index_    = 0;
+    uint64_t          fuzz_base_seed_     = 0;
+    bool              fuzz_seed_explicit_ = false;
 };
 
 }   // namespace spectra::adapters::qt

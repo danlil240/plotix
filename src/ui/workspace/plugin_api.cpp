@@ -2,6 +2,7 @@
 
 #include "plugin_ui_schema.hpp"
 
+#include <algorithm>
 #include <bit>
 #include <chrono>
 #include <cstdlib>
@@ -927,13 +928,25 @@ bool PluginManager::load_plugin(const std::string& path)
 
     SpectraPluginContext ctx = make_context(SPECTRA_PLUGIN_API_VERSION_MINOR);
     SpectraPluginInfo    info{};
-    auto                 t0     = std::chrono::steady_clock::now();
-    int                  result = init_fn(&ctx, &info);
+    std::vector<std::string> registered_transforms;
+    if (transform_reg_)
+        transform_reg_->begin_registration_capture(&registered_transforms);
+    auto t0     = std::chrono::steady_clock::now();
+    int  result = init_fn(&ctx, &info);
+    if (transform_reg_)
+        transform_reg_->end_registration_capture();
     auto                 t1     = std::chrono::steady_clock::now();
     size_t               init_us =
         static_cast<size_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+    const auto unregister_new_transforms = [&]()
+    {
+        if (transform_reg_)
+            for (const auto& name : registered_transforms)
+                transform_reg_->unregister_transform(name);
+    };
     if (result != 0)
     {
+        unregister_new_transforms();
 #ifdef _WIN32
         FreeLibrary(static_cast<HMODULE>(handle));
 #else
@@ -945,6 +958,7 @@ bool PluginManager::load_plugin(const std::string& path)
     // Version compatibility check
     if (info.api_version_major != SPECTRA_PLUGIN_API_VERSION_MAJOR)
     {
+        unregister_new_transforms();
 #ifdef _WIN32
         FreeLibrary(static_cast<HMODULE>(handle));
 #else
@@ -978,8 +992,13 @@ bool PluginManager::load_plugin(const std::string& path)
     entry.api_version_minor        = plugin_minor;
     entry.handle                   = handle;
     entry.shutdown_fn              = shutdown_fn;
+    entry.registered_transforms    = registered_transforms;
     entry.diagnostics.init_time_us = init_us;
     entry.manifest                 = std::move(manifest);
+
+    if (transform_reg_)
+        for (const auto& transform_name : entry.registered_transforms)
+            transform_reg_->set_transform_source(transform_name, entry.name);
 
     plugins_.push_back(std::move(entry));
     return true;
@@ -1001,6 +1020,10 @@ bool PluginManager::unload_plugin(const std::string& name)
                     registry_->unregister_command(cmd_id);
                 }
             }
+
+            if (transform_reg_)
+                for (const auto& transform_name : it->registered_transforms)
+                    transform_reg_->unregister_transform(transform_name);
 
             // Call shutdown
             if (it->shutdown_fn)
@@ -1041,6 +1064,10 @@ void PluginManager::unload_all()
                 registry_->unregister_command(cmd_id);
             }
         }
+
+        if (transform_reg_)
+            for (const auto& transform_name : p.registered_transforms)
+                transform_reg_->unregister_transform(transform_name);
 
         if (p.shutdown_fn)
         {

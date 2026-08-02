@@ -57,6 +57,18 @@ void AxisLinkManager::remove_group(LinkGroupId id)
     notify();
 }
 
+void AxisLinkManager::clear()
+{
+    std::lock_guard lock(mutex_);
+    const bool      changed = !groups_.empty() || !groups_3d_.empty() || shared_cursor_.valid;
+    groups_.clear();
+    groups_3d_.clear();
+    shared_cursor_ = {};
+    next_id_       = 1;
+    if (changed)
+        notify();
+}
+
 // ─── Membership ──────────────────────────────────────────────────────────────
 
 void AxisLinkManager::add_to_group(LinkGroupId id, Axes* ax)
@@ -398,12 +410,19 @@ size_t AxisLinkManager::group_count() const
     return groups_.size();
 }
 
-// ─── Serialization ───────────────────────────────────────────────────────────
-
-std::string AxisLinkManager::serialize(const AxesToIndex& mapper) const
+size_t AxisLinkManager::group_3d_count() const
 {
     std::lock_guard lock(mutex_);
-    if (groups_.empty())
+    return groups_3d_.size();
+}
+
+// ─── Serialization ───────────────────────────────────────────────────────────
+
+std::string AxisLinkManager::serialize(const AxesToIndex&   mapper,
+                                       const Axes3DToIndex& mapper_3d) const
+{
+    std::lock_guard lock(mutex_);
+    if (groups_.empty() && groups_3d_.empty())
         return "{}";
 
     std::ostringstream ss;
@@ -429,14 +448,39 @@ std::string AxisLinkManager::serialize(const AxesToIndex& mapper) const
         }
         ss << "]}";
     }
+    ss << "],\"groups3d\":[";
+    first = true;
+    for (const auto& [id, group] : groups_3d_)
+    {
+        if (!first)
+            ss << ",";
+        first = false;
+        ss << "{\"id\":" << id << R"(,"name":")" << group.name << "\""
+           << ",\"axis\":" << static_cast<int>(group.axis) << ",\"members\":[";
+        bool first_member = true;
+        for (const Axes3D* axes : group.members)
+        {
+            const int index = mapper_3d ? mapper_3d(axes) : -1;
+            if (index < 0)
+                continue;
+            if (!first_member)
+                ss << ",";
+            first_member = false;
+            ss << index;
+        }
+        ss << "]}";
+    }
     ss << "]}";
     return ss.str();
 }
 
-void AxisLinkManager::deserialize(const std::string& json, const IndexToAxes& mapper)
+void AxisLinkManager::deserialize(const std::string&   json,
+                                  const IndexToAxes&   mapper,
+                                  const IndexToAxes3D& mapper_3d)
 {
     std::lock_guard lock(mutex_);
     groups_.clear();
+    groups_3d_.clear();
     next_id_ = 1;
 
     if (json.empty() || json == "{}")
@@ -466,11 +510,9 @@ void AxisLinkManager::deserialize(const std::string& json, const IndexToAxes& ma
     };
 
     auto [groups_start, groups_end] = find_array("groups");
-    if (groups_start == std::string::npos)
-        return;
 
     // Parse each group object
-    size_t pos = groups_start;
+    size_t pos = groups_start == std::string::npos ? groups_end : groups_start;
     while (pos < groups_end)
     {
         auto obj_start = json.find('{', pos);
@@ -580,6 +622,85 @@ void AxisLinkManager::deserialize(const std::string& json, const IndexToAxes& ma
         }
 
         pos = obj_end;
+    }
+
+    auto [groups3d_start, groups3d_end] = find_array("groups3d");
+    pos = groups3d_start == std::string::npos ? groups3d_end : groups3d_start;
+    while (pos < groups3d_end)
+    {
+        const auto object_start = json.find('{', pos);
+        if (object_start == std::string::npos || object_start >= groups3d_end)
+            break;
+        int    depth      = 1;
+        size_t object_end = object_start + 1;
+        while (object_end < json.size() && depth > 0)
+        {
+            if (json[object_end] == '{')
+                ++depth;
+            else if (json[object_end] == '}')
+                --depth;
+            ++object_end;
+        }
+        const std::string object      = json.substr(object_start, object_end - object_start);
+        auto              extract_int = [&object](const std::string& key)
+        {
+            size_t key_pos = object.find("\"" + key + "\"");
+            if (key_pos == std::string::npos)
+                return -1;
+            key_pos = object.find(':', key_pos);
+            return key_pos == std::string::npos ? -1 : std::atoi(object.c_str() + key_pos + 1);
+        };
+        auto extract_string = [&object](const std::string& key)
+        {
+            size_t key_pos = object.find("\"" + key + "\"");
+            if (key_pos == std::string::npos)
+                return std::string{};
+            const size_t begin = object.find('"', object.find(':', key_pos) + 1);
+            if (begin == std::string::npos)
+                return std::string{};
+            const size_t end = object.find('"', begin + 1);
+            return end == std::string::npos ? std::string{}
+                                            : object.substr(begin + 1, end - begin - 1);
+        };
+        const int id   = extract_int("id");
+        const int axis = extract_int("axis");
+        if (id <= 0 || axis < 1 || axis > static_cast<int>(LinkAxis::All))
+        {
+            pos = object_end;
+            continue;
+        }
+        Link3DGroup group;
+        group.id                 = static_cast<LinkGroupId>(id);
+        group.name               = extract_string("name");
+        group.axis               = static_cast<LinkAxis>(axis);
+        const size_t members_key = object.find("\"members\"");
+        if (members_key != std::string::npos)
+        {
+            const size_t begin = object.find('[', members_key);
+            const size_t end   = object.find(']', begin);
+            if (begin != std::string::npos && end != std::string::npos)
+            {
+                std::istringstream members(object.substr(begin + 1, end - begin - 1));
+                std::string        token;
+                while (std::getline(members, token, ','))
+                    if (Axes3D* axes = mapper_3d ? mapper_3d(std::atoi(token.c_str())) : nullptr)
+                        group.members.push_back(axes);
+            }
+        }
+        static constexpr Color group_colors[] = {
+            {0.34f, 0.65f, 0.96f},
+            {0.96f, 0.49f, 0.31f},
+            {0.30f, 0.78f, 0.47f},
+            {0.89f, 0.35f, 0.40f},
+            {0.58f, 0.40f, 0.74f},
+            {0.09f, 0.75f, 0.81f},
+            {0.89f, 0.47f, 0.76f},
+            {0.74f, 0.74f, 0.13f},
+        };
+        group.color          = group_colors[(group.id - 1) % 8];
+        groups_3d_[group.id] = std::move(group);
+        next_id_             = std::max(next_id_, static_cast<LinkGroupId>(id) + 1);
+        pos                  = object_end;
     }
 }
 

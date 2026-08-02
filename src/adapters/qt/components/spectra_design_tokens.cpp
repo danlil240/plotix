@@ -4,6 +4,7 @@
 
 #include "../../../../third_party/fa_solid_900.hpp"
 #include "inter_font_embedded.hpp"
+#include "ui/theme/theme.hpp"
 
 #include <QApplication>
 #include <QDir>
@@ -15,6 +16,63 @@
 
 namespace spectra::adapters::qt
 {
+namespace
+{
+
+SpectraColors& mutable_spectra_colors()
+{
+    static SpectraColors colors;
+    return colors;
+}
+
+QColor to_qcolor(const ui::Color& color)
+{
+    return QColor::fromRgbF(color.r, color.g, color.b, color.a);
+}
+
+}   // namespace
+
+const SpectraColors& spectra_colors()
+{
+    return mutable_spectra_colors();
+}
+
+SpectraColors spectra_colors_from_theme(const ui::ThemeColors& colors)
+{
+    SpectraColors result;
+    result.window_base       = to_qcolor(colors.bg_primary);
+    result.bg_canvas         = to_qcolor(colors.bg_canvas);
+    result.header_surface    = to_qcolor(colors.bg_primary);
+    result.workspace_surface = to_qcolor(colors.bg_primary);
+    result.panel_surface     = to_qcolor(colors.bg_secondary);
+    result.input_surface     = to_qcolor(colors.input_bg);
+    result.elevated_surface  = to_qcolor(colors.bg_elevated);
+
+    result.border_subtle  = to_qcolor(colors.border_subtle);
+    result.border_default = to_qcolor(colors.border_default);
+    result.border_strong  = to_qcolor(colors.border_strong);
+
+    result.text_primary   = to_qcolor(colors.text_primary);
+    result.text_secondary = to_qcolor(colors.text_secondary);
+    result.text_muted     = to_qcolor(colors.text_tertiary);
+
+    result.cyan_accent     = to_qcolor(colors.accent);
+    result.cyan_accent_dim = to_qcolor(colors.accent_muted);
+    result.purple_ambient  = to_qcolor(colors.accent_glow);
+    result.purple_dim      = to_qcolor(colors.accent_subtle);
+
+    result.success_green = to_qcolor(colors.success);
+    result.warning_amber = to_qcolor(colors.warning);
+    result.error_red     = to_qcolor(colors.error);
+    result.cyan_glow     = to_qcolor(colors.accent_glow);
+    result.purple_glow   = to_qcolor(colors.accent_subtle);
+    return result;
+}
+
+void set_spectra_colors(const ui::ThemeColors& colors)
+{
+    mutable_spectra_colors() = spectra_colors_from_theme(colors);
+}
 
 SpectraFontManager& SpectraFontManager::instance()
 {

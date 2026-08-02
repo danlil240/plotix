@@ -110,12 +110,10 @@ class PluginVersionLoadTest : public ::testing::Test
 
     void TearDown() override
     {
-        // Destroy the transform registry BEFORE unloading plugins to avoid
-        // dangling std::function pointers after dlclose.  The lambdas wrapping
-        // plugin callbacks were instantiated inside the plugin's copy of
-        // libspectra, so their type-erased managers live in the .so segment.
-        transform_reg_.reset();
+        // Unregister provider-owned callbacks while the plugin library is still loaded.
         mgr_.unload_all();
+        mgr_.set_transform_registry(nullptr);
+        transform_reg_.reset();
     }
 
     std::string                        v1_0_path_;

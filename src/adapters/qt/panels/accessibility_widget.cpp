@@ -3,6 +3,7 @@
 #include "accessibility_widget.hpp"
 
 #include "ui/accessibility/sonification.hpp"
+#include "app/frontend_services.hpp"
 #include "ui/data/html_table_export.hpp"
 
 #include <spectra/figure.hpp>
@@ -11,19 +12,19 @@
 
 #include <QComboBox>
 #include <QDoubleSpinBox>
-#include <QFileDialog>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
 namespace spectra::adapters::qt
 {
 
-QtAccessibilityWidget::QtAccessibilityWidget(FigureRegistry* registry, QWidget* parent)
-    : QDockWidget("Accessibility", parent), registry_(registry)
+QtAccessibilityWidget::QtAccessibilityWidget(FigureRegistry* registry,
+                                             DialogService*  dialogs,
+                                             QWidget*        parent)
+    : QDockWidget("Accessibility", parent), registry_(registry), dialogs_(dialogs)
 {
     setObjectName("accessibility_panel");
     setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -202,13 +203,13 @@ void QtAccessibilityWidget::on_sonify_clicked()
     if (!axes)
         return;
 
-    // File dialog for WAV output
-    QString path = QFileDialog::getSaveFileName(
-        this, "Export Sonification WAV",
-        "spectra_sonify.wav",
-        "WAV Audio (*.wav)");
-
-    if (path.isEmpty())
+    if (!dialogs_)
+        return;
+    auto path = dialogs_->file_dialog(DialogService::FileType::Save,
+                                      "Export Sonification WAV",
+                                      "spectra_sonify.wav",
+                                      {{"WAV Audio", "*.wav"}});
+    if (!path)
         return;
 
     SonificationParams params;
@@ -217,11 +218,12 @@ void QtAccessibilityWidget::on_sonify_clicked()
     params.freq_hi_hz   = static_cast<float>(freq_hi_spin_->value());
     params.amplitude    = static_cast<float>(amplitude_spin_->value());
 
-    if (sonify_axes_to_wav(*axes, path.toStdString(), params))
+    const QString qpath = QString::fromStdString(*path);
+    if (sonify_axes_to_wav(*axes, *path, params))
     {
-        sonify_status_->setText("WAV exported: " + path);
+        sonify_status_->setText("WAV exported: " + qpath);
         sonify_status_->setStyleSheet("color: green;");
-        SPECTRA_LOG_INFO("qt_accessibility", "Sonification WAV exported to '{}'", path.toStdString());
+        SPECTRA_LOG_INFO("qt_accessibility", "Sonification WAV exported to '{}'", *path);
     }
     else
     {
@@ -240,19 +242,21 @@ void QtAccessibilityWidget::on_export_html_clicked()
     if (!fig)
         return;
 
-    QString path = QFileDialog::getSaveFileName(
-        this, "Export HTML Table",
-        "spectra_data.html",
-        "HTML Document (*.html)");
-
-    if (path.isEmpty())
+    if (!dialogs_)
+        return;
+    auto path = dialogs_->file_dialog(DialogService::FileType::Save,
+                                      "Export HTML Table",
+                                      "spectra_data.html",
+                                      {{"HTML Document", "*.html"}});
+    if (!path)
         return;
 
-    if (figure_to_html_table_file(*fig, path.toStdString()))
+    const QString qpath = QString::fromStdString(*path);
+    if (figure_to_html_table_file(*fig, *path))
     {
-        html_status_->setText("HTML exported: " + path);
+        html_status_->setText("HTML exported: " + qpath);
         html_status_->setStyleSheet("color: green;");
-        SPECTRA_LOG_INFO("qt_accessibility", "HTML table exported to '{}'", path.toStdString());
+        SPECTRA_LOG_INFO("qt_accessibility", "HTML table exported to '{}'", *path);
     }
     else
     {

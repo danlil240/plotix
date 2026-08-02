@@ -29,7 +29,7 @@ TEST(WorkspaceAutosave, DefaultState)
 {
     WorkspaceAutosave a;
     const std::string path = test_autosave_path("_default_state");
-    std::error_code ec;
+    std::error_code   ec;
     std::filesystem::remove(path, ec);
     a.set_autosave_path(path);
     EXPECT_FALSE(a.has_unsaved_changes());
@@ -150,6 +150,19 @@ TEST_F(AutosaveSaveTest, HasAutosaveAfterSave)
     EXPECT_FALSE(a.has_autosave());
     a.save_now();
     EXPECT_TRUE(a.has_autosave());
+}
+
+TEST_F(AutosaveSaveTest, ClearAutosaveUsesConfiguredPathAndIsIdempotent)
+{
+    WorkspaceAutosave a;
+    a.set_autosave_path(path_);
+    a.set_serialize_fn([] { return "{}"; });
+    ASSERT_TRUE(a.save_now());
+    ASSERT_TRUE(a.has_autosave());
+
+    EXPECT_TRUE(a.clear_autosave());
+    EXPECT_FALSE(a.has_autosave());
+    EXPECT_TRUE(a.clear_autosave());
 }
 
 // ─── autosave_is_newer_than ───────────────────────────────────────────────────

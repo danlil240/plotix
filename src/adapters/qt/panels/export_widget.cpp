@@ -215,32 +215,17 @@ void QtExportWidget::on_export_clicked()
     uint32_t w = static_cast<uint32_t>(width_spin_->value());
     uint32_t h = static_cast<uint32_t>(height_spin_->value());
 
-    if (format_key == "png_builtin")
+    if (export_callback_)
     {
-        fig->save_png(path.toStdString(), w, h);
-        status_label_->setText(QString("Exported: %1").arg(path));
-        status_label_->setStyleSheet("color: green;");
-        SPECTRA_LOG_INFO("qt_export", "Exported figure " + std::to_string(active_id_) + " to " + path.toStdString());
+        const bool ok =
+            export_callback_(active_id_, format_key.toStdString(), path.toStdString(), w, h);
+        status_label_->setText(ok ? QString("Exported: %1").arg(path) : "Export failed");
+        status_label_->setStyleSheet(ok ? "color: green;" : "color: red;");
+        return;
     }
-    else if (formats_)
-    {
-        // Plugin export format
-        // TODO: When readback is available from the Qt canvas, pass RGBA pixels
-        // to ExportFormatRegistry::export_figure(). For now, use the figure JSON
-        // path with null pixels (data-only export).
-        std::string fmt_name = format_key.toStdString();
-        bool ok = formats_->export_figure(fmt_name, "", nullptr, w, h, path.toStdString());
-        if (ok)
-        {
-            status_label_->setText(QString("Exported: %1").arg(path));
-            status_label_->setStyleSheet("color: green;");
-        }
-        else
-        {
-            status_label_->setText("Export failed");
-            status_label_->setStyleSheet("color: red;");
-        }
-    }
+
+    status_label_->setText("Native canvas exporter unavailable");
+    status_label_->setStyleSheet("color: red;");
 }
 
 }   // namespace spectra::adapters::qt

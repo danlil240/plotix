@@ -1687,7 +1687,7 @@ endif()
 # Requires Qt6 (Core, Gui, Widgets) and the spectra_qt_adapter library.
 # Tests run headless via QT_QPA_PLATFORM=offscreen.
 if(SPECTRA_BUILD_QT_TESTS AND SPECTRA_USE_QT)
-    find_package(Qt6 REQUIRED COMPONENTS Gui Widgets)
+    find_package(Qt6 REQUIRED COMPONENTS Gui Widgets Test)
 
     function(add_qt_test name)
         add_executable(qt_${name} qt/${name}.cpp qt/qt_test_main.cpp)
@@ -1696,6 +1696,7 @@ if(SPECTRA_BUILD_QT_TESTS AND SPECTRA_USE_QT)
             spectra
             Qt6::Gui
             Qt6::Widgets
+            Qt6::Test
             GTest::gtest
         )
         target_compile_features(qt_${name} PRIVATE cxx_std_20)
@@ -1729,6 +1730,10 @@ if(SPECTRA_BUILD_QT_TESTS AND SPECTRA_USE_QT)
 
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_plugin_ui.cpp)
         add_qt_test(test_qt_plugin_ui)
+        target_compile_definitions(qt_test_qt_plugin_ui PRIVATE
+            SPECTRA_MOCK_TRANSFORM_PLUGIN_PATH="$<TARGET_FILE:mock_transform_plugin>"
+        )
+        add_dependencies(qt_test_qt_plugin_ui mock_transform_plugin)
     endif()
 
     if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/qt/test_qt_panels.cpp)

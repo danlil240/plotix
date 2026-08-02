@@ -295,6 +295,14 @@ void CommandRegistry::set_enabled(const std::string& id, bool enabled)
     }
 }
 
+void CommandRegistry::set_shortcut(const std::string& id, const std::string& shortcut)
+{
+    std::lock_guard lock(mutex_);
+    auto            it = commands_.find(id);
+    if (it != commands_.end())
+        it->second.shortcut = shortcut;
+}
+
 // ─── Recent commands ─────────────────────────────────────────────────────────
 
 void CommandRegistry::record_execution(const std::string& id)

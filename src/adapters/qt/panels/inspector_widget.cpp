@@ -7,6 +7,7 @@
 #include "app/frontend_services.hpp"
 
 #include <spectra/axes.hpp>
+#include <spectra/axes3d.hpp>
 #include <spectra/figure.hpp>
 #include <spectra/figure_registry.hpp>
 #include <spectra/logger.hpp>
@@ -14,7 +15,7 @@
 #include <spectra/series.hpp>
 
 #include <QCheckBox>
-#include <QColorDialog>
+#include <QColor>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
@@ -24,12 +25,167 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
 namespace spectra::adapters::qt
 {
+namespace
+{
+
+AxesBase* figure_axes_at(Figure* figure, int index)
+{
+    if (!figure || index < 0)
+        return nullptr;
+
+    AxesBase* result  = nullptr;
+    int       current = 0;
+    figure->for_each_axes(
+        [&](AxesBase* axes)
+        {
+            if (current == index)
+                result = axes;
+            ++current;
+        });
+    return result;
+}
+
+void set_line_edit_from_model(QLineEdit* edit, const std::string& value)
+{
+    if (!edit)
+        return;
+    const QString text = QString::fromStdString(value);
+    if (edit->text() == text)
+        return;
+    const QSignalBlocker blocker(edit);
+    edit->setText(text);
+}
+
+void set_spin_from_model(QDoubleSpinBox* spin, double value)
+{
+    if (!spin || qFuzzyCompare(spin->value() + 1.0, value + 1.0))
+        return;
+    const QSignalBlocker blocker(spin);
+    spin->setValue(value);
+}
+
+void request_redraw(RedrawRequest* redraw, FigureId figure_id)
+{
+    if (redraw)
+        redraw->request_redraw(figure_id);
+}
+
+enum class Axis3DDimension
+{
+    X,
+    Y,
+    Z
+};
+
+AxisLimits axes3d_limits(const Axes3D& axes, Axis3DDimension dimension)
+{
+    switch (dimension)
+    {
+        case Axis3DDimension::X:
+            return axes.x_limits();
+        case Axis3DDimension::Y:
+            return axes.y_limits();
+        case Axis3DDimension::Z:
+            return axes.z_limits();
+    }
+    return {};
+}
+
+void set_axes3d_limits(Axes3D& axes, Axis3DDimension dimension, const AxisLimits& limits)
+{
+    switch (dimension)
+    {
+        case Axis3DDimension::X:
+            axes.xlim(limits.min, limits.max);
+            break;
+        case Axis3DDimension::Y:
+            axes.ylim(limits.min, limits.max);
+            break;
+        case Axis3DDimension::Z:
+            axes.zlim(limits.min, limits.max);
+            break;
+    }
+}
+
+void undoable_set_axes3d_limits(UndoManager*    undo,
+                                Axes3D&         axes,
+                                Axis3DDimension dimension,
+                                AxisLimits      limits)
+{
+    const AxisLimits before = axes3d_limits(axes, dimension);
+    if (qFuzzyCompare(before.min + 1.0, limits.min + 1.0)
+        && qFuzzyCompare(before.max + 1.0, limits.max + 1.0))
+        return;
+
+    set_axes3d_limits(axes, dimension, limits);
+    if (undo)
+    {
+        auto* target = &axes;
+        undo->push(UndoAction{
+            "Change 3D axis limits",
+            [target, dimension, before]() { set_axes3d_limits(*target, dimension, before); },
+            [target, dimension, limits]() { set_axes3d_limits(*target, dimension, limits); }});
+    }
+}
+
+std::string axes3d_label(const Axes3D& axes, Axis3DDimension dimension)
+{
+    switch (dimension)
+    {
+        case Axis3DDimension::X:
+            return axes.xlabel();
+        case Axis3DDimension::Y:
+            return axes.ylabel();
+        case Axis3DDimension::Z:
+            return axes.zlabel();
+    }
+    return {};
+}
+
+void set_axes3d_label(Axes3D& axes, Axis3DDimension dimension, const std::string& label)
+{
+    switch (dimension)
+    {
+        case Axis3DDimension::X:
+            axes.xlabel(label);
+            break;
+        case Axis3DDimension::Y:
+            axes.ylabel(label);
+            break;
+        case Axis3DDimension::Z:
+            axes.zlabel(label);
+            break;
+    }
+}
+
+void undoable_set_axes3d_label(UndoManager*       undo,
+                               Axes3D&            axes,
+                               Axis3DDimension    dimension,
+                               const std::string& label)
+{
+    const std::string before = axes3d_label(axes, dimension);
+    if (before == label)
+        return;
+
+    set_axes3d_label(axes, dimension, label);
+    if (undo)
+    {
+        auto* target = &axes;
+        undo->push(UndoAction{
+            "Change 3D axis label",
+            [target, dimension, before]() { set_axes3d_label(*target, dimension, before); },
+            [target, dimension, label]() { set_axes3d_label(*target, dimension, label); }});
+    }
+}
+
+}   // namespace
 
 QtInspectorWidget::QtInspectorWidget(FigureRegistry*      registry,
                                      ApplicationServices* services,
@@ -55,11 +211,18 @@ QtInspectorWidget::QtInspectorWidget(FigureRegistry*      registry,
 
 void QtInspectorWidget::set_active_figure(FigureId id)
 {
-    if (active_id_ == id)
-        return;
-
     active_id_ = id;
     refresh();
+}
+
+std::vector<AxesBase*> QtInspectorWidget::active_axes() const
+{
+    std::vector<AxesBase*> axes;
+    Figure*                figure =
+        registry_ && active_id_ != INVALID_FIGURE_ID ? registry_->get(active_id_) : nullptr;
+    if (figure)
+        figure->for_each_axes([&](AxesBase* axis) { axes.push_back(axis); });
+    return axes;
 }
 
 void QtInspectorWidget::refresh()
@@ -99,22 +262,25 @@ void QtInspectorWidget::refresh()
     figure_title_edit_->setText(QString::fromStdString(figure->tab_title()));
     fig_form->addRow("Title", figure_title_edit_);
 
-    auto* size_label =
+    figure_size_label_ =
         new QLabel(QString("%1 × %2").arg(figure->width()).arg(figure->height()), fig_group);
-    fig_form->addRow("Size", size_label);
+    figure_size_label_->setObjectName("figure_size");
+    fig_form->addRow("Size", figure_size_label_);
 
-    auto* axes_count_label = new QLabel(QString::number(figure->all_axes().size()), fig_group);
-    fig_form->addRow("Axes", axes_count_label);
+    const auto axes   = active_axes();
+    axes_count_label_ = new QLabel(QString::number(axes.size()), fig_group);
+    axes_count_label_->setObjectName("figure_axes_count");
+    fig_form->addRow("Axes", axes_count_label_);
 
     fig_layout->addWidget(fig_group);
 
     // Legend group
     auto* legend_group = new QGroupBox("Legend", fig_tab);
     auto* legend_form  = new QFormLayout(legend_group);
-    auto* legend_check = new QCheckBox("Visible", legend_group);
-    legend_check->setObjectName("figure_legend_visible");
-    legend_check->setChecked(figure->legend().visible);
-    legend_form->addRow("Show", legend_check);
+    legend_check_      = new QCheckBox("Visible", legend_group);
+    legend_check_->setObjectName("figure_legend_visible");
+    legend_check_->setChecked(figure->legend().visible);
+    legend_form->addRow("Show", legend_check_);
     fig_layout->addWidget(legend_group);
 
     fig_layout->addStretch();
@@ -133,12 +299,14 @@ void QtInspectorWidget::refresh()
             {
                 if (!registry_)
                     return;
-                if (undoable_set_figure_title(undo_mgr, *registry_, fig_id, text.toStdString())
-                    && redraw)
+                if (!undoable_set_figure_title(undo_mgr, *registry_, fig_id, text.toStdString()))
+                    return;
+                emit figure_title_changed(fig_id, text);
+                if (redraw)
                     redraw->request_redraw(fig_id);
             });
     connect(
-        legend_check,
+        legend_check_,
         &QCheckBox::toggled,
         this,
         [this, fig_id, undo_mgr, redraw](bool checked)
@@ -160,15 +328,115 @@ void QtInspectorWidget::refresh()
         });
 
     // ── Per-axes tabs ─────────────────────────────────────────────────
-    int axes_idx = 0;
-    figure->for_each_axes(
-        [&](AxesBase* ab)
+    for (int axes_idx = 0; axes_idx < static_cast<int>(axes.size()); ++axes_idx)
+    {
+        if (auto* ax = dynamic_cast<Axes*>(axes[axes_idx]))
+            build_axes_tab(*ax, axes_idx);
+        else if (auto* ax3d = dynamic_cast<Axes3D*>(axes[axes_idx]))
+            build_axes3d_tab(*ax3d, axes_idx);
+    }
+}
+
+void QtInspectorWidget::sync_from_model()
+{
+    Figure* figure =
+        registry_ && active_id_ != INVALID_FIGURE_ID ? registry_->get(active_id_) : nullptr;
+    if (!figure)
+    {
+        if (tab_widget_->count() != 1 || tab_widget_->tabText(0) == "Figure")
+            refresh();
+        return;
+    }
+
+    const auto axes = active_axes();
+    bool       topology_changed =
+        axes.size() != axes_controls_.size() || axes.size() != axes_series_counts_.size();
+    if (!topology_changed)
+    {
+        for (size_t i = 0; i < axes.size(); ++i)
         {
-            auto* ax = dynamic_cast<Axes*>(ab);
-            if (ax)
-                build_axes_tab(*ax, axes_idx);
-            ++axes_idx;
-        });
+            if (axes_controls_[i].model != axes[i]
+                || axes_series_counts_[i] != axes[i]->series().size())
+            {
+                topology_changed = true;
+                break;
+            }
+        }
+    }
+    if (topology_changed)
+    {
+        refresh();
+        return;
+    }
+
+    set_line_edit_from_model(figure_title_edit_, figure->tab_title());
+    if (figure_size_label_)
+        figure_size_label_->setText(QString("%1 × %2").arg(figure->width()).arg(figure->height()));
+    if (axes_count_label_)
+        axes_count_label_->setText(QString::number(axes.size()));
+    if (legend_check_ && legend_check_->isChecked() != figure->legend().visible)
+    {
+        const QSignalBlocker blocker(legend_check_);
+        legend_check_->setChecked(figure->legend().visible);
+    }
+
+    for (size_t i = 0; i < axes.size(); ++i)
+    {
+        auto& controls = axes_controls_[i];
+        set_line_edit_from_model(controls.title_edit, axes[i]->title());
+        if (auto* ax = dynamic_cast<Axes*>(axes[i]))
+        {
+            set_line_edit_from_model(controls.xlabel_edit, ax->xlabel());
+            set_line_edit_from_model(controls.ylabel_edit, ax->ylabel());
+            const auto x_limits = ax->x_limits();
+            const auto y_limits = ax->y_limits();
+            set_spin_from_model(controls.xmin_spin, x_limits.min);
+            set_spin_from_model(controls.xmax_spin, x_limits.max);
+            set_spin_from_model(controls.ymin_spin, y_limits.min);
+            set_spin_from_model(controls.ymax_spin, y_limits.max);
+            if (controls.grid_check && controls.grid_check->isChecked() != ax->grid_enabled())
+            {
+                const QSignalBlocker blocker(controls.grid_check);
+                controls.grid_check->setChecked(ax->grid_enabled());
+            }
+            if (controls.border_check && controls.border_check->isChecked() != ax->border_enabled())
+            {
+                const QSignalBlocker blocker(controls.border_check);
+                controls.border_check->setChecked(ax->border_enabled());
+            }
+        }
+        else if (auto* ax3d = dynamic_cast<Axes3D*>(axes[i]))
+        {
+            set_line_edit_from_model(controls.xlabel_edit, ax3d->xlabel());
+            set_line_edit_from_model(controls.ylabel_edit, ax3d->ylabel());
+            set_line_edit_from_model(controls.zlabel_edit, ax3d->zlabel());
+            const auto x_limits = ax3d->x_limits();
+            const auto y_limits = ax3d->y_limits();
+            const auto z_limits = ax3d->z_limits();
+            set_spin_from_model(controls.xmin_spin, x_limits.min);
+            set_spin_from_model(controls.xmax_spin, x_limits.max);
+            set_spin_from_model(controls.ymin_spin, y_limits.min);
+            set_spin_from_model(controls.ymax_spin, y_limits.max);
+            set_spin_from_model(controls.zmin_spin, z_limits.min);
+            set_spin_from_model(controls.zmax_spin, z_limits.max);
+            if (controls.grid_planes_combo)
+            {
+                const int grid_value = static_cast<int>(ax3d->grid_planes());
+                const int index      = controls.grid_planes_combo->findData(grid_value);
+                if (index >= 0 && index != controls.grid_planes_combo->currentIndex())
+                {
+                    const QSignalBlocker blocker(controls.grid_planes_combo);
+                    controls.grid_planes_combo->setCurrentIndex(index);
+                }
+            }
+            if (controls.border_check
+                && controls.border_check->isChecked() != ax3d->show_bounding_box())
+            {
+                const QSignalBlocker blocker(controls.border_check);
+                controls.border_check->setChecked(ax3d->show_bounding_box());
+            }
+        }
+    }
 }
 
 void QtInspectorWidget::build_series_section(AxesBase&    ax,
@@ -272,33 +540,25 @@ void QtInspectorWidget::build_series_section(AxesBase&    ax,
         connect(ctrl.color_btn,
                 &QPushButton::clicked,
                 this,
-                [this, axes_idx, series_idx, undo_mgr, redraw, btn = ctrl.color_btn]()
+                [this, fig_id, axes_idx, series_idx, undo_mgr, redraw, btn = ctrl.color_btn]()
                 {
-                    Figure* fig = registry_ ? registry_->get(active_id_) : nullptr;
-                    if (!fig)
+                    Series* s = registry_
+                                    ? find_figure_series(*registry_, fig_id, axes_idx, series_idx)
+                                    : nullptr;
+                    if (!s)
                         return;
-                    Axes* ax = fig->get_axes(axes_idx);
-                    if (!ax || series_idx >= ax->series().size())
+                    auto* dialogs = services_ ? services_->dialog_service() : nullptr;
+                    if (!dialogs)
                         return;
-                    Series* s = ax->series()[series_idx].get();
-                    QColor  initial(static_cast<int>(s->color().r * 255),
-                                   static_cast<int>(s->color().g * 255),
-                                   static_cast<int>(s->color().b * 255));
-                    QColor  chosen = QColorDialog::getColor(initial,
-                                                           nullptr,
-                                                           "Series Color",
-                                                           QColorDialog::ShowAlphaChannel);
-                    if (chosen.isValid())
+                    const auto chosen = dialogs->color_picker("Series Color", s->color());
+                    if (chosen)
                     {
-                        undoable_set_series_color(undo_mgr,
-                                                  *s,
-                                                  spectra::Color(chosen.redF(),
-                                                                 chosen.greenF(),
-                                                                 chosen.blueF(),
-                                                                 chosen.alphaF()));
-                        btn->setText(chosen.name());
+                        undoable_set_series_color(undo_mgr, *s, *chosen);
+                        const QColor qchosen =
+                            QColor::fromRgbF(chosen->r, chosen->g, chosen->b, chosen->a);
+                        btn->setText(qchosen.name());
                         btn->setStyleSheet(
-                            QString("background-color: %1; min-width: 60px;").arg(chosen.name()));
+                            QString("background-color: %1; min-width: 60px;").arg(qchosen.name()));
                         if (redraw)
                             redraw->request_redraw();
                     }
@@ -324,15 +584,13 @@ void QtInspectorWidget::build_series_section(AxesBase&    ax,
         connect(ctrl.opacity_spin,
                 qOverload<double>(&QDoubleSpinBox::valueChanged),
                 this,
-                [this, axes_idx, series_idx, undo_mgr, redraw](double val)
+                [this, fig_id, axes_idx, series_idx, undo_mgr, redraw](double val)
                 {
-                    Figure* fig = registry_ ? registry_->get(active_id_) : nullptr;
-                    if (!fig)
+                    Series* s = registry_
+                                    ? find_figure_series(*registry_, fig_id, axes_idx, series_idx)
+                                    : nullptr;
+                    if (!s)
                         return;
-                    Axes* ax = fig->get_axes(axes_idx);
-                    if (!ax || series_idx >= ax->series().size())
-                        return;
-                    Series* s = ax->series()[series_idx].get();
                     undoable_set_opacity(undo_mgr, *s, static_cast<float>(val));
                     if (redraw)
                         redraw->request_redraw();
@@ -341,17 +599,15 @@ void QtInspectorWidget::build_series_section(AxesBase&    ax,
         connect(ctrl.line_style_combo,
                 qOverload<int>(&QComboBox::currentIndexChanged),
                 this,
-                [this, axes_idx, series_idx, undo_mgr, redraw](int idx)
+                [this, fig_id, axes_idx, series_idx, undo_mgr, redraw](int idx)
                 {
                     if (idx < 0 || idx >= LINE_STYLE_COUNT)
                         return;
-                    Figure* fig = registry_ ? registry_->get(active_id_) : nullptr;
-                    if (!fig)
+                    Series* s = registry_
+                                    ? find_figure_series(*registry_, fig_id, axes_idx, series_idx)
+                                    : nullptr;
+                    if (!s)
                         return;
-                    Axes* ax = fig->get_axes(axes_idx);
-                    if (!ax || series_idx >= ax->series().size())
-                        return;
-                    Series* s = ax->series()[series_idx].get();
                     undoable_set_line_style(undo_mgr, *s, ALL_LINE_STYLES[idx]);
                     if (redraw)
                         redraw->request_redraw();
@@ -360,17 +616,15 @@ void QtInspectorWidget::build_series_section(AxesBase&    ax,
         connect(ctrl.marker_style_combo,
                 qOverload<int>(&QComboBox::currentIndexChanged),
                 this,
-                [this, axes_idx, series_idx, undo_mgr, redraw](int idx)
+                [this, fig_id, axes_idx, series_idx, undo_mgr, redraw](int idx)
                 {
                     if (idx < 0 || idx >= MARKER_STYLE_COUNT)
                         return;
-                    Figure* fig = registry_ ? registry_->get(active_id_) : nullptr;
-                    if (!fig)
+                    Series* s = registry_
+                                    ? find_figure_series(*registry_, fig_id, axes_idx, series_idx)
+                                    : nullptr;
+                    if (!s)
                         return;
-                    Axes* ax = fig->get_axes(axes_idx);
-                    if (!ax || series_idx >= ax->series().size())
-                        return;
-                    Series* s = ax->series()[series_idx].get();
                     undoable_set_marker_style(undo_mgr, *s, ALL_MARKER_STYLES[idx]);
                     if (redraw)
                         redraw->request_redraw();
@@ -379,15 +633,13 @@ void QtInspectorWidget::build_series_section(AxesBase&    ax,
         connect(ctrl.visible_check,
                 &QCheckBox::toggled,
                 this,
-                [this, axes_idx, series_idx, undo_mgr, redraw](bool checked)
+                [this, fig_id, axes_idx, series_idx, undo_mgr, redraw](bool checked)
                 {
-                    Figure* fig = registry_ ? registry_->get(active_id_) : nullptr;
-                    if (!fig)
+                    Series* s = registry_
+                                    ? find_figure_series(*registry_, fig_id, axes_idx, series_idx)
+                                    : nullptr;
+                    if (!s)
                         return;
-                    Axes* ax = fig->get_axes(axes_idx);
-                    if (!ax || series_idx >= ax->series().size())
-                        return;
-                    Series* s = ax->series()[series_idx].get();
                     s->visible(checked);
                     if (undo_mgr)
                         undo_mgr->push(UndoAction{
@@ -413,6 +665,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     layout->setSpacing(10);
 
     AxesControls ctrl{};
+    ctrl.model = &ax;
 
     // ── Title ─────────────────────────────────────────────────────────
     auto* title_group = new QGroupBox("Title", tab);
@@ -516,7 +769,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Figure* fig = registry_ ? registry_->get(fig_id) : nullptr;
                 if (!fig)
                     return;
-                Axes* ax = fig->get_axes(axes_idx_local);
+                Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
                 undoable_set_title(undo_mgr, *ax, text.toStdString());
@@ -531,7 +784,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Figure* fig = registry_ ? registry_->get(fig_id) : nullptr;
                 if (!fig)
                     return;
-                Axes* ax = fig->get_axes(axes_idx_local);
+                Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
                 undoable_set_xlabel(undo_mgr, *ax, text.toStdString());
@@ -546,7 +799,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Figure* fig = registry_ ? registry_->get(fig_id) : nullptr;
                 if (!fig)
                     return;
-                Axes* ax = fig->get_axes(axes_idx_local);
+                Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
                 undoable_set_ylabel(undo_mgr, *ax, text.toStdString());
@@ -565,7 +818,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Figure* fig = registry_ ? registry_->get(fig_id) : nullptr;
                 if (!fig)
                     return;
-                Axes* ax = fig->get_axes(axes_idx_local);
+                Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
                 undoable_xlim(undo_mgr,
@@ -583,7 +836,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Figure* fig = registry_ ? registry_->get(fig_id) : nullptr;
                 if (!fig)
                     return;
-                Axes* ax = fig->get_axes(axes_idx_local);
+                Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
                 undoable_xlim(undo_mgr,
@@ -601,7 +854,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Figure* fig = registry_ ? registry_->get(fig_id) : nullptr;
                 if (!fig)
                     return;
-                Axes* ax = fig->get_axes(axes_idx_local);
+                Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
                 undoable_ylim(undo_mgr,
@@ -619,7 +872,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Figure* fig = registry_ ? registry_->get(fig_id) : nullptr;
                 if (!fig)
                     return;
-                Axes* ax = fig->get_axes(axes_idx_local);
+                Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
                 undoable_ylim(undo_mgr,
@@ -637,7 +890,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Figure* fig = registry_ ? registry_->get(fig_id) : nullptr;
                 if (!fig)
                     return;
-                Axes* ax = fig->get_axes(axes_idx_local);
+                Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
                 ax->grid(checked);
@@ -656,7 +909,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Figure* fig = registry_ ? registry_->get(fig_id) : nullptr;
                 if (!fig)
                     return;
-                Axes* ax = fig->get_axes(axes_idx_local);
+                Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
                 ax->show_border(checked);
@@ -669,6 +922,238 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
             });
 
     axes_controls_.push_back(ctrl);
+    axes_series_counts_.push_back(ax.series().size());
+}
+
+void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
+{
+    auto* tab    = new QWidget(tab_widget_);
+    auto* layout = new QVBoxLayout(tab);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(10);
+
+    AxesControls ctrl{};
+    ctrl.model = &ax;
+
+    auto* title_group = new QGroupBox("Title", tab);
+    auto* title_form  = new QFormLayout(title_group);
+    ctrl.title_edit   = new QLineEdit(title_group);
+    ctrl.title_edit->setObjectName(QString("axes_%1_title").arg(index));
+    ctrl.title_edit->setText(QString::fromStdString(ax.title()));
+    title_form->addRow("Title", ctrl.title_edit);
+    layout->addWidget(title_group);
+
+    auto add_axis_group = [index, layout, tab](const QString&     name,
+                                               const QString&     prefix,
+                                               const std::string& label,
+                                               const AxisLimits&  limits,
+                                               QLineEdit*&        label_edit,
+                                               QDoubleSpinBox*&   min_spin,
+                                               QDoubleSpinBox*&   max_spin)
+    {
+        auto* group = new QGroupBox(name, tab);
+        auto* form  = new QFormLayout(group);
+
+        label_edit = new QLineEdit(group);
+        label_edit->setObjectName(QString("axes_%1_%2_label").arg(index).arg(prefix));
+        label_edit->setText(QString::fromStdString(label));
+        form->addRow("Label", label_edit);
+
+        auto* range_layout = new QHBoxLayout();
+        min_spin           = new QDoubleSpinBox(group);
+        min_spin->setObjectName(QString("axes_%1_%2_min").arg(index).arg(prefix));
+        min_spin->setRange(-1e9, 1e9);
+        min_spin->setDecimals(3);
+        min_spin->setValue(limits.min);
+        range_layout->addWidget(min_spin);
+
+        max_spin = new QDoubleSpinBox(group);
+        max_spin->setObjectName(QString("axes_%1_%2_max").arg(index).arg(prefix));
+        max_spin->setRange(-1e9, 1e9);
+        max_spin->setDecimals(3);
+        max_spin->setValue(limits.max);
+        range_layout->addWidget(max_spin);
+        form->addRow("Range", range_layout);
+        layout->addWidget(group);
+    };
+
+    add_axis_group("X Axis",
+                   "x",
+                   ax.xlabel(),
+                   ax.x_limits(),
+                   ctrl.xlabel_edit,
+                   ctrl.xmin_spin,
+                   ctrl.xmax_spin);
+    add_axis_group("Y Axis",
+                   "y",
+                   ax.ylabel(),
+                   ax.y_limits(),
+                   ctrl.ylabel_edit,
+                   ctrl.ymin_spin,
+                   ctrl.ymax_spin);
+    add_axis_group("Z Axis",
+                   "z",
+                   ax.zlabel(),
+                   ax.z_limits(),
+                   ctrl.zlabel_edit,
+                   ctrl.zmin_spin,
+                   ctrl.zmax_spin);
+
+    auto* appearance_group  = new QGroupBox("Grid & Bounding Box", tab);
+    auto* appearance_layout = new QFormLayout(appearance_group);
+    ctrl.grid_planes_combo  = new QComboBox(appearance_group);
+    ctrl.grid_planes_combo->setObjectName(QString("axes_%1_grid_planes").arg(index));
+    ctrl.grid_planes_combo->addItem("None", static_cast<int>(Axes3D::GridPlane::None));
+    ctrl.grid_planes_combo->addItem("XY", static_cast<int>(Axes3D::GridPlane::XY));
+    ctrl.grid_planes_combo->addItem("XZ", static_cast<int>(Axes3D::GridPlane::XZ));
+    ctrl.grid_planes_combo->addItem("YZ", static_cast<int>(Axes3D::GridPlane::YZ));
+    ctrl.grid_planes_combo->addItem("All", static_cast<int>(Axes3D::GridPlane::All));
+    ctrl.grid_planes_combo->setCurrentIndex(
+        ctrl.grid_planes_combo->findData(static_cast<int>(ax.grid_planes())));
+    appearance_layout->addRow("Grid Planes", ctrl.grid_planes_combo);
+
+    ctrl.border_check = new QCheckBox("Visible", appearance_group);
+    ctrl.border_check->setObjectName(QString("axes_%1_bounding_box").arg(index));
+    ctrl.border_check->setChecked(ax.show_bounding_box());
+    appearance_layout->addRow("Bounding Box", ctrl.border_check);
+    layout->addWidget(appearance_group);
+
+    auto* series_label = new QLabel(QString("%1 series").arg(ax.series().size()), tab);
+    series_label->setStyleSheet("color: gray;");
+    layout->addWidget(series_label);
+    build_series_section(ax, index, layout, tab);
+    layout->addStretch();
+    tab_widget_->addTab(tab, QString("Axes %1 (3D)").arg(index + 1));
+
+    const FigureId fig_id       = active_id_;
+    auto*          undo_mgr     = services_ ? &services_->undo() : nullptr;
+    auto*          redraw       = services_ ? services_->redraw_request() : nullptr;
+    auto           resolve_axes = [this, fig_id, index]() -> Axes3D*
+    {
+        Figure* figure = registry_ ? registry_->get(fig_id) : nullptr;
+        return dynamic_cast<Axes3D*>(figure_axes_at(figure, index));
+    };
+
+    connect(ctrl.title_edit,
+            &QLineEdit::textChanged,
+            this,
+            [resolve_axes, undo_mgr, redraw, fig_id](const QString& text)
+            {
+                Axes3D* target = resolve_axes();
+                if (!target || target->title() == text.toStdString())
+                    return;
+                const std::string before = target->title();
+                const std::string after  = text.toStdString();
+                target->title(after);
+                if (undo_mgr)
+                {
+                    undo_mgr->push(UndoAction{"Change 3D axes title",
+                                              [target, before]() { target->title(before); },
+                                              [target, after]() { target->title(after); }});
+                }
+                request_redraw(redraw, fig_id);
+            });
+
+    auto connect_label =
+        [this, resolve_axes, undo_mgr, redraw, fig_id](QLineEdit* edit, Axis3DDimension dimension)
+    {
+        connect(edit,
+                &QLineEdit::textChanged,
+                this,
+                [resolve_axes, undo_mgr, redraw, fig_id, dimension](const QString& text)
+                {
+                    Axes3D* target = resolve_axes();
+                    if (!target)
+                        return;
+                    undoable_set_axes3d_label(undo_mgr, *target, dimension, text.toStdString());
+                    request_redraw(redraw, fig_id);
+                });
+    };
+    connect_label(ctrl.xlabel_edit, Axis3DDimension::X);
+    connect_label(ctrl.ylabel_edit, Axis3DDimension::Y);
+    connect_label(ctrl.zlabel_edit, Axis3DDimension::Z);
+
+    auto connect_limits = [this, resolve_axes, undo_mgr, redraw, fig_id](QDoubleSpinBox* min_spin,
+                                                                         QDoubleSpinBox* max_spin,
+                                                                         Axis3DDimension dimension)
+    {
+        connect(min_spin,
+                qOverload<double>(&QDoubleSpinBox::valueChanged),
+                this,
+                [resolve_axes, undo_mgr, redraw, fig_id, dimension, max_spin](double value)
+                {
+                    Axes3D* target = resolve_axes();
+                    if (!target)
+                        return;
+                    undoable_set_axes3d_limits(undo_mgr,
+                                               *target,
+                                               dimension,
+                                               {value, max_spin->value()});
+                    request_redraw(redraw, fig_id);
+                });
+        connect(max_spin,
+                qOverload<double>(&QDoubleSpinBox::valueChanged),
+                this,
+                [resolve_axes, undo_mgr, redraw, fig_id, dimension, min_spin](double value)
+                {
+                    Axes3D* target = resolve_axes();
+                    if (!target)
+                        return;
+                    undoable_set_axes3d_limits(undo_mgr,
+                                               *target,
+                                               dimension,
+                                               {min_spin->value(), value});
+                    request_redraw(redraw, fig_id);
+                });
+    };
+    connect_limits(ctrl.xmin_spin, ctrl.xmax_spin, Axis3DDimension::X);
+    connect_limits(ctrl.ymin_spin, ctrl.ymax_spin, Axis3DDimension::Y);
+    connect_limits(ctrl.zmin_spin, ctrl.zmax_spin, Axis3DDimension::Z);
+
+    connect(
+        ctrl.grid_planes_combo,
+        qOverload<int>(&QComboBox::currentIndexChanged),
+        this,
+        [resolve_axes, undo_mgr, redraw, fig_id, combo = ctrl.grid_planes_combo](int combo_index)
+        {
+            Axes3D* target = resolve_axes();
+            if (!target || combo_index < 0)
+                return;
+            const auto before = target->grid_planes();
+            const auto after = static_cast<Axes3D::GridPlane>(combo->itemData(combo_index).toInt());
+            if (before == after)
+                return;
+            target->grid_planes(after);
+            if (undo_mgr)
+            {
+                undo_mgr->push(UndoAction{"Change 3D grid planes",
+                                          [target, before]() { target->grid_planes(before); },
+                                          [target, after]() { target->grid_planes(after); }});
+            }
+            request_redraw(redraw, fig_id);
+        });
+    connect(ctrl.border_check,
+            &QCheckBox::toggled,
+            this,
+            [resolve_axes, undo_mgr, redraw, fig_id](bool checked)
+            {
+                Axes3D* target = resolve_axes();
+                if (!target || target->show_bounding_box() == checked)
+                    return;
+                const bool before = target->show_bounding_box();
+                target->show_bounding_box(checked);
+                if (undo_mgr)
+                {
+                    undo_mgr->push(
+                        UndoAction{checked ? "Show 3D bounding box" : "Hide 3D bounding box",
+                                   [target, before]() { target->show_bounding_box(before); },
+                                   [target, checked]() { target->show_bounding_box(checked); }});
+                }
+                request_redraw(redraw, fig_id);
+            });
+
+    axes_controls_.push_back(ctrl);
+    axes_series_counts_.push_back(ax.series().size());
 }
 
 void QtInspectorWidget::clear_axes_tabs()
@@ -680,8 +1165,12 @@ void QtInspectorWidget::clear_axes_tabs()
         delete page;
     }
     axes_controls_.clear();
+    axes_series_counts_.clear();
     series_controls_.clear();
     figure_title_edit_ = nullptr;
+    figure_size_label_ = nullptr;
+    axes_count_label_  = nullptr;
+    legend_check_      = nullptr;
 }
 
 }   // namespace spectra::adapters::qt

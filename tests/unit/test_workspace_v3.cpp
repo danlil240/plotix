@@ -226,6 +226,64 @@ TEST(WorkspaceV3, TransformPipeline)
     std::filesystem::remove(path);
 }
 
+TEST(WorkspaceV3, TransformPipelineRoundTripsTargetAndFullParameters)
+{
+    auto path = std::filesystem::temp_directory_path() / "spectra_test_transform_params.spectra";
+    std::filesystem::remove(path);
+
+    auto                          data = make_v3_workspace();
+    WorkspaceData::TransformState state;
+    state.figure_index = 0;
+    state.axes_index   = 2;
+    state.series_index = 3;
+    state.all_visible  = false;
+    state.target       = "multi:0:1,2:3";
+    state.name         = "analysis";
+    WorkspaceData::TransformState::Step step;
+    step.type            = 13;
+    step.name            = "FFT";
+    step.source          = "core";
+    step.enabled         = false;
+    step.params_version  = 1;
+    step.scale_factor    = 2.5f;
+    step.offset_value    = -3.0f;
+    step.clamp_min       = -8.0f;
+    step.clamp_max       = 9.0f;
+    step.log_base        = 2.0f;
+    step.skip_nan        = false;
+    step.fft_db          = true;
+    step.fft_sample_rate = 48000.0f;
+    state.steps.push_back(step);
+    data.transforms.push_back(state);
+
+    ASSERT_TRUE(Workspace::save(path.string(), data));
+    WorkspaceData loaded;
+    ASSERT_TRUE(Workspace::load(path.string(), loaded));
+    ASSERT_EQ(loaded.transforms.size(), 1u);
+    const auto& restored = loaded.transforms.front();
+    EXPECT_EQ(restored.axes_index, 2u);
+    EXPECT_EQ(restored.series_index, 3u);
+    EXPECT_FALSE(restored.all_visible);
+    EXPECT_EQ(restored.target, "multi:0:1,2:3");
+    EXPECT_EQ(restored.name, "analysis");
+    ASSERT_EQ(restored.steps.size(), 1u);
+    const auto& restored_step = restored.steps.front();
+    EXPECT_EQ(restored_step.name, "FFT");
+    EXPECT_EQ(restored_step.source, "core");
+    EXPECT_FALSE(restored_step.enabled);
+    EXPECT_EQ(restored_step.params_version, 1);
+    EXPECT_FLOAT_EQ(restored_step.scale_factor, 2.5f);
+    EXPECT_FLOAT_EQ(restored_step.offset_value, -3.0f);
+    EXPECT_FLOAT_EQ(restored_step.clamp_min, -8.0f);
+    EXPECT_FLOAT_EQ(restored_step.clamp_max, 9.0f);
+    EXPECT_FLOAT_EQ(restored_step.log_base, 2.0f);
+    EXPECT_FALSE(restored_step.skip_nan);
+    EXPECT_TRUE(restored_step.fft_db);
+    EXPECT_FLOAT_EQ(restored_step.fft_sample_rate, 48000.0f);
+
+    std::filesystem::remove(path);
+}
+
 TEST(WorkspaceV3, MultipleTransformPipelines)
 {
     auto path = std::filesystem::temp_directory_path() / "spectra_test_multi_transforms.spectra";

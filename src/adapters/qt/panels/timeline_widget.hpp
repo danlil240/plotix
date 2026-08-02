@@ -10,7 +10,10 @@
 
 #include <spectra/fwd.hpp>
 
-#include <chrono>
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <string>
 
 class QSlider;
 class QDoubleSpinBox;
@@ -20,6 +23,13 @@ class QPushButton;
 class QLabel;
 class QListWidget;
 class QTimer;
+class QLineEdit;
+class QCheckBox;
+
+namespace spectra
+{
+class UndoManager;
+}
 
 namespace spectra::adapters::qt
 {
@@ -36,6 +46,9 @@ class QtTimelineWidget : public QDockWidget
     QtTimelineWidget& operator=(const QtTimelineWidget&) = delete;
 
    public slots:
+    void set_timeline(TimelineEditor* timeline);
+    void set_figure(Figure* figure);
+    void set_undo_manager(UndoManager* undo) { undo_ = undo; }
     void refresh();
     void on_tick();
 
@@ -47,17 +60,41 @@ class QtTimelineWidget : public QDockWidget
     void on_duration_changed(double val);
     void on_fps_changed(int val);
     void on_loop_mode_changed(int index);
+    void on_track_selection_changed();
+    void on_keyframe_selection_changed();
+    void on_add_track();
+    void on_rename_track();
+    void on_remove_track();
+    void on_add_keyframe();
+    void on_move_keyframe();
+    void on_remove_keyframe();
+    void on_set_keyframe_value();
+    void on_set_keyframe_tangents();
+    void on_track_visible_changed(bool visible);
+    void on_track_locked_changed(bool locked);
+    void on_bind_property();
+    void on_property_selection_changed(int index);
+
+   signals:
+    void timeline_changed();
 
    private:
     void build_ui();
     void update_playback_state();
+    void                 refresh_keyframes();
+    void                 refresh_property_targets();
+    uint32_t             selected_track_id() const;
+    std::optional<float> selected_keyframe_time() const;
+    void perform_mutation(const std::string& description, const std::function<void()>& mutation);
 
     TimelineEditor* timeline_ = nullptr;
+    Figure*         figure_   = nullptr;
+    UndoManager*    undo_     = nullptr;
 
     // Playback controls
-    QPushButton* play_btn_   = nullptr;
-    QPushButton* pause_btn_  = nullptr;
-    QPushButton* stop_btn_   = nullptr;
+    QPushButton* play_btn_  = nullptr;
+    QPushButton* pause_btn_ = nullptr;
+    QPushButton* stop_btn_  = nullptr;
 
     // Scrubber
     QSlider* scrubber_ = nullptr;
@@ -72,12 +109,24 @@ class QtTimelineWidget : public QDockWidget
     QComboBox* loop_combo_ = nullptr;
 
     // Track list
-    QListWidget* track_list_ = nullptr;
+    QListWidget*    track_list_          = nullptr;
+    QListWidget*    keyframe_list_       = nullptr;
+    QLineEdit*      track_name_edit_     = nullptr;
+    QDoubleSpinBox* keyframe_time_spin_  = nullptr;
+    QDoubleSpinBox* keyframe_value_spin_ = nullptr;
+    QComboBox*      interpolation_combo_ = nullptr;
+    QComboBox*      tangent_mode_combo_  = nullptr;
+    QDoubleSpinBox* in_tangent_dt_spin_  = nullptr;
+    QDoubleSpinBox* in_tangent_dv_spin_  = nullptr;
+    QDoubleSpinBox* out_tangent_dt_spin_ = nullptr;
+    QDoubleSpinBox* out_tangent_dv_spin_ = nullptr;
+    QCheckBox*      track_visible_check_ = nullptr;
+    QCheckBox*      track_locked_check_  = nullptr;
+    QComboBox*      property_combo_      = nullptr;
+    QLabel*         property_status_     = nullptr;
 
     // Animation timer for UI updates during playback
     QTimer* ui_timer_ = nullptr;
-
-    std::chrono::steady_clock::time_point last_tick_time_;
 };
 
 }   // namespace spectra::adapters::qt

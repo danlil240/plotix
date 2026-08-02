@@ -277,18 +277,14 @@ class PluginTransformLoadTest : public ::testing::Test
         mgr_.set_transform_registry(&transform_reg_);
     }
 
-    // No explicit TearDown — destruction order matters:
-    // transform_reg_ is declared last so it is destroyed first (while the
-    // plugin .so is still loaded).  Then mgr_ destruction calls unload_all()
-    // which dlcloses the library safely.
+    void TearDown() override { mgr_.unload_all(); }
 
     std::string     plugin_path_;
     CommandRegistry cmd_reg_;
     ShortcutManager shortcut_mgr_;
     UndoManager     undo_mgr_;
-    PluginManager   mgr_;
-    // Must be destroyed before mgr_ closes the plugin .so, so declared last.
     TransformRegistry transform_reg_;
+    PluginManager     mgr_;
 };
 
 TEST_F(PluginTransformLoadTest, LoadPluginRegistersTransforms)
@@ -318,6 +314,17 @@ TEST_F(PluginTransformLoadTest, LoadPluginRegistersTransforms)
     }
     EXPECT_TRUE(found_double) << "PluginDouble transform not found in registry";
     EXPECT_TRUE(found_reverse) << "PluginReverse transform not found in registry";
+    EXPECT_EQ(transform_reg_.transform_source("PluginDouble"), "MockTransformPlugin");
+    EXPECT_EQ(transform_reg_.transform_source("PluginReverse"), "MockTransformPlugin");
+}
+
+TEST_F(PluginTransformLoadTest, UnloadRemovesOwnedTransformsBeforeLibraryClose)
+{
+    ASSERT_TRUE(mgr_.load_plugin(plugin_path_));
+    ASSERT_TRUE(mgr_.unload_plugin("MockTransformPlugin"));
+    DataTransform transform;
+    EXPECT_FALSE(transform_reg_.get_transform("PluginDouble", transform));
+    EXPECT_FALSE(transform_reg_.get_transform("PluginReverse", transform));
 }
 
 TEST_F(PluginTransformLoadTest, ScalarTransformProducesCorrectOutput)

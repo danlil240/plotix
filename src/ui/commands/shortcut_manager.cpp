@@ -1,5 +1,6 @@
 #include "shortcut_manager.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <spectra/logger.hpp>
 #include <sstream>
@@ -331,6 +332,14 @@ std::vector<ShortcutBinding> ShortcutManager::all_bindings() const
     {
         result.push_back({sc, id});
     }
+    std::sort(result.begin(),
+              result.end(),
+              [](const ShortcutBinding& a, const ShortcutBinding& b)
+              {
+                  if (a.command_id != b.command_id)
+                      return a.command_id < b.command_id;
+                  return a.shortcut.to_string() < b.shortcut.to_string();
+              });
     return result;
 }
 

@@ -390,6 +390,40 @@ TEST(UndoProperty, CaptureRestoreFigureAxes)
 
 // ─── Null UndoManager safety ────────────────────────────────────────────────
 
+TEST(UndoProperty, ThreeDimensionalSeriesDataIsUndoable)
+{
+    FigureRegistry           registry;
+    auto                     figure = std::make_unique<Figure>();
+    auto&                    axes   = figure->subplot3d(1, 1, 1);
+    const std::vector<float> x{1.0f, 2.0f};
+    const std::vector<float> y{3.0f, 4.0f};
+    const std::vector<float> z{5.0f, 6.0f};
+    axes.line3d(x, y, z).x_offset(12.5);
+    const FigureId id = registry.register_figure(std::move(figure));
+    UndoManager    undo;
+
+    EditableSeriesData after;
+    after.x        = {10.0f, 20.0f};
+    after.y        = {30.0f, 40.0f};
+    after.z        = {50.0f, 60.0f};
+    after.has_z    = true;
+    after.x_offset = 1783350621.752999;
+    ASSERT_TRUE(undoable_set_series_data(&undo, registry, id, 0, 0, after, "Edit 3D series data"));
+    auto* line = dynamic_cast<LineSeries3D*>(find_figure_series(registry, id, 0, 0));
+    ASSERT_NE(line, nullptr);
+    EXPECT_FLOAT_EQ(line->z_data()[0], 50.0f);
+    EXPECT_NEAR(line->x_offset(), 1783350621.752999, 1e-6);
+
+    ASSERT_TRUE(undo.undo());
+    EXPECT_FLOAT_EQ(line->x_data()[0], 1.0f);
+    EXPECT_FLOAT_EQ(line->y_data()[0], 3.0f);
+    EXPECT_FLOAT_EQ(line->z_data()[0], 5.0f);
+    EXPECT_DOUBLE_EQ(line->x_offset(), 12.5);
+    ASSERT_TRUE(undo.redo());
+    EXPECT_FLOAT_EQ(line->z_data()[1], 60.0f);
+    EXPECT_NEAR(line->x_offset(), 1783350621.752999, 1e-6);
+}
+
 TEST(UndoProperty, NullManagerXlim)
 {
     Figure fig = make_test_figure();

@@ -27,6 +27,7 @@
 namespace spectra
 {
 class CommandRegistry;
+class ShortcutManager;
 struct Command;
 }   // namespace spectra
 
@@ -57,7 +58,7 @@ class QtActionBridge : public QObject
     // Returns a list of (category, actions) pairs.
     struct CategoryActions
     {
-        std::string        category;
+        std::string           category;
         std::vector<QAction*> actions;
     };
     std::vector<CategoryActions> actions_by_category() const;
@@ -67,6 +68,10 @@ class QtActionBridge : public QObject
 
     // Refresh enabled state and labels from the registry.
     void refresh();
+
+    // Make QAction bindings and command metadata match the authoritative
+    // shared ShortcutManager, including commands with multiple bindings.
+    void sync_shortcuts(const ShortcutManager& shortcuts);
 
    private:
     // Parse a Spectra shortcut string (e.g. "Ctrl+R") to QKeySequence.

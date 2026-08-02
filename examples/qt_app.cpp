@@ -23,8 +23,9 @@
     #include <QApplication>
     #include "adapters/qt/qt_application.hpp"
     #include "adapters/qt/qt_main_window.hpp"
+    #include "ui/native_dialog_policy.hpp"
 
-    using namespace spectra::adapters::qt;
+using namespace spectra::adapters::qt;
 
     #include <spectra/logger.hpp>
 
@@ -46,12 +47,13 @@
 namespace
 {
 
-#ifndef _WIN32
+    #ifndef _WIN32
 
 bool socket_is_live(const std::string& path)
 {
     int fd = ::socket(AF_UNIX, SOCK_STREAM, 0);
-    if (fd < 0) return false;
+    if (fd < 0)
+        return false;
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
     if (path.size() >= sizeof(addr.sun_path))
@@ -75,19 +77,25 @@ std::string discover_live_daemon_socket()
         dir = "/tmp";
 
     std::vector<std::pair<std::string, fs::file_time_type>> hits;
-    std::error_code ec;
+    std::error_code                                         ec;
     for (auto& e : fs::directory_iterator(dir, ec))
     {
-        if (ec) break;
+        if (ec)
+            break;
         const auto& p    = e.path();
         const auto  name = p.filename().string();
         if (name.rfind("spectra-", 0) != 0 || p.extension() != ".sock")
             continue;
         auto mtime = fs::last_write_time(p, ec);
-        if (ec) { ec.clear(); continue; }
+        if (ec)
+        {
+            ec.clear();
+            continue;
+        }
         hits.emplace_back(p.string(), mtime);
     }
-    std::sort(hits.begin(), hits.end(),
+    std::sort(hits.begin(),
+              hits.end(),
               [](const auto& a, const auto& b) { return a.second > b.second; });
     for (const auto& h : hits)
     {
@@ -97,12 +105,13 @@ std::string discover_live_daemon_socket()
     return {};
 }
 
-#endif // !_WIN32
+    #endif   // !_WIN32
 
-} // namespace
+}   // namespace
 
 int main(int argc, char* argv[])
 {
+    spectra::init_native_dialog_policy(argc, argv);
     QApplication app(argc, argv);
     app.setApplicationName("Spectra");
     app.setOrganizationName("Spectra");
@@ -123,11 +132,11 @@ int main(int argc, char* argv[])
     {
         if (std::strcmp(argv[i], "--version") == 0 || std::strcmp(argv[i], "-v") == 0)
         {
-#ifdef SPECTRA_VERSION_STRING
+    #ifdef SPECTRA_VERSION_STRING
             std::cout << "spectra-qt-app " << SPECTRA_VERSION_STRING << "\n";
-#else
+    #else
             std::cout << "spectra-qt-app (version unknown)\n";
-#endif
+    #endif
             return 0;
         }
         if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0)
@@ -147,7 +156,7 @@ int main(int argc, char* argv[])
     spectra::setup_dual_logging(spectra::default_console_log_level(),
                                 spectra::default_file_log_level());
 
-#ifndef _WIN32
+    #ifndef _WIN32
     // Auto-discover daemon if no socket specified and discovery not disabled
     if (socket_path.empty())
     {
@@ -157,7 +166,7 @@ int main(int argc, char* argv[])
             socket_path = discover_live_daemon_socket();
         }
     }
-#endif
+    #endif
 
     // Initialize the Qt application controller
     spectra::adapters::qt::QtApplicationController controller;
@@ -194,9 +203,10 @@ int main(int argc, char* argv[])
         main_window->show();
 
         // Native recovery prompts are intentionally disabled under automation;
-        // interactive startup should offer the persisted session.
-        const char* automation = std::getenv("SPECTRA_AUTOMATION");
-        if (!automation || !*automation)
+        // an explicit recovery policy enables deterministic launched tests.
+        const char* automation      = std::getenv("SPECTRA_AUTOMATION");
+        const char* recovery_policy = std::getenv("SPECTRA_RECOVER_AUTOSAVE");
+        if (!automation || !*automation || (recovery_policy && *recovery_policy))
             controller.check_crash_recovery();
     }
 

@@ -43,6 +43,7 @@ TEST(SeriesClipboard, SnapshotLineSeries)
     ls.color(Color{1.0f, 0.0f, 0.0f});
     ls.width(3.0f);
     ls.visible(false);
+    ls.x_offset(1783350621.752999);
 
     auto snap = SeriesClipboard::snapshot(ls);
 
@@ -52,6 +53,7 @@ TEST(SeriesClipboard, SnapshotLineSeries)
     EXPECT_FLOAT_EQ(snap.color.g, 0.0f);
     EXPECT_FLOAT_EQ(snap.line_width, 3.0f);
     EXPECT_FALSE(snap.visible);
+    EXPECT_NEAR(snap.x_offset, 1783350621.752999, 1e-6);
     ASSERT_EQ(snap.x_data.size(), 5u);
     ASSERT_EQ(snap.y_data.size(), 5u);
     EXPECT_FLOAT_EQ(snap.x_data[0], 1.0f);
@@ -102,6 +104,7 @@ TEST(SeriesClipboard, PasteLineSeriesToAxes)
     snap.color      = Color{0.5f, 0.5f, 0.5f};
     snap.line_width = 4.0f;
     snap.visible    = true;
+    snap.x_offset   = 1783350621.752999;
     snap.x_data     = {1, 2, 3};
     snap.y_data     = {10, 20, 30};
 
@@ -111,6 +114,7 @@ TEST(SeriesClipboard, PasteLineSeriesToAxes)
     EXPECT_EQ(result->label(), "pasted_line");
     EXPECT_FLOAT_EQ(result->color().r, 0.5f);
     EXPECT_TRUE(result->visible());
+    EXPECT_NEAR(result->x_offset(), 1783350621.752999, 1e-6);
     EXPECT_EQ(ax.series().size(), 1u);
 
     auto* line = dynamic_cast<LineSeries*>(result);

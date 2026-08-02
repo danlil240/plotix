@@ -7,10 +7,12 @@
 #include <functional>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include <QtGui/QVulkanInstance>
 
 #include "ui/theme/theme.hpp"
+#include "ui/workspace/overlay_snapshot.hpp"
 
 class QWindow;
 
@@ -20,6 +22,9 @@ class VulkanBackend;
 class Renderer;
 class Figure;
 class InputHandler;
+class Axes;
+class AxesBase;
+class Series;
 struct WindowContext;
 #ifdef SPECTRA_USE_IMGUI
 class ImGuiIntegration;
@@ -31,6 +36,16 @@ namespace spectra::adapters::qt
 {
 
 class QtSurfaceHost;
+
+struct QtSeriesSelectionEntry
+{
+    Figure*   figure       = nullptr;
+    AxesBase* owner        = nullptr;
+    Axes*     axes         = nullptr;
+    Series*   series       = nullptr;
+    int       axes_index   = -1;
+    int       series_index = -1;
+};
 
 // Bootstrap runtime that owns Spectra's Vulkan backend + renderer and
 // drives a frame loop for one or more QWindow canvases.
@@ -101,6 +116,24 @@ class QtRuntime
     void set_input_handler(QWindow* window, InputHandler* input);
     void set_input_handler(InputHandler* input);
 
+    // Apply the per-canvas crosshair state to the existing data-interaction
+    // overlay. Returns false until that canvas is attached and initialized.
+    bool set_crosshair(QWindow* window, bool enabled);
+
+    // Losslessly transfer the retained overlay state for a native canvas.
+    // These return false when the canvas has not attached its interaction layer.
+    bool capture_overlay_snapshot(QWindow*         window,
+                                  const Figure&    figure,
+                                  OverlaySnapshot& snapshot) const;
+    bool restore_overlay_snapshot(QWindow* window, Figure& figure, const OverlaySnapshot& snapshot);
+    size_t marker_count(QWindow* window) const;
+    bool   clear_markers(QWindow* window);
+
+    // Canvas selection is the authoritative per-window state. Mirror it into
+    // the retained interaction/inspector context and renderer highlight.
+    void set_series_selection(QWindow* window, const std::vector<QtSeriesSelectionEntry>& selected);
+    void notify_series_removed(QWindow* window, const Series* series);
+
     // Keep the exact legacy-rendered inspector chevron while delegating its
     // state and action to the Qt-owned inspector drawer for this canvas.
     void set_inspector_toggle_callbacks(QWindow*              window,
@@ -143,6 +176,7 @@ class QtRuntime
         bool                                  resize_pending           = false;
         uint32_t                              swapchain_recreate_count = 0;
         uint32_t                              frame_skip_count         = 0;
+        std::vector<const Series*>            selected_series;
 
         // Surface generation: 0 = invalid, >0 = valid surface.
         // Incremented on attach, invalidated on detach.

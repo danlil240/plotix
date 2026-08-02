@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <spectra/fwd.hpp>
 #include <string>
 #include <vector>
@@ -71,6 +72,7 @@ struct WorkspaceData
 
     struct FigureState
     {
+        FigureId                 figure_id = 0;
         std::string              title;
         uint32_t                 width       = 1280;
         uint32_t                 height      = 720;
@@ -81,6 +83,12 @@ struct WorkspaceData
         std::vector<AxisState>   axes;
         std::vector<SeriesState> series;
         std::vector<Axes3DState> axes_3d;   // v4: 3D axes state
+        // v5 optional extension: complete FigureSerializer payload. This is
+        // what makes populated workspaces and autosaves restart-safe.
+        std::string snapshot_base64;
+        // Per-figure TimelineEditor state, including authored tracks and
+        // keyframes. Empty preserves compatibility with older workspaces.
+        std::string timeline_json;
     };
 
     struct PanelState
@@ -116,11 +124,27 @@ struct WorkspaceData
     {
         FigureId figure_index = 0;
         size_t   axes_index   = 0;
+        size_t      series_index = 0;
+        bool        all_visible  = false;
+        bool        axes_only    = false;
+        std::string target;
+        std::string name;
         struct Step
         {
             int   type    = 0;      // DataTransform::Type enum value
             float param   = 0.0f;   // Scale/offset/clamp parameter
             bool  enabled = true;
+            std::string name;
+            std::string source;
+            int         params_version  = 0;
+            float       scale_factor    = 1.0f;
+            float       offset_value    = 0.0f;
+            float       clamp_min       = 0.0f;
+            float       clamp_max       = 1.0f;
+            float       log_base        = 10.0f;
+            bool        skip_nan        = true;
+            bool        fft_db          = false;
+            float       fft_sample_rate = 0.0f;
         };
         std::vector<Step> steps;
     };
@@ -160,19 +184,23 @@ struct WorkspaceData
     // v5: Qt desktop layout state (provider-specific window/panel arrangement)
     struct DesktopLayoutState
     {
-        std::string provider;                   // "native", "kddockwidgets", etc.
-        std::string provider_version;
-        std::string main_window_state_base64;   // QMainWindow::saveState()
-        std::string main_window_geometry_base64; // QMainWindow::saveGeometry()
-        std::string provider_layout;            // provider-specific extra layout data
+        std::string           provider;   // "native", "kddockwidgets", etc.
+        std::string           provider_version;
+        std::string           main_window_state_base64;      // QMainWindow::saveState()
+        std::string           main_window_geometry_base64;   // QMainWindow::saveGeometry()
+        std::string           main_window_split_layout;
+        std::vector<FigureId> main_window_figure_ids;
+        std::string           provider_layout;   // provider-specific extra layout data
 
         struct WindowState
         {
-            std::string state_base64;
-            std::string geometry_base64;
-            std::string title;
+            std::string           state_base64;
+            std::string           geometry_base64;
+            std::string           title;
+            std::string           split_layout;
+            std::vector<FigureId> figure_ids;
         };
-        std::vector<WindowState> windows;       // additional/detached windows
+        std::vector<WindowState> windows;   // additional/detached windows
     };
     DesktopLayoutState desktop_layout;
 
@@ -208,16 +236,24 @@ class Workspace
 
     // Capture current application state into WorkspaceData.
     // figures: all open figures. active_index: currently active figure.
-    static WorkspaceData capture(const std::vector<Figure*>& figures,
-                                 size_t                      active_index,
-                                 const std::string&          theme_name,
-                                 bool                        inspector_visible,
-                                 float                       inspector_width,
-                                 bool                        nav_rail_expanded);
+    static WorkspaceData capture(const std::vector<Figure*>&         figures,
+                                 size_t                              active_index,
+                                 const std::string&                  theme_name,
+                                 bool                                inspector_visible,
+                                 float                               inspector_width,
+                                 bool                                nav_rail_expanded,
+                                 const std::vector<OverlaySnapshot>* overlays = nullptr);
 
     // Apply loaded workspace data to figures (restores axis limits, etc.).
     // Returns false if data is incompatible.
     static bool apply(const WorkspaceData& data, std::vector<Figure*>& figures);
+
+    // Recreate every figure from its embedded snapshot. The output is only
+    // replaced after all payloads have decoded and deserialized successfully.
+    // When requested, overlays are returned in the same order as the figures.
+    static bool restore_figures(const WorkspaceData&                  data,
+                                std::vector<std::unique_ptr<Figure>>& figures,
+                                std::vector<OverlaySnapshot>*         overlays = nullptr);
 
     // Get default workspace file path (in user config directory).
     static std::string default_path();
@@ -241,7 +277,7 @@ class Workspace
 
    private:
     // JSON serialization helpers (minimal, no external dependency)
-    static bool        deserialize_json(const std::string& json, WorkspaceData& data);
+    static bool deserialize_json(const std::string& json, WorkspaceData& data);
 
     // Simple JSON value parser
     static std::string read_string_value(const std::string& json, const std::string& key);

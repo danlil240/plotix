@@ -2,7 +2,9 @@
 
 #include <spectra/figure.hpp>
 #include <spectra/fwd.hpp>
+#include <iosfwd>
 #include <string>
+#include <string_view>
 
 #include "overlay_snapshot.hpp"
 
@@ -35,6 +37,14 @@ class FigureSerializer
     // Returns true on success.
     static bool load(const std::string& path, Figure& figure, OverlaySnapshot* overlay = nullptr);
 
+    // In-memory equivalents used by atomic workspace/autosave snapshots.
+    static bool serialize(const Figure&          figure,
+                          std::string&           bytes,
+                          const OverlaySnapshot* overlay = nullptr);
+    static bool deserialize(std::string_view bytes,
+                            Figure&          figure,
+                            OverlaySnapshot* overlay = nullptr);
+
     // Open a native OS save dialog and save the figure.
     // Returns true if the user selected a file and save succeeded.
     static bool save_with_dialog(const Figure& figure, const OverlaySnapshot* overlay = nullptr);
@@ -42,6 +52,12 @@ class FigureSerializer
     // Open a native OS open dialog and load into the figure.
     // Returns true if the user selected a file and load succeeded.
     static bool load_with_dialog(Figure& figure, OverlaySnapshot* overlay = nullptr);
+
+   private:
+    static bool save_stream(std::ostream&          stream,
+                            const Figure&          figure,
+                            const OverlaySnapshot* overlay);
+    static bool load_stream(std::istream& stream, Figure& figure, OverlaySnapshot* overlay);
 };
 
 }   // namespace spectra

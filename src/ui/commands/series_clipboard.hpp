@@ -29,6 +29,7 @@ struct SeriesSnapshot
     bool               visible    = true;
     float              line_width = 2.0f;   // LineSeries / LineSeries3D
     float              point_size = 4.0f;   // ScatterSeries / ScatterSeries3D
+    double             x_offset   = 0.0;
     std::vector<float> x_data;
     std::vector<float> y_data;
     std::vector<float> z_data;   // 3D only (empty for 2D)

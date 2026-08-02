@@ -13,6 +13,7 @@
 // Lifetime: created in main(), lives for the duration of the application.
 
 #include <memory>
+#include <unordered_map>
 
 #include <spectra/fwd.hpp>
 
@@ -21,6 +22,9 @@ namespace spectra
 class ApplicationServices;
 class FigureRegistry;
 class TimelineEditor;
+class AxisLinkManager;
+class SeriesClipboard;
+struct WorkspaceData;
 
 namespace adapters::qt
 {
@@ -36,6 +40,8 @@ class MainWindowRegistry;
 class QtWorkspaceBridge;
 class QtAutomationAdapter;
 class QtIpcClient;
+class QtFunctionPlotDialog;
+class SpectraVulkanWindow;
 
 }   // namespace adapters::qt
 
@@ -66,15 +72,15 @@ class QtApplicationController
 
     // ── Accessors ───────────────────────────────────────────────────────────
 
-    SpectraMainWindow*    main_window()    { return main_window_.get(); }
-    QtRuntime*            runtime()        { return runtime_.get(); }
-    ApplicationServices*  services()       { return services_.get(); }
-    QtActionBridge*       action_bridge()  { return action_bridge_.get(); }
-    MainWindowRegistry*   window_registry() { return window_registry_.get(); }
-    QtWorkspaceBridge*    workspace_bridge() { return workspace_bridge_.get(); }
-    QtAutomationAdapter*  automation_adapter() { return automation_adapter_.get(); }
-    QtIpcClient*          ipc_client()         { return ipc_client_.get(); }
-    FigureRegistry&       figure_registry();
+    SpectraMainWindow*   main_window() { return main_window_.get(); }
+    QtRuntime*           runtime() { return runtime_.get(); }
+    ApplicationServices* services() { return services_.get(); }
+    QtActionBridge*      action_bridge() { return action_bridge_.get(); }
+    MainWindowRegistry*  window_registry() { return window_registry_.get(); }
+    QtWorkspaceBridge*   workspace_bridge() { return workspace_bridge_.get(); }
+    QtAutomationAdapter* automation_adapter() { return automation_adapter_.get(); }
+    QtIpcClient*         ipc_client() { return ipc_client_.get(); }
+    FigureRegistry&      figure_registry();
 
     // Check for autosave file and prompt user to restore. Call after init().
     void check_crash_recovery();
@@ -90,30 +96,40 @@ class QtApplicationController
    private:
     // Register frontend-neutral command IDs with Qt implementations before
     // QtActionBridge snapshots the registry.
-    void register_qt_commands();
+    void                 register_qt_commands();
+    TimelineEditor*      timeline_for(FigureId id);
+    TimelineEditor*      active_timeline();
+    SpectraMainWindow*   command_target_window() const;
+    SpectraVulkanWindow* canvas_for_figure(FigureId id) const;
+    WorkspaceData        capture_workspace_data();
+    bool                 restore_workspace_data(const WorkspaceData& data);
 
     bool initialized_ = false;
 
     // Core infrastructure (owned)
-    std::unique_ptr<QtRuntime>         runtime_;
+    std::unique_ptr<QtRuntime>           runtime_;
     std::unique_ptr<ApplicationServices> services_;
+    std::unique_ptr<AxisLinkManager>     axis_link_manager_;
 
     // Qt frontend (owned)
-    std::unique_ptr<QtActionBridge>      action_bridge_;
-    std::unique_ptr<SpectraMainWindow>   main_window_;
-    std::unique_ptr<MainWindowRegistry>  window_registry_;
-    std::unique_ptr<QtWorkspaceBridge>   workspace_bridge_;
-    std::unique_ptr<QtAutomationAdapter> automation_adapter_;
-    std::unique_ptr<WorkspaceAutosave>   autosave_;
-    std::unique_ptr<QtIpcClient>         ipc_client_;
-    std::unique_ptr<TimelineEditor>      timeline_editor_;
+    std::unique_ptr<QtActionBridge>                                     action_bridge_;
+    std::unique_ptr<SpectraMainWindow>                                  main_window_;
+    std::unique_ptr<MainWindowRegistry>                                 window_registry_;
+    std::unique_ptr<QtWorkspaceBridge>                                  workspace_bridge_;
+    std::unique_ptr<QtAutomationAdapter>                                automation_adapter_;
+    std::unique_ptr<WorkspaceAutosave>                                  autosave_;
+    std::unique_ptr<QtIpcClient>                                        ipc_client_;
+    std::unique_ptr<QtFunctionPlotDialog>                               function_plot_dialog_;
+    std::unordered_map<FigureId, std::unique_ptr<TimelineEditor>>       timelines_;
+    std::unordered_map<FigureId, std::unique_ptr<KeyframeInterpolator>> interpolators_;
+    std::unique_ptr<SeriesClipboard>                                    series_clipboard_;
 
     // Frontend service implementations (owned, injected into ApplicationServices)
-    std::unique_ptr<QtDialogService>     dialog_service_;
-    std::unique_ptr<QtClipboardService>  clipboard_service_;
-    std::unique_ptr<QtRedrawRequest>     redraw_request_;
-    std::unique_ptr<QtWindowService>     window_service_;
+    std::unique_ptr<QtDialogService>    dialog_service_;
+    std::unique_ptr<QtClipboardService> clipboard_service_;
+    std::unique_ptr<QtRedrawRequest>    redraw_request_;
+    std::unique_ptr<QtWindowService>    window_service_;
 };
 
-}   // namespace spectra::adapters::qt
+}   // namespace adapters::qt
 }   // namespace spectra

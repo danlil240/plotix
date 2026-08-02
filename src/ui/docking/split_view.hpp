@@ -61,7 +61,7 @@ class SplitPane
 
     PaneId   id() const { return id_; }
     FigureId figure_index() const { return figure_index_; }
-    void     set_figure_index(FigureId idx) { figure_index_ = idx; }
+    void     set_figure_index(FigureId idx);
 
     // ── Multi-figure per pane (per-pane tab bar) ────────────────────────
 
@@ -70,6 +70,7 @@ class SplitPane
     void                         set_active_local_index(size_t local_idx);
     void                         add_figure(FigureId fig_id);
     void                         remove_figure(FigureId fig_id);
+    bool                         move_figure(FigureId fig_id, size_t target_index);
     bool                         has_figure(FigureId fig_id) const;
     size_t                       figure_count() const { return figure_indices_.size(); }
     void                         swap_contents(SplitPane& other);
@@ -121,6 +122,7 @@ class SplitPane
 
     std::string                       serialize() const;
     static std::unique_ptr<SplitPane> deserialize(const std::string& data);
+    void remap_figure_ids(const std::function<FigureId(FigureId)>& remap);
 
     // ── Constants ────────────────────────────────────────────────────────
 
@@ -236,6 +238,7 @@ class SplitViewManager
 
     std::string serialize() const;
     bool        deserialize(const std::string& data);
+    void        remap_figure_ids(const std::function<FigureId(FigureId)>& remap);
 
     // ── Callbacks ───────────────────────────────────────────────────────
 

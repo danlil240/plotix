@@ -5,27 +5,27 @@
 #include "docking/main_window_registry.hpp"
 #include "docking/native_qt_docking_host.hpp"
 #include "docking/docking_host.hpp"
+#include "qt_main_window.hpp"
 
 #include "ui/workspace/workspace.hpp"
 
 namespace spectra::adapters::qt
 {
 
-QtWorkspaceBridge::QtWorkspaceBridge(MainWindowRegistry* registry)
-    : registry_(registry)
-{
-}
+QtWorkspaceBridge::QtWorkspaceBridge(MainWindowRegistry* registry) : registry_(registry) {}
 
 void QtWorkspaceBridge::capture_layout(WorkspaceData& data) const
 {
     if (!registry_)
         return;
 
-    data.desktop_layout.provider        = provider_;
+    data.desktop_layout.provider         = provider_;
     data.desktop_layout.provider_version = "1.0";
+    data.desktop_layout.windows.clear();
+    data.desktop_layout.main_window_figure_ids.clear();
 
-    auto host_ids = registry_->all_hosts();
-    bool first    = true;
+    auto         host_ids = registry_->all_hosts();
+    const HostId main_id  = registry_->primary_host_id();
 
     for (HostId hid : host_ids)
     {
@@ -35,15 +35,19 @@ void QtWorkspaceBridge::capture_layout(WorkspaceData& data) const
 
         DockLayoutState layout = host->save_layout();
 
-        if (first)
+        auto* window = host->main_window();
+        if (hid == main_id)
         {
-            // First window is the main window — store its state directly.
             if (!layout.windows.empty())
             {
                 data.desktop_layout.main_window_state_base64    = layout.windows[0].state_base64;
                 data.desktop_layout.main_window_geometry_base64 = layout.windows[0].geometry_base64;
             }
-            first = false;
+            if (window)
+            {
+                data.desktop_layout.main_window_figure_ids   = window->open_figure_ids();
+                data.desktop_layout.main_window_split_layout = window->serialize_split_layout();
+            }
         }
         else
         {
@@ -54,20 +58,25 @@ void QtWorkspaceBridge::capture_layout(WorkspaceData& data) const
                 dws.state_base64    = ws.state_base64;
                 dws.geometry_base64 = ws.geometry_base64;
                 dws.title           = ws.title;
+                if (window)
+                {
+                    dws.figure_ids   = window->open_figure_ids();
+                    dws.split_layout = window->serialize_split_layout();
+                }
                 data.desktop_layout.windows.push_back(std::move(dws));
             }
         }
     }
 }
 
-bool QtWorkspaceBridge::apply_layout(const WorkspaceData& data) const
+bool QtWorkspaceBridge::apply_layout(const WorkspaceData&                          data,
+                                     const std::unordered_map<FigureId, FigureId>& id_map) const
 {
     if (!registry_)
         return false;
 
     // Provider mismatch: degrade safely — keep figures but don't restore layout.
-    if (!data.desktop_layout.provider.empty()
-        && data.desktop_layout.provider != provider_)
+    if (!data.desktop_layout.provider.empty() && data.desktop_layout.provider != provider_)
     {
         return false;
     }
@@ -75,11 +84,17 @@ bool QtWorkspaceBridge::apply_layout(const WorkspaceData& data) const
     bool any_applied = false;
 
     // Restore main window (first host).
-    auto host_ids = registry_->all_hosts();
-    if (host_ids.empty())
+    const HostId main_id = registry_->primary_host_id();
+    if (main_id == INVALID_HOST_ID)
         return false;
 
-    auto* main_host = registry_->native_host(host_ids[0]);
+    auto map_id = [&id_map](FigureId old_id)
+    {
+        const auto it = id_map.find(old_id);
+        return it == id_map.end() ? old_id : it->second;
+    };
+
+    auto* main_host = registry_->native_host(main_id);
     if (main_host)
     {
         DockLayoutState layout;
@@ -87,14 +102,26 @@ bool QtWorkspaceBridge::apply_layout(const WorkspaceData& data) const
         layout.provider_version = "1.0";
 
         DockLayoutState::DockWindowState ws;
-        ws.host_id          = host_ids[0];
-        ws.state_base64     = data.desktop_layout.main_window_state_base64;
-        ws.geometry_base64  = data.desktop_layout.main_window_geometry_base64;
-        ws.title            = "Spectra";
+        ws.host_id         = main_id;
+        ws.state_base64    = data.desktop_layout.main_window_state_base64;
+        ws.geometry_base64 = data.desktop_layout.main_window_geometry_base64;
+        ws.title           = "Spectra";
         layout.windows.push_back(ws);
 
         if (main_host->restore_layout(layout))
             any_applied = true;
+
+        auto* window = main_host->main_window();
+        if (window && !data.desktop_layout.main_window_split_layout.empty()
+            && window->restore_split_layout(data.desktop_layout.main_window_split_layout, id_map))
+        {
+            any_applied = true;
+        }
+        else if (window)
+        {
+            for (FigureId old_id : data.desktop_layout.main_window_figure_ids)
+                any_applied = main_host->add_figure_tab(map_id(old_id)) || any_applied;
+        }
     }
 
     // Restore detached windows.
@@ -115,10 +142,10 @@ bool QtWorkspaceBridge::apply_layout(const WorkspaceData& data) const
         layout.provider_version = "1.0";
 
         DockLayoutState::DockWindowState ws;
-        ws.host_id          = new_id;
-        ws.state_base64     = saved_ws.state_base64;
-        ws.geometry_base64  = saved_ws.geometry_base64;
-        ws.title            = saved_ws.title;
+        ws.host_id         = new_id;
+        ws.state_base64    = saved_ws.state_base64;
+        ws.geometry_base64 = saved_ws.geometry_base64;
+        ws.title           = saved_ws.title;
         layout.windows.push_back(ws);
 
         if (new_host->restore_layout(layout))
@@ -126,6 +153,18 @@ bool QtWorkspaceBridge::apply_layout(const WorkspaceData& data) const
 
         if (!saved_ws.title.empty())
             new_host->set_title(saved_ws.title);
+
+        auto* window = new_host->main_window();
+        if (window && !saved_ws.split_layout.empty()
+            && window->restore_split_layout(saved_ws.split_layout, id_map))
+        {
+            any_applied = true;
+        }
+        else
+        {
+            for (FigureId old_id : saved_ws.figure_ids)
+                any_applied = new_host->add_figure_tab(map_id(old_id)) || any_applied;
+        }
     }
 
     return any_applied;

@@ -129,6 +129,14 @@ DataTransform::DataTransform(const std::string& name, CustomXYFunc func)
 {
 }
 
+DataTransform DataTransform::unavailable_custom(const std::string& name, const std::string& source)
+{
+    DataTransform transform(name, CustomFunc{});
+    transform.available_ = false;
+    transform.source_    = source;
+    return transform;
+}
+
 // ─── Apply ──────────────────────────────────────────────────────────────────
 
 void DataTransform::apply_y(std::span<const float> x_in,
@@ -723,7 +731,7 @@ void TransformPipeline::apply(std::span<const float> x_in,
 
     for (const auto& step : steps_)
     {
-        if (!step.enabled)
+        if (!step.enabled || !step.transform.available())
             continue;
 
         if (first_step)
@@ -779,7 +787,8 @@ bool TransformPipeline::is_identity() const
         return true;
     for (const auto& step : steps_)
     {
-        if (step.enabled && step.transform.type() != TransformType::Identity)
+        if (step.enabled && step.transform.available()
+            && step.transform.type() != TransformType::Identity)
         {
             return false;
         }
@@ -806,6 +815,9 @@ void TransformRegistry::register_transform(const std::string&        name,
 {
     std::lock_guard lock(mutex_);
     custom_transforms_[name] = {DataTransform(name, std::move(func)), desc};
+    if (registration_capture_
+        && std::ranges::find(*registration_capture_, name) == registration_capture_->end())
+        registration_capture_->push_back(name);
 }
 
 void TransformRegistry::register_xy_transform(const std::string&          name,
@@ -814,12 +826,44 @@ void TransformRegistry::register_xy_transform(const std::string&          name,
 {
     std::lock_guard lock(mutex_);
     custom_transforms_[name] = {DataTransform(name, std::move(func)), desc};
+    if (registration_capture_
+        && std::ranges::find(*registration_capture_, name) == registration_capture_->end())
+        registration_capture_->push_back(name);
 }
 
 bool TransformRegistry::unregister_transform(const std::string& name)
 {
     std::lock_guard lock(mutex_);
     return custom_transforms_.erase(name) > 0;
+}
+
+bool TransformRegistry::set_transform_source(const std::string& name, const std::string& source)
+{
+    std::lock_guard lock(mutex_);
+    const auto      it = custom_transforms_.find(name);
+    if (it == custom_transforms_.end())
+        return false;
+    it->second.transform.set_source(source);
+    return true;
+}
+
+std::string TransformRegistry::transform_source(const std::string& name) const
+{
+    std::lock_guard lock(mutex_);
+    const auto      it = custom_transforms_.find(name);
+    return it == custom_transforms_.end() ? std::string{} : it->second.transform.source();
+}
+
+void TransformRegistry::begin_registration_capture(std::vector<std::string>* names)
+{
+    std::lock_guard lock(mutex_);
+    registration_capture_ = names;
+}
+
+void TransformRegistry::end_registration_capture()
+{
+    std::lock_guard lock(mutex_);
+    registration_capture_ = nullptr;
 }
 
 bool TransformRegistry::get_transform(const std::string& name, DataTransform& out) const

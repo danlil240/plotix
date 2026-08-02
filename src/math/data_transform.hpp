@@ -69,6 +69,10 @@ class DataTransform
     // Construct a custom X-Y transform (can change both x and y, and length)
     DataTransform(const std::string& name, CustomXYFunc func);
 
+    // Construct a persisted custom step whose implementation is not currently registered.
+    static DataTransform unavailable_custom(const std::string& name,
+                                            const std::string& source = {});
+
     // Apply this transform to Y data only (X passes through unchanged).
     // Returns transformed Y values. Output may be shorter than input
     // for transforms like Derivative or Diff.
@@ -86,6 +90,9 @@ class DataTransform
     const std::string&     name() const { return name_; }
     const TransformParams& params() const { return params_; }
     TransformParams&       params_mut() { return params_; }
+    bool                   available() const { return available_; }
+    const std::string&     source() const { return source_; }
+    void                   set_source(std::string source) { source_ = std::move(source); }
 
     // Whether this transform can be applied per-element (vs needing full array)
     bool is_elementwise() const;
@@ -102,6 +109,8 @@ class DataTransform
     TransformParams params_;
     CustomFunc      custom_func_;
     CustomXYFunc    custom_xy_func_;
+    bool            available_ = true;
+    std::string     source_;
 
     // Built-in transform implementations
     void apply_identity(std::span<const float> x_in,
@@ -249,6 +258,14 @@ class TransformRegistry
     // Remove a custom transform by name.
     bool unregister_transform(const std::string& name);
 
+    // Attach/query the provider identity used for persistence and diagnostics.
+    bool        set_transform_source(const std::string& name, const std::string& source);
+    std::string transform_source(const std::string& name) const;
+
+    // Record all names registered during one plugin initialization transaction.
+    void begin_registration_capture(std::vector<std::string>* names);
+    void end_registration_capture();
+
     // Get a registered custom transform by name
     bool get_transform(const std::string& name, DataTransform& out) const;
 
@@ -280,6 +297,7 @@ class TransformRegistry
     mutable std::mutex                                 mutex_;
     std::unordered_map<std::string, CustomEntry>       custom_transforms_;
     std::unordered_map<std::string, TransformPipeline> saved_pipelines_;
+    std::vector<std::string>*                          registration_capture_ = nullptr;
 
     void register_builtins();
 };

@@ -164,6 +164,20 @@ bool WorkspaceAutosave::has_autosave() const
     return std::filesystem::exists(autosave_path_);
 }
 
+bool WorkspaceAutosave::clear_autosave()
+{
+    if (autosave_path_.empty())
+        return true;
+    std::error_code ec;
+    std::filesystem::remove(autosave_path_, ec);
+    if (ec)
+    {
+        SPECTRA_LOG_WARN("workspace", "Could not clear autosave: {}", ec.message());
+        return false;
+    }
+    return !std::filesystem::exists(autosave_path_);
+}
+
 bool WorkspaceAutosave::autosave_is_newer_than(const std::string& reference_path) const
 {
     if (!has_autosave())

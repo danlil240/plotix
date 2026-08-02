@@ -18,10 +18,26 @@ SplitPane::PaneId SplitPane::next_id()
     return s_next_pane_id.fetch_add(1, std::memory_order_relaxed);
 }
 
-SplitPane::SplitPane(FigureId figure_id)
-    : id_(next_id()), figure_index_(figure_id) 
+SplitPane::SplitPane(FigureId figure_id) : id_(next_id()), figure_index_(figure_id)
 {
     figure_indices_.push_back(figure_id);
+}
+
+void SplitPane::set_figure_index(FigureId idx)
+{
+    figure_index_ = idx;
+    if (!is_leaf())
+        return;
+    if (figure_indices_.empty())
+    {
+        figure_indices_.push_back(idx);
+        active_local_ = 0;
+    }
+    else
+    {
+        active_local_                  = std::min(active_local_, figure_indices_.size() - 1);
+        figure_indices_[active_local_] = idx;
+    }
 }
 
 void SplitPane::set_active_local_index(size_t local_idx)
@@ -66,6 +82,23 @@ void SplitPane::remove_figure(FigureId fig_idx)
         active_local_--;
     }
     figure_index_ = figure_indices_[active_local_];
+}
+
+bool SplitPane::move_figure(FigureId fig_idx, size_t target_index)
+{
+    auto it = std::find(figure_indices_.begin(), figure_indices_.end(), fig_idx);
+    if (it == figure_indices_.end() || target_index >= figure_indices_.size())
+        return false;
+    const size_t source_index = static_cast<size_t>(it - figure_indices_.begin());
+    if (source_index == target_index)
+        return false;
+    figure_indices_.erase(it);
+    figure_indices_.insert(figure_indices_.begin() + static_cast<std::ptrdiff_t>(target_index),
+                           fig_idx);
+    const auto active = std::find(figure_indices_.begin(), figure_indices_.end(), figure_index_);
+    active_local_ =
+        active == figure_indices_.end() ? 0 : static_cast<size_t>(active - figure_indices_.begin());
+    return true;
 }
 
 bool SplitPane::has_figure(FigureId fig_idx) const
@@ -404,6 +437,15 @@ std::string SplitPane::serialize() const
     if (is_leaf())
     {
         ss << ",\"figure\":" << figure_index_;
+        ss << ",\"figures\":[";
+        for (size_t i = 0; i < figure_indices_.size(); ++i)
+        {
+            if (i > 0)
+                ss << ',';
+            ss << figure_indices_[i];
+        }
+        ss << "]";
+        ss << ",\"active_local\":" << active_local_;
     }
     else
     {
@@ -463,6 +505,13 @@ std::unique_ptr<SplitPane> SplitPane::deserialize(const std::string& data)
             }
             return "";
         }
+        if (data[pos] == '[')
+        {
+            auto end = data.find(']', pos + 1);
+            if (end == std::string::npos)
+                return "";
+            return data.substr(pos, end - pos + 1);
+        }
 
         // Number or bool
         auto end = data.find_first_of(",}", pos);
@@ -477,11 +526,53 @@ std::unique_ptr<SplitPane> SplitPane::deserialize(const std::string& data)
     {
         FigureId    fig_idx = 0;
         std::string fig_str = find_value("figure");
-        if (!fig_str.empty())
+        try
         {
-            fig_idx = static_cast<FigureId>(std::stoul(fig_str));
+            if (!fig_str.empty())
+                fig_idx = static_cast<FigureId>(std::stoull(fig_str));
         }
-        return std::make_unique<SplitPane>(fig_idx);
+        catch (...)
+        {
+            return nullptr;
+        }
+
+        auto              pane    = std::make_unique<SplitPane>(fig_idx);
+        const std::string figures = find_value("figures");
+        if (figures.size() >= 2)
+        {
+            pane->figure_indices_.clear();
+            std::istringstream values(figures.substr(1, figures.size() - 2));
+            std::string        token;
+            try
+            {
+                while (std::getline(values, token, ','))
+                {
+                    if (!token.empty())
+                        pane->figure_indices_.push_back(static_cast<FigureId>(std::stoull(token)));
+                }
+            }
+            catch (...)
+            {
+                return nullptr;
+            }
+            if (pane->figure_indices_.empty())
+                pane->figure_indices_.push_back(fig_idx);
+        }
+
+        size_t            active_local = 0;
+        const std::string active_str   = find_value("active_local");
+        try
+        {
+            if (!active_str.empty())
+                active_local = static_cast<size_t>(std::stoull(active_str));
+        }
+        catch (...)
+        {
+            return nullptr;
+        }
+        pane->active_local_ = std::min(active_local, pane->figure_indices_.size() - 1);
+        pane->figure_index_ = pane->figure_indices_[pane->active_local_];
+        return pane;
     }
 
     // Internal node
@@ -490,9 +581,14 @@ std::unique_ptr<SplitPane> SplitPane::deserialize(const std::string& data)
 
     float       ratio     = 0.5f;
     std::string ratio_str = find_value("ratio");
-    if (!ratio_str.empty())
+    try
     {
-        ratio = std::stof(ratio_str);
+        if (!ratio_str.empty())
+            ratio = std::stof(ratio_str);
+    }
+    catch (...)
+    {
+        return nullptr;
     }
 
     std::string first_str  = find_value("first");
@@ -517,6 +613,30 @@ std::unique_ptr<SplitPane> SplitPane::deserialize(const std::string& data)
     node->second_ = std::move(second_child);
 
     return node;
+}
+
+void SplitPane::remap_figure_ids(const std::function<FigureId(FigureId)>& remap)
+{
+    if (is_leaf())
+    {
+        for (auto& id : figure_indices_)
+            id = remap(id);
+        if (!figure_indices_.empty())
+        {
+            active_local_ = std::min(active_local_, figure_indices_.size() - 1);
+            figure_index_ = figure_indices_[active_local_];
+        }
+        else
+        {
+            figure_index_ = INVALID_FIGURE_ID;
+            active_local_ = 0;
+        }
+        return;
+    }
+    if (first_)
+        first_->remap_figure_ids(remap);
+    if (second_)
+        second_->remap_figure_ids(remap);
 }
 
 // ─── SplitViewManager ────────────────────────────────────────────────────────
@@ -780,8 +900,8 @@ void SplitViewManager::update_splitter_drag(float mouse_pos)
     float min_ratio = SplitPane::MIN_PANE_SIZE / total_size;
     float max_ratio = 1.0f - min_ratio;
     new_ratio       = std::clamp(new_ratio,
-                                 std::max(SplitPane::MIN_RATIO, min_ratio),
-                                 std::min(SplitPane::MAX_RATIO, max_ratio));
+                           std::max(SplitPane::MIN_RATIO, min_ratio),
+                           std::min(SplitPane::MAX_RATIO, max_ratio));
 
     dragging_splitter_->set_split_ratio(new_ratio);
     recompute_layout();
@@ -814,16 +934,24 @@ bool SplitViewManager::deserialize(const std::string& data)
         return false;
 
     // Find active figure index
-    auto active_pos = data.find("\"active\":");
-    if (active_pos != std::string::npos)
+    FigureId new_active = active_figure_index_;
+    auto     active_pos = data.find("\"active\":");
+    try
     {
-        active_pos += 9;
-        auto end = data.find_first_of(",}", active_pos);
-        if (end != std::string::npos)
+        if (active_pos != std::string::npos)
         {
-            active_figure_index_ =
-                static_cast<size_t>(std::stoul(data.substr(active_pos, end - active_pos)));
+            active_pos += 9;
+            auto end = data.find_first_of(",}", active_pos);
+            if (end != std::string::npos)
+            {
+                new_active =
+                    static_cast<FigureId>(std::stoull(data.substr(active_pos, end - active_pos)));
+            }
         }
+    }
+    catch (...)
+    {
+        return false;
     }
 
     // Find root object
@@ -847,7 +975,8 @@ bool SplitViewManager::deserialize(const std::string& data)
                     auto new_root  = SplitPane::deserialize(root_data);
                     if (new_root)
                     {
-                        root_ = std::move(new_root);
+                        root_                = std::move(new_root);
+                        active_figure_index_ = new_active;
                         recompute_layout();
                         return true;
                     }
@@ -858,6 +987,14 @@ bool SplitViewManager::deserialize(const std::string& data)
     }
 
     return false;
+}
+
+void SplitViewManager::remap_figure_ids(const std::function<FigureId(FigureId)>& remap)
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (root_)
+        root_->remap_figure_ids(remap);
+    active_figure_index_ = remap(active_figure_index_);
 }
 
 void SplitViewManager::recompute_layout()

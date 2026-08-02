@@ -10,6 +10,11 @@
 #include "qt_frontend_services.hpp"
 #include "qt_main_window.hpp"
 #include "qt_runtime.hpp"
+#include "qt_series_commands.hpp"
+#include "panels/function_plot_dialog.hpp"
+#include "panels/shortcut_widget.hpp"
+#include "panels/timeline_property_binding.hpp"
+#include "panels/transform_widget.hpp"
 #include "qt_workspace_bridge.hpp"
 #include "qt_automation_adapter.hpp"
 #include "qt_ipc_client.hpp"
@@ -23,9 +28,12 @@
 #include "ui/plot/plot_annotations.hpp"
 #include "ui/data/clipboard_export.hpp"
 #include "ui/data/html_table_export.hpp"
+#include "ui/data/axis_link.hpp"
 #include "ui/accessibility/sonification.hpp"
 #include "ui/animation/timeline_editor.hpp"
+#include "ui/animation/keyframe_interpolator.hpp"
 #include "ui/theme/theme.hpp"
+#include "ui/settings/settings_store.hpp"
 
 #include "ipc/figure_snapshot.hpp"
 
@@ -34,24 +42,26 @@
 #include <QObject>
 #include <QCoreApplication>
 #include <QBuffer>
-#include <QFileDialog>
 #include <QMessageBox>
 #include <QPixmap>
 #include <QScreen>
 #include <QTimer>
 #include <QClipboard>
 #include <QApplication>
-#include <QInputDialog>
 
 #include "app/application_services.hpp"
 #include "render/vulkan/vk_backend.hpp"
 #include "ui/commands/command_registry.hpp"
 #include "ui/commands/shortcut_manager.hpp"
+#include "ui/commands/series_clipboard.hpp"
 #include "ui/commands/undo_manager.hpp"
 #include "ui/input/input.hpp"
 
+#include <spectra/export.hpp>
+
 #include <spectra/figure.hpp>
 #include <spectra/figure_registry.hpp>
+#include <spectra/axes3d.hpp>
 #include <spectra/logger.hpp>
 #include <spectra/axes.hpp>
 #include <spectra/series.hpp>
@@ -61,6 +71,7 @@
 #include <functional>
 #include <sstream>
 #include <thread>
+#include <unordered_set>
 
 #ifdef __unix__
     #include <unistd.h>
@@ -103,7 +114,9 @@ QRect widget_screen_rect(const QWidget* widget)
 QtCaptureResult capture_screen_surface(QWidget*           root,
                                        QWindow*           canvas,
                                        QtCaptureScope     scope,
-                                       const std::string& path)
+                                       const std::string& path,
+                                       uint32_t           target_width  = 0,
+                                       uint32_t           target_height = 0)
 {
     QRect    bounds;
     QScreen* screen = nullptr;
@@ -137,10 +150,19 @@ QtCaptureResult capture_screen_surface(QWidget*           root,
     // QWindow-backed Vulkan canvases are native children and are absent from
     // QWidget::grab(). Capture the composed screen pixels instead so the image
     // matches what the user sees, including owned popup/dialog surfaces.
-    const QPixmap pixmap =
-        screen->grabWindow(0, bounds.x(), bounds.y(), bounds.width(), bounds.height());
+    QPixmap pixmap = screen->grabWindow(0, bounds.x(), bounds.y(), bounds.width(), bounds.height());
     if (pixmap.isNull())
         return {};
+
+    if (target_width > 0 && target_height > 0
+        && (pixmap.width() != static_cast<int>(target_width)
+            || pixmap.height() != static_cast<int>(target_height)))
+    {
+        pixmap = pixmap.scaled(static_cast<int>(target_width),
+                               static_cast<int>(target_height),
+                               Qt::IgnoreAspectRatio,
+                               Qt::SmoothTransformation);
+    }
 
     QByteArray png;
     QBuffer    buffer(&png);
@@ -195,13 +217,14 @@ bool QtApplicationController::init()
                     *runtime_->theme_manager(),
                     60.0f);
 
-    timeline_editor_ = std::make_unique<TimelineEditor>();
-
+    series_clipboard_  = std::make_unique<SeriesClipboard>();
+    axis_link_manager_ = std::make_unique<AxisLinkManager>();
     register_qt_commands();
 
     // 4. Create QtActionBridge from the shared CommandRegistry
     action_bridge_ = std::make_unique<QtActionBridge>(services_->commands());
     action_bridge_->rebuild();
+    action_bridge_->sync_shortcuts(services_->shortcuts());
 
     // 5. Create frontend service implementations and inject them
     dialog_service_    = std::make_unique<QtDialogService>();
@@ -209,6 +232,8 @@ bool QtApplicationController::init()
     redraw_request_    = std::make_unique<QtRedrawRequest>(
         [this]()
         {
+            if (autosave_)
+                autosave_->mark_dirty();
             // Request redraw on all canvases in the main window
             if (main_window_)
             {
@@ -235,6 +260,8 @@ bool QtApplicationController::init()
             FigureId id = figure_registry().register_figure(std::move(fig));
             if (main_window_)
                 main_window_->add_figure_tab(id);
+            if (autosave_)
+                autosave_->mark_dirty();
             return id;
         });
     window_service_->set_close_window(
@@ -259,10 +286,13 @@ bool QtApplicationController::init()
     services_->set_window_service(window_service_.get());
 
     // 6. Create the main window registry (for multi-window support)
-    window_registry_ = std::make_unique<MainWindowRegistry>(runtime_.get(),
+    auto timeline_resolver = [this](FigureId id) { return timeline_for(id); };
+    window_registry_       = std::make_unique<MainWindowRegistry>(runtime_.get(),
                                                             &figure_registry(),
                                                             action_bridge_.get(),
-                                                            services_.get());
+                                                            services_.get(),
+                                                            axis_link_manager_.get(),
+                                                            timeline_resolver);
 
     // 6b. Create the workspace bridge for layout save/restore
     workspace_bridge_ = std::make_unique<QtWorkspaceBridge>(window_registry_.get());
@@ -286,11 +316,34 @@ bool QtApplicationController::init()
     automation_adapter_->set_switch_figure(
         [this](FigureId id) -> bool
         {
-            if (!main_window_)
+            if (!main_window_ || !figure_registry().get(id))
                 return false;
-            if (!main_window_->canvas_for(id))
-                return main_window_->add_figure_tab(id) >= 0;
-            return main_window_->central_view()->activate_figure(id);
+            if (window_registry_)
+            {
+                const HostId host_id = window_registry_->find_host_for_figure(id);
+                if (auto* host = window_registry_->native_host(host_id))
+                {
+                    if (auto* window = host->main_window())
+                    {
+                        window->show();
+                        window->raise();
+                        window->activateWindow();
+                        return window->central_view()->activate_figure(id);
+                    }
+                }
+            }
+            return main_window_->add_figure_tab(id) >= 0;
+        });
+    automation_adapter_->set_close_figure(
+        [this](FigureId id) { return window_registry_ && window_registry_->close_document(id); });
+    automation_adapter_->set_detach_figure(
+        [this](FigureId id)
+        {
+            if (!window_registry_)
+                return false;
+            const HostId source = window_registry_->find_host_for_figure(id);
+            return source != INVALID_HOST_ID
+                   && window_registry_->detach_document(id, source) != INVALID_HOST_ID;
         });
     automation_adapter_->set_get_state(
         [this]() -> std::string
@@ -381,69 +434,34 @@ bool QtApplicationController::init()
     }
 
     // 6d. Create the workspace autosave manager
-    autosave_ = std::make_unique<WorkspaceAutosave>();
-    autosave_->set_serialize_fn(
-        [this]() -> std::string
-        {
-            WorkspaceData data;
-            data.version = WorkspaceData::FORMAT_VERSION;
-
-            // Capture figure and series data from the registry
-            auto&                reg = figure_registry();
-            auto                 ids = reg.all_ids();
-            std::vector<Figure*> figures;
-            figures.reserve(ids.size());
-            for (auto id : ids)
-            {
-                Figure* f = reg.get(id);
-                if (f)
-                    figures.push_back(f);
-            }
-
-            // Determine active figure index
-            size_t active_index = 0;
-            if (main_window_)
-            {
-                FigureId active_id = main_window_->active_figure_id();
-                for (size_t i = 0; i < ids.size(); ++i)
-                {
-                    if (ids[i] == active_id)
-                    {
-                        active_index = i;
-                        break;
-                    }
-                }
-            }
-
-            // Get theme name
-            std::string theme_name = "dark";
-            if (services_)
-                theme_name = services_->theme().current_theme_name();
-
-            // Get panel states from main window
-            bool  inspector_visible = false;
-            float inspector_width   = 300.0f;
-            bool  nav_rail_expanded = true;
-            if (main_window_)
-            {
-                inspector_visible = main_window_->is_inspector_open();
-                nav_rail_expanded = !main_window_->is_nav_rail_compact();
-            }
-
-            data = Workspace::capture(figures,
-                                      active_index,
-                                      theme_name,
-                                      inspector_visible,
-                                      inspector_width,
-                                      nav_rail_expanded);
-
-            // Also capture desktop layout (docking state)
-            if (workspace_bridge_)
-                workspace_bridge_->capture_layout(data);
-
-            return Workspace::serialize_json(data);
-        });
+    autosave_                    = std::make_unique<WorkspaceAutosave>();
+    auto apply_autosave_duration = [this](const char* name, bool debounce)
+    {
+        const char* value = std::getenv(name);
+        if (!value || !*value)
+            return;
+        char*           end = nullptr;
+        const long long ms  = std::strtoll(value, &end, 10);
+        if (!end || *end != '\0' || ms < 0)
+            return;
+        const auto duration = std::chrono::milliseconds(ms);
+        if (debounce)
+            autosave_->set_debounce(duration);
+        else
+            autosave_->set_interval(duration);
+    };
+    // Deterministic launched-test seam; production defaults remain 60 s / 5 s.
+    apply_autosave_duration("SPECTRA_AUTOSAVE_INTERVAL_MS", false);
+    apply_autosave_duration("SPECTRA_AUTOSAVE_DEBOUNCE_MS", true);
+    autosave_->set_serialize_fn([this]() -> std::string
+                                { return Workspace::serialize_json(capture_workspace_data()); });
     window_registry_->set_document_changed_callback(
+        [this]()
+        {
+            if (autosave_)
+                autosave_->mark_dirty();
+        });
+    axis_link_manager_->set_on_change(
         [this]()
         {
             if (autosave_)
@@ -454,7 +472,9 @@ bool QtApplicationController::init()
     main_window_ = std::make_unique<SpectraMainWindow>(runtime_.get(),
                                                        &figure_registry(),
                                                        action_bridge_.get(),
-                                                       services_.get());
+                                                       services_.get(),
+                                                       timeline_resolver);
+    main_window_->set_axis_link_manager(axis_link_manager_.get());
     automation_adapter_->set_input_target(
         main_window_.get(),
         [this]() -> QWindow*
@@ -504,10 +524,20 @@ void QtApplicationController::register_qt_commands()
 
     auto active_figure = [this]() -> Figure*
     {
-        if (!main_window_)
+        auto* window = command_target_window();
+        if (!window)
             return nullptr;
-        const FigureId id = main_window_->active_figure_id();
+        const FigureId id = window->active_figure_id();
         return id == INVALID_FIGURE_ID ? nullptr : figure_registry().get(id);
+    };
+
+    auto active_canvas = [this]() -> SpectraVulkanWindow*
+    {
+        auto* window = command_target_window();
+        if (!window)
+            return nullptr;
+        FigureCanvasWidget* canvas = window->canvas_for(window->active_figure_id());
+        return canvas ? canvas->vulkanWindow() : nullptr;
     };
 
     auto request_redraw = [this]()
@@ -546,6 +576,8 @@ void QtApplicationController::register_qt_commands()
             const FigureId id = figure_registry().register_figure(std::move(figure));
             if (main_window_)
                 main_window_->add_figure_tab(id);
+            if (autosave_)
+                autosave_->mark_dirty();
         });
     add("figure.close",
         "Close Figure",
@@ -559,11 +591,24 @@ void QtApplicationController::register_qt_commands()
             if (id == INVALID_FIGURE_ID)
                 return;
             if (window_registry_)
-                window_registry_->close_document(id);
+            {
+                if (window_registry_->close_document(id))
+                    timelines_.erase(id);
+            }
             else
             {
                 main_window_->close_figure_tab(id);
+                if (Figure* figure = figure_registry().get(id); axis_link_manager_ && figure)
+                {
+                    for (auto& axes : figure->axes_mut())
+                        if (axes)
+                            axis_link_manager_->remove_from_all(axes.get());
+                    for (auto& axes : figure->all_axes_mut())
+                        if (auto* axes3d = dynamic_cast<Axes3D*>(axes.get()))
+                            axis_link_manager_->remove_from_all_3d(axes3d);
+                }
                 figure_registry().unregister_figure(id);
+                timelines_.erase(id);
             }
         });
 
@@ -624,17 +669,23 @@ void QtApplicationController::register_qt_commands()
         request_redraw();
     };
     add("view.reset", "Reset View", "R", "View", reset_view);
-    add("view.autofit", "Auto-Fit Active Figure", "Shift+A", "View", reset_view);
-    add("view.fullscreen",
-        "Toggle Fullscreen",
-        "F11",
+    add("view.autofit",
+        "Auto-Fit Active Axes",
+        "A",
         "View",
         [this]()
         {
-            if (!main_window_)
-                return;
-            main_window_->isFullScreen() ? main_window_->showNormal()
-                                         : main_window_->showFullScreen();
+            if (auto* window = command_target_window())
+                window->autofit_active_axes();
+        });
+    add("view.fullscreen",
+        "Toggle Fullscreen Canvas",
+        "F",
+        "View",
+        [this]()
+        {
+            if (auto* window = command_target_window())
+                window->toggle_canvas_fullscreen();
         });
     add("view.split_right",
         "Split Right",
@@ -699,37 +750,42 @@ void QtApplicationController::register_qt_commands()
 
     auto invoke_window_slot = [this](const char* slot)
     {
-        if (main_window_)
-            QMetaObject::invokeMethod(main_window_.get(), slot, Qt::DirectConnection);
+        if (auto* window = command_target_window())
+            QMetaObject::invokeMethod(window, slot, Qt::DirectConnection);
     };
     add("panel.toggle_inspector",
-        "Toggle Inspector",
-        "I",
-        "View",
+        "Toggle Inspector Panel",
+        "",
+        "Panel",
         [this]()
         {
-            if (main_window_)
-                main_window_->toggle_inspector();
+            if (auto* window = command_target_window())
+                window->toggle_inspector();
         });
     add("panel.toggle_topics",
-        "Toggle Topics",
+        "Toggle Topics Panel",
         "Ctrl+Shift+T",
-        "View",
+        "Panel",
         [invoke_window_slot]() { invoke_window_slot("on_toggle_topics"); });
     add("panel.open_settings",
         "Settings",
-        "Ctrl+,",
-        "View",
+        "",
+        "Panel",
         [invoke_window_slot]() { invoke_window_slot("on_toggle_settings"); });
     add("panel.toggle_timeline",
-        "Toggle Timeline",
+        "Toggle Timeline Panel",
         "T",
-        "View",
+        "Panel",
         [invoke_window_slot]() { invoke_window_slot("on_toggle_timeline"); });
+    add("panel.toggle_curve_editor",
+        "Toggle Curve Editor",
+        "",
+        "Panel",
+        [invoke_window_slot]() { invoke_window_slot("on_toggle_curve_editor"); });
     add("panel.toggle_data_editor",
         "Toggle Data Editor",
-        "D",
-        "View",
+        "",
+        "Panel",
         [invoke_window_slot]() { invoke_window_slot("on_toggle_data_editor"); });
     add("file.export",
         "Export Figure",
@@ -742,6 +798,11 @@ void QtApplicationController::register_qt_commands()
     auto apply_theme = [this](const std::string& name)
     {
         services_->theme().set_theme(name);
+        auto& settings                    = services_->settings();
+        settings.data_mut().default_theme = name;
+        settings.notify_change();
+        if (main_window_)
+            main_window_->refresh_theme();
         if (redraw_request_)
             redraw_request_->request_redraw();
     };
@@ -770,6 +831,11 @@ void QtApplicationController::register_qt_commands()
             std::string current = tm.current_theme_name();
             std::string next    = (current == "dark") ? "light" : "dark";
             tm.set_theme(next);
+            auto& settings                    = services_->settings();
+            settings.data_mut().default_theme = next;
+            settings.notify_change();
+            if (main_window_)
+                main_window_->refresh_theme();
             if (redraw_request_)
                 redraw_request_->request_redraw();
         });
@@ -921,11 +987,10 @@ void QtApplicationController::register_qt_commands()
         "Toggle Crosshair",
         "C",
         "View",
-        [request_redraw]()
+        [this]()
         {
-            // Crosshair requires DataInteraction (ImGui-specific).
-            // TODO: Wire to Qt canvas overlay when available.
-            (void)request_redraw;
+            if (main_window_)
+                main_window_->toggle_active_crosshair();
         });
 
     add("view.toggle_legend",
@@ -974,8 +1039,8 @@ void QtApplicationController::register_qt_commands()
         "Animation",
         [this]()
         {
-            if (timeline_editor_)
-                timeline_editor_->toggle_play();
+            if (auto* timeline = active_timeline())
+                timeline->toggle_play();
         });
     add("anim.step_back",
         "Step Frame Back",
@@ -983,8 +1048,8 @@ void QtApplicationController::register_qt_commands()
         "Animation",
         [this]()
         {
-            if (timeline_editor_)
-                timeline_editor_->step_backward();
+            if (auto* timeline = active_timeline())
+                timeline->step_backward();
         });
     add("anim.step_forward",
         "Step Frame Forward",
@@ -992,8 +1057,8 @@ void QtApplicationController::register_qt_commands()
         "Animation",
         [this]()
         {
-            if (timeline_editor_)
-                timeline_editor_->step_forward();
+            if (auto* timeline = active_timeline())
+                timeline->step_forward();
         });
     add("anim.stop",
         "Stop Playback",
@@ -1001,8 +1066,8 @@ void QtApplicationController::register_qt_commands()
         "Animation",
         [this]()
         {
-            if (timeline_editor_)
-                timeline_editor_->stop();
+            if (auto* timeline = active_timeline())
+                timeline->stop();
         });
     add("anim.go_to_start",
         "Go to Start",
@@ -1010,8 +1075,8 @@ void QtApplicationController::register_qt_commands()
         "Animation",
         [this]()
         {
-            if (timeline_editor_)
-                timeline_editor_->set_playhead(0.0f);
+            if (auto* timeline = active_timeline())
+                timeline->set_playhead(0.0f);
         });
     add("anim.go_to_end",
         "Go to End",
@@ -1019,8 +1084,8 @@ void QtApplicationController::register_qt_commands()
         "Animation",
         [this]()
         {
-            if (timeline_editor_)
-                timeline_editor_->set_playhead(timeline_editor_->duration());
+            if (auto* timeline = active_timeline())
+                timeline->set_playhead(timeline->duration());
         });
 
     // ── App commands ──────────────────────────────────────────────────────
@@ -1037,9 +1102,10 @@ void QtApplicationController::register_qt_commands()
         "Cancel / Close",
         "Escape",
         "App",
-        []()
+        [this]()
         {
-            // Command palette handles its own escape; this is a fallback.
+            if (main_window_)
+                main_window_->cancel_transient_ui();
         });
     add("app.new_window",
         "New Window",
@@ -1085,15 +1151,19 @@ void QtApplicationController::register_qt_commands()
         [this, active_figure]()
         {
             Figure* fig = active_figure();
-            if (!fig)
+            if (!fig || !dialog_service_)
                 return;
-            QString path = QFileDialog::getSaveFileName(main_window_.get(),
-                                                        "Export PNG",
-                                                        "spectra_export.png",
-                                                        "PNG Image (*.png)");
-            if (path.isEmpty())
+            auto path = dialog_service_->file_dialog(DialogService::FileType::Save,
+                                                     "Export PNG",
+                                                     "spectra_export.png",
+                                                     {{"PNG Image", "*.png"}});
+            if (!path)
                 return;
-            fig->save_png(path.toStdString());
+            auto* window = command_target_window();
+            auto* canvas = canvas_for_figure(figure_registry().find_id(fig));
+            (void)window;
+            if (!canvas || !canvas->savePng(*path))
+                SPECTRA_LOG_ERROR("qt_export", "Failed to export PNG: {}", *path);
         });
 
     add("file.export_svg",
@@ -1103,72 +1173,43 @@ void QtApplicationController::register_qt_commands()
         [this, active_figure]()
         {
             Figure* fig = active_figure();
-            if (!fig)
+            if (!fig || !dialog_service_)
                 return;
-            QString path = QFileDialog::getSaveFileName(main_window_.get(),
-                                                        "Export SVG",
-                                                        "spectra_export.svg",
-                                                        "SVG Image (*.svg)");
-            if (path.isEmpty())
+            auto path = dialog_service_->file_dialog(DialogService::FileType::Save,
+                                                     "Export SVG",
+                                                     "spectra_export.svg",
+                                                     {{"SVG Image", "*.svg"}});
+            if (!path)
                 return;
-            fig->save_svg(path.toStdString());
+            if (!SvgExporter::write_svg(*path, *fig))
+                SPECTRA_LOG_ERROR("qt_export", "Failed to export SVG: {}", *path);
         });
 
     add("file.copy_to_clipboard",
         "Copy Figure to Clipboard",
         "Ctrl+Shift+C",
         "File",
-        [active_figure]()
+        [this, active_figure]()
         {
             Figure* fig = active_figure();
-            if (!fig)
+            if (!fig || !clipboard_service_)
                 return;
-            fig->copy_to_clipboard();
+            auto* window = command_target_window();
+            auto* canvas = canvas_for_figure(figure_registry().find_id(fig));
+            (void)window;
+            std::vector<uint8_t> pixels;
+            uint32_t             width  = 0;
+            uint32_t             height = 0;
+            if (canvas && canvas->captureRgba(pixels, width, height))
+                clipboard_service_->copy_image(
+                    ImageExporter::write_png_to_memory(pixels.data(), width, height));
         });
 
     add("file.save_workspace",
         "Save Workspace",
         "",
         "File",
-        [this]()
-        {
-            if (!workspace_bridge_)
-                return;
-            WorkspaceData data;
-            data.version             = WorkspaceData::FORMAT_VERSION;
-            auto&                reg = figure_registry();
-            auto                 ids = reg.all_ids();
-            std::vector<Figure*> figures;
-            for (auto id : ids)
-            {
-                Figure* f = reg.get(id);
-                if (f)
-                    figures.push_back(f);
-            }
-            size_t active_index = 0;
-            if (main_window_)
-            {
-                FigureId active_id = main_window_->active_figure_id();
-                for (size_t i = 0; i < ids.size(); ++i)
-                    if (ids[i] == active_id)
-                    {
-                        active_index = i;
-                        break;
-                    }
-            }
-            std::string theme_name        = services_->theme().current_theme_name();
-            bool        inspector_visible = main_window_ && main_window_->is_inspector_open();
-            float       inspector_width   = 300.0f;
-            bool        nav_rail_expanded = main_window_ && !main_window_->is_nav_rail_compact();
-            data                          = Workspace::capture(figures,
-                                      active_index,
-                                      theme_name,
-                                      inspector_visible,
-                                      inspector_width,
-                                      nav_rail_expanded);
-            workspace_bridge_->capture_layout(data);
-            Workspace::save(Workspace::default_path(), data);
-        });
+        [this]() { Workspace::save(Workspace::default_path(), capture_workspace_data()); });
 
     add("file.load_workspace",
         "Load Workspace",
@@ -1179,46 +1220,55 @@ void QtApplicationController::register_qt_commands()
             WorkspaceData data;
             if (!Workspace::load(Workspace::default_path(), data))
                 return;
-            auto&                reg = figure_registry();
-            auto                 ids = reg.all_ids();
-            std::vector<Figure*> figures;
-            for (auto id : ids)
-            {
-                Figure* f = reg.get(id);
-                if (f)
-                    figures.push_back(f);
-            }
-            Workspace::apply(data, figures);
-            if (workspace_bridge_)
-                workspace_bridge_->apply_layout(data);
-            if (!data.theme_name.empty())
-                services_->theme().set_theme(data.theme_name);
-            if (redraw_request_)
-                redraw_request_->request_redraw();
+            restore_workspace_data(data);
         });
 
     add("file.save_figure",
         "Save Figure",
         "",
         "File",
-        [active_figure]()
+        [this, active_figure]()
         {
             Figure* fig = active_figure();
-            if (!fig)
+            if (!fig || !dialog_service_)
                 return;
-            FigureSerializer::save_with_dialog(*fig);
+            auto path = dialog_service_->file_dialog(DialogService::FileType::Save,
+                                                     "Save Figure",
+                                                     "figure.spectra",
+                                                     {{"Spectra Figure", "*.spectra"}});
+            if (!path)
+                return;
+            OverlaySnapshot overlay;
+            const FigureId  id          = figure_registry().find_id(fig);
+            auto*           canvas      = canvas_for_figure(id);
+            const bool      has_overlay = canvas && canvas->captureOverlaySnapshot(overlay);
+            if (!FigureSerializer::save(*path, *fig, has_overlay ? &overlay : nullptr))
+                SPECTRA_LOG_ERROR("qt_figure", "Failed to save figure: {}", *path);
         });
 
     add("file.load_figure",
         "Load Figure",
         "",
         "File",
-        [active_figure, request_redraw]()
+        [this, active_figure, request_redraw]()
         {
             Figure* fig = active_figure();
-            if (!fig)
+            if (!fig || !dialog_service_)
                 return;
-            FigureSerializer::load_with_dialog(*fig);
+            auto path = dialog_service_->file_dialog(DialogService::FileType::Open,
+                                                     "Open Figure",
+                                                     "",
+                                                     {{"Spectra Figure", "*.spectra"}});
+            if (!path)
+                return;
+            OverlaySnapshot overlay;
+            if (!FigureSerializer::load(*path, *fig, &overlay))
+            {
+                SPECTRA_LOG_ERROR("qt_figure", "Failed to load figure: {}", *path);
+                return;
+            }
+            if (auto* canvas = canvas_for_figure(figure_registry().find_id(fig)))
+                canvas->restoreOverlaySnapshot(overlay);
             for (auto& ax : fig->all_axes_mut())
                 if (ax)
                     for (auto& s : ax->series_mut())
@@ -1234,14 +1284,9 @@ void QtApplicationController::register_qt_commands()
         "Panel",
         [this]()
         {
-            if (main_window_)
-                main_window_->set_nav_rail_visible(!main_window_->is_nav_rail_visible());
+            if (auto* window = command_target_window())
+                window->set_nav_rail_visible(!window->is_nav_rail_visible());
         });
-    add("panel.toggle_curve_editor",
-        "Toggle Curve Editor",
-        "",
-        "Panel",
-        []() { /* TODO: Implement curve editor panel in Qt */ });
     add("panel.toggle_plugins",
         "Toggle Plugins Panel",
         "",
@@ -1282,19 +1327,16 @@ void QtApplicationController::register_qt_commands()
         [this, active_axes]()
         {
             Axes* ax = active_axes();
-            if (!ax)
+            if (!ax || !dialog_service_)
                 return;
-            bool   ok    = false;
-            double value = QInputDialog::getDouble(main_window_.get(),
-                                                   "Add Horizontal Line",
-                                                   "Y value:",
-                                                   0.0,
-                                                   -2147483647.0,
-                                                   2147483647.0,
-                                                   3,
-                                                   &ok);
-            if (ok)
-                ui::add_horizontal_reference_line(*ax, static_cast<float>(value));
+            auto value = dialog_service_->number_input("Add Horizontal Line",
+                                                       "Y value:",
+                                                       0.0,
+                                                       -2147483647.0,
+                                                       2147483647.0,
+                                                       3);
+            if (value)
+                ui::add_horizontal_reference_line(*ax, static_cast<float>(*value));
         });
     add("plot.vline",
         "Add Vertical Line...",
@@ -1303,25 +1345,37 @@ void QtApplicationController::register_qt_commands()
         [this, active_axes]()
         {
             Axes* ax = active_axes();
-            if (!ax)
+            if (!ax || !dialog_service_)
                 return;
-            bool   ok    = false;
-            double value = QInputDialog::getDouble(main_window_.get(),
-                                                   "Add Vertical Line",
-                                                   "X value:",
-                                                   0.0,
-                                                   -2147483647.0,
-                                                   2147483647.0,
-                                                   3,
-                                                   &ok);
-            if (ok)
-                ui::add_vertical_reference_line(*ax, static_cast<float>(value));
+            auto value = dialog_service_->number_input("Add Vertical Line",
+                                                       "X value:",
+                                                       0.0,
+                                                       -2147483647.0,
+                                                       2147483647.0,
+                                                       3);
+            if (value)
+                ui::add_vertical_reference_line(*ax, static_cast<float>(*value));
         });
     add("plot.function",
         "Plot Function...",
         "",
         "Plot",
-        []() { /* TODO: Implement function plot dialog in Qt */ });
+        [this]()
+        {
+            if (!main_window_)
+                return;
+            const FigureId id = main_window_->active_figure_id();
+            if (id == INVALID_FIGURE_ID)
+                return;
+            if (!function_plot_dialog_)
+            {
+                function_plot_dialog_ =
+                    std::make_unique<QtFunctionPlotDialog>(&figure_registry(),
+                                                           redraw_request_.get(),
+                                                           main_window_.get());
+            }
+            function_plot_dialog_->open_for_figure(id);
+        });
 
     // ── Data / Accessibility commands ─────────────────────────────────────
     add("data.copy_to_clipboard",
@@ -1395,32 +1449,140 @@ void QtApplicationController::register_qt_commands()
         "Cycle Series Selection",
         "Tab",
         "Series",
-        []() { /* TODO: Implement series selection in Qt canvas */ });
+        [active_canvas]()
+        {
+            if (auto* canvas = active_canvas())
+                canvas->cycleSeriesSelection();
+        });
     add("series.copy",
         "Copy Series",
         "Ctrl+C",
         "Series",
-        []() { /* TODO: Implement series clipboard in Qt */ });
+        [this, active_canvas]()
+        {
+            auto* canvas = active_canvas();
+            if (!canvas || !series_clipboard_)
+                return;
+            copy_selected_series(canvas->selectedSeries(), *series_clipboard_, false);
+        });
+
+    auto remove_selected = [this, active_canvas](bool cut)
+    {
+        auto* canvas = active_canvas();
+        if (!canvas)
+            return;
+        const auto selected = canvas->selectedSeries();
+        if (selected.empty())
+            return;
+
+        auto*          window         = command_target_window();
+        const FigureId figure_id      = window ? window->active_figure_id() : INVALID_FIGURE_ID;
+        auto           notify_removed = [this, figure_id](const Series* series)
+        {
+            if (auto* target_canvas = canvas_for_figure(figure_id))
+                target_canvas->notifySeriesRemoved(series);
+        };
+        auto notify_changed = [this, figure_id]()
+        {
+            if (redraw_request_)
+                redraw_request_->request_redraw(figure_id);
+        };
+        auto owner_is_alive = [this, figure_id](const AxesBase* owner)
+        {
+            const Figure* figure = figure_registry().get(figure_id);
+            if (!figure || !owner)
+                return false;
+            for (const auto& axes : figure->axes())
+                if (axes.get() == owner)
+                    return true;
+            for (const auto& axes : figure->all_axes())
+                if (axes.get() == owner)
+                    return true;
+            return false;
+        };
+        canvas->deselectSeries();
+        if (auto action = remove_selected_series(selected,
+                                                 series_clipboard_.get(),
+                                                 cut,
+                                                 std::move(notify_removed),
+                                                 std::move(notify_changed),
+                                                 std::move(owner_is_alive)))
+            services_->undo().push(std::move(*action));
+    };
+
     add("series.cut",
         "Cut Series",
         "Ctrl+X",
         "Series",
-        []() { /* TODO: Implement series clipboard in Qt */ });
+        [remove_selected]() { remove_selected(true); });
     add("series.paste",
         "Paste Series",
         "Ctrl+V",
         "Series",
-        []() { /* TODO: Implement series clipboard in Qt */ });
+        [this, active_figure, active_canvas]()
+        {
+            Figure* figure = active_figure();
+            auto*   canvas = active_canvas();
+            if (!figure || !canvas || !series_clipboard_ || !series_clipboard_->has_data())
+                return;
+
+            AxesBase* target = canvas->selectedSeriesAxes();
+            if (!target)
+            {
+                if (!figure->all_axes().empty())
+                    target = figure->all_axes_mut()[0].get();
+                else if (!figure->axes().empty())
+                    target = figure->axes_mut()[0].get();
+            }
+            if (!target)
+                return;
+
+            auto*          window         = command_target_window();
+            const FigureId figure_id      = window ? window->active_figure_id() : INVALID_FIGURE_ID;
+            auto           notify_removed = [this, figure_id](const Series* series)
+            {
+                if (auto* target_canvas = canvas_for_figure(figure_id))
+                    target_canvas->notifySeriesRemoved(series);
+            };
+            auto notify_changed = [this, figure_id]()
+            {
+                if (redraw_request_)
+                    redraw_request_->request_redraw(figure_id);
+            };
+            auto owner_is_alive = [this, figure_id](const AxesBase* owner)
+            {
+                const Figure* current = figure_registry().get(figure_id);
+                if (!current || !owner)
+                    return false;
+                for (const auto& axes : current->axes())
+                    if (axes.get() == owner)
+                        return true;
+                for (const auto& axes : current->all_axes())
+                    if (axes.get() == owner)
+                        return true;
+                return false;
+            };
+            if (auto action = paste_series(*target,
+                                           *series_clipboard_,
+                                           std::move(notify_removed),
+                                           std::move(notify_changed),
+                                           std::move(owner_is_alive)))
+                services_->undo().push(std::move(*action));
+        });
     add("series.delete",
         "Delete Series",
         "Delete",
         "Series",
-        []() { /* TODO: Implement series selection in Qt canvas */ });
+        [remove_selected]() { remove_selected(false); });
     add("series.deselect",
         "Deselect Series",
         "Escape",
         "Series",
-        []() { /* TODO: Implement series selection in Qt canvas */ });
+        [active_canvas]()
+        {
+            if (auto* canvas = active_canvas())
+                canvas->deselectSeries();
+        });
 
     // ── Figure move to window ─────────────────────────────────────────────
     add("figure.move_to_window",
@@ -1429,14 +1591,19 @@ void QtApplicationController::register_qt_commands()
         "App",
         [this]()
         {
-            if (!main_window_ || !window_registry_)
+            auto* target_window = command_target_window();
+            if (!target_window || !window_registry_)
                 return;
-            FigureId fid = main_window_->active_figure_id();
+            FigureId fid = target_window->active_figure_id();
             if (fid == INVALID_FIGURE_ID)
                 return;
             const HostId source = window_registry_->find_host_for_figure(fid);
-            if (source != INVALID_HOST_ID)
+            if (source == INVALID_HOST_ID)
+                return;
+            if (source == window_registry_->primary_host_id())
                 window_registry_->detach_document(fid, source);
+            else
+                window_registry_->redock_document(fid, source);
         });
 
     services_->shortcuts().register_defaults();
@@ -1453,6 +1620,10 @@ void QtApplicationController::shutdown()
     if (autosave_ && autosave_->has_unsaved_changes())
         autosave_->save_now();
 
+    // The modeless function editor is also parented to the main window; release
+    // its explicit owner before Qt destroys the child hierarchy.
+    function_plot_dialog_.reset();
+
     // Destroy main window first (it holds canvas widgets with Vulkan surfaces)
     main_window_.reset();
 
@@ -1465,13 +1636,14 @@ void QtApplicationController::shutdown()
         automation_adapter_->stop();
     automation_adapter_.reset();
 
-    autosave_.reset();
-
     // Shut down services
     if (services_)
         services_->shutdown();
     services_.reset();
-    timeline_editor_.reset();
+    timelines_.clear();
+    interpolators_.clear();
+    series_clipboard_.reset();
+    axis_link_manager_.reset();
 
     // Shut down Qt runtime (Vulkan surfaces + swapchains)
     if (runtime_)
@@ -1485,8 +1657,86 @@ void QtApplicationController::shutdown()
     dialog_service_.reset();
     action_bridge_.reset();
 
+    // A successfully completed shutdown is not a crash. Keep the snapshot
+    // through teardown so an interruption remains recoverable, then remove it
+    // only after every owned frontend/runtime resource has shut down cleanly.
+    if (autosave_)
+        autosave_->clear_autosave();
+    autosave_.reset();
     initialized_ = false;
     SPECTRA_LOG_INFO("qt_app", "QtApplicationController shutdown complete");
+}
+
+TimelineEditor* QtApplicationController::timeline_for(FigureId id)
+{
+    if (id == INVALID_FIGURE_ID)
+        return nullptr;
+    if (auto it = timelines_.find(id); it != timelines_.end())
+        return it->second.get();
+
+    Figure* figure = figure_registry().get(id);
+    if (!figure)
+        return nullptr;
+
+    auto timeline     = std::make_unique<TimelineEditor>();
+    auto interpolator = std::make_unique<KeyframeInterpolator>();
+    timeline->set_interpolator(interpolator.get());
+    if (figure->anim_duration() > 0.0f)
+        timeline->set_duration(figure->anim_duration());
+    else if (figure->has_animation())
+        timeline->set_duration(60.0f);
+    if (figure->anim_fps() > 0.0f)
+        timeline->set_fps(figure->anim_fps());
+    if (figure->anim_loop())
+        timeline->set_loop_mode(LoopMode::Loop);
+    if (figure->has_animation())
+        timeline->play();
+    timeline->set_playhead(figure->anim_.time);
+
+    TimelineEditor* result = timeline.get();
+    interpolators_.emplace(id, std::move(interpolator));
+    timelines_.emplace(id, std::move(timeline));
+    return result;
+}
+
+TimelineEditor* QtApplicationController::active_timeline()
+{
+    auto* window = command_target_window();
+    return window ? timeline_for(window->active_figure_id()) : nullptr;
+}
+
+SpectraMainWindow* QtApplicationController::command_target_window() const
+{
+    QWidget* active = QApplication::activeWindow();
+    QWidget* focus  = QApplication::focusWidget();
+    if (window_registry_)
+    {
+        for (HostId id : window_registry_->all_hosts())
+        {
+            auto* host   = window_registry_->native_host(id);
+            auto* window = host ? host->main_window() : nullptr;
+            if (window && (belongs_to_window(active, window) || belongs_to_window(focus, window)))
+                return window;
+        }
+    }
+    return main_window_.get();
+}
+
+SpectraVulkanWindow* QtApplicationController::canvas_for_figure(FigureId id) const
+{
+    if (id == INVALID_FIGURE_ID)
+        return nullptr;
+    if (window_registry_)
+    {
+        const HostId host_id = window_registry_->find_host_for_figure(id);
+        auto*        host    = window_registry_->native_host(host_id);
+        auto*        window  = host ? host->main_window() : nullptr;
+        auto*        wrapper = window ? window->canvas_for(id) : nullptr;
+        if (wrapper)
+            return wrapper->vulkanWindow();
+    }
+    auto* wrapper = main_window_ ? main_window_->canvas_for(id) : nullptr;
+    return wrapper ? wrapper->vulkanWindow() : nullptr;
 }
 
 FigureRegistry& QtApplicationController::figure_registry()
@@ -1499,19 +1749,358 @@ FigureRegistry& QtApplicationController::figure_registry()
     return s_registry;
 }
 
+WorkspaceData QtApplicationController::capture_workspace_data()
+{
+    auto&                        registry = figure_registry();
+    const auto                   ids      = registry.all_ids();
+    std::vector<Figure*>         figures;
+    std::vector<OverlaySnapshot> overlays;
+    figures.reserve(ids.size());
+    overlays.reserve(ids.size());
+    for (FigureId id : ids)
+    {
+        if (Figure* figure = registry.get(id))
+        {
+            figures.push_back(figure);
+            OverlaySnapshot overlay;
+            if (auto* canvas = canvas_for_figure(id))
+                canvas->captureOverlaySnapshot(overlay);
+            overlays.push_back(std::move(overlay));
+        }
+    }
+
+    size_t         active_index = 0;
+    const FigureId active_id = main_window_ ? main_window_->active_figure_id() : INVALID_FIGURE_ID;
+    const auto     active_it = std::find(ids.begin(), ids.end(), active_id);
+    if (active_it != ids.end())
+        active_index = static_cast<size_t>(active_it - ids.begin());
+
+    const std::string theme        = services_ ? services_->theme().current_theme_name() : "night";
+    const bool        inspector    = main_window_ && main_window_->is_inspector_open();
+    const bool        nav_expanded = main_window_ && !main_window_->is_nav_rail_compact();
+    WorkspaceData     data         = Workspace::capture(figures,
+                                            active_index,
+                                            theme,
+                                            inspector,
+                                            300.0f,
+                                            nav_expanded,
+                                            &overlays);
+    if (axis_link_manager_)
+    {
+        std::vector<Axes*>   axes2d;
+        std::vector<Axes3D*> axes3d;
+        for (Figure* figure : figures)
+        {
+            if (!figure)
+                continue;
+            for (auto& axes : figure->axes_mut())
+                if (axes)
+                    axes2d.push_back(axes.get());
+            for (auto& axes : figure->all_axes_mut())
+                if (auto* candidate = dynamic_cast<Axes3D*>(axes.get()))
+                    axes3d.push_back(candidate);
+        }
+        data.axis_link_state = axis_link_manager_->serialize(
+            [&axes2d](const Axes* axes)
+            {
+                const auto found = std::find(axes2d.begin(), axes2d.end(), axes);
+                return found == axes2d.end() ? -1 : static_cast<int>(found - axes2d.begin());
+            },
+            [&axes3d](const Axes3D* axes)
+            {
+                const auto found = std::find(axes3d.begin(), axes3d.end(), axes);
+                return found == axes3d.end() ? -1 : static_cast<int>(found - axes3d.begin());
+            });
+    }
+    for (size_t i = 0; i < data.figures.size() && i < ids.size(); ++i)
+    {
+        data.figures[i].figure_id = ids[i];
+        if (TimelineEditor* timeline = timeline_for(ids[i]))
+            data.figures[i].timeline_json = timeline->serialize();
+        SpectraMainWindow* window = main_window_.get();
+        if (window_registry_)
+        {
+            const HostId host_id = window_registry_->find_host_for_figure(ids[i]);
+            if (auto* host = window_registry_->native_host(host_id); host && host->main_window())
+                window = host->main_window();
+        }
+        if (window && window->transform_panel())
+        {
+            if (auto state = window->transform_panel()->capture_pipeline_state(ids[i], i))
+                data.transforms.push_back(std::move(*state));
+        }
+    }
+    if (TimelineEditor* timeline = timeline_for(active_id))
+    {
+        data.timeline.playhead   = timeline->playhead();
+        data.timeline.duration   = timeline->duration();
+        data.timeline.fps        = timeline->fps();
+        data.timeline.loop_mode  = static_cast<int>(timeline->loop_mode());
+        data.timeline.loop_start = timeline->loop_in();
+        data.timeline.loop_end   = timeline->loop_out();
+        data.timeline.playing    = timeline->is_playing();
+    }
+    if (workspace_bridge_)
+        workspace_bridge_->capture_layout(data);
+    if (services_)
+    {
+        std::unordered_set<std::string> bound_commands;
+        for (const auto& binding : services_->shortcuts().all_bindings())
+        {
+            if (!services_->commands().find(binding.command_id))
+                continue;
+            data.shortcut_overrides.push_back(
+                {binding.command_id, binding.shortcut.to_string(), false});
+            bound_commands.insert(binding.command_id);
+        }
+        for (const Command* command : services_->commands().all_commands())
+        {
+            if (command && !bound_commands.contains(command->id))
+                data.shortcut_overrides.push_back({command->id, "", true});
+        }
+    }
+    return data;
+}
+
+bool QtApplicationController::restore_workspace_data(const WorkspaceData& data)
+{
+    auto restore_axis_links = [this, &data](const std::vector<FigureId>& ids)
+    {
+        if (!axis_link_manager_)
+            return;
+        std::vector<Axes*>   axes2d;
+        std::vector<Axes3D*> axes3d;
+        for (FigureId id : ids)
+        {
+            Figure* figure = figure_registry().get(id);
+            if (!figure)
+                continue;
+            for (auto& axes : figure->axes_mut())
+                if (axes)
+                    axes2d.push_back(axes.get());
+            for (auto& axes : figure->all_axes_mut())
+                if (auto* candidate = dynamic_cast<Axes3D*>(axes.get()))
+                    axes3d.push_back(candidate);
+        }
+        axis_link_manager_->deserialize(
+            data.axis_link_state,
+            [&axes2d](int index) -> Axes*
+            {
+                return index >= 0 && static_cast<size_t>(index) < axes2d.size()
+                           ? axes2d[static_cast<size_t>(index)]
+                           : nullptr;
+            },
+            [&axes3d](int index) -> Axes3D*
+            {
+                return index >= 0 && static_cast<size_t>(index) < axes3d.size()
+                           ? axes3d[static_cast<size_t>(index)]
+                           : nullptr;
+            });
+    };
+
+    auto restore_transforms = [this, &data](const std::vector<FigureId>& ids)
+    {
+        for (const auto& state : data.transforms)
+        {
+            if (state.figure_index >= ids.size())
+                continue;
+            const FigureId     id     = ids[state.figure_index];
+            SpectraMainWindow* window = main_window_.get();
+            if (window_registry_)
+            {
+                const HostId host_id = window_registry_->find_host_for_figure(id);
+                if (auto* host = window_registry_->native_host(host_id);
+                    host && host->main_window())
+                    window = host->main_window();
+            }
+            if (window && window->transform_panel())
+                window->transform_panel()->restore_pipeline_state(id, state);
+        }
+    };
+
+    auto restore_shortcuts = [this, &data]()
+    {
+        if (!services_ || data.shortcut_overrides.empty())
+            return;
+        services_->shortcuts().clear();
+        for (const auto& override : data.shortcut_overrides)
+        {
+            if (override.removed)
+                continue;
+            const Shortcut shortcut = Shortcut::from_string(override.shortcut_str);
+            if (shortcut.valid() && services_->commands().find(override.command_id))
+                services_->shortcuts().bind(shortcut, override.command_id);
+        }
+        if (action_bridge_)
+            action_bridge_->sync_shortcuts(services_->shortcuts());
+        if (main_window_ && main_window_->shortcut_panel())
+            main_window_->shortcut_panel()->refresh();
+    };
+
+    auto restore_timeline = [this, &data](size_t index, FigureId id)
+    {
+        TimelineEditor* timeline = timeline_for(id);
+        if (!timeline)
+            return;
+        if (index < data.figures.size() && !data.figures[index].timeline_json.empty())
+        {
+            timeline->deserialize(data.figures[index].timeline_json);
+            if (Figure* figure = figure_registry().get(id))
+                bind_timeline_properties(*timeline, *figure);
+            return;
+        }
+        if (index != data.active_figure_index)
+            return;
+        timeline->set_duration(data.timeline.duration);
+        timeline->set_fps(data.timeline.fps);
+        timeline->set_loop_mode(static_cast<LoopMode>(std::clamp(data.timeline.loop_mode, 0, 2)));
+        if (data.timeline.loop_end > data.timeline.loop_start)
+            timeline->set_loop_region(data.timeline.loop_start, data.timeline.loop_end);
+        else
+            timeline->clear_loop_region();
+        if (data.timeline.playing)
+            timeline->play();
+        else
+            timeline->stop();
+        timeline->set_playhead(data.timeline.playhead);
+    };
+
+    std::vector<std::unique_ptr<Figure>> restored;
+    std::vector<OverlaySnapshot>         overlays;
+    if (!Workspace::restore_figures(data, restored, &overlays))
+    {
+        auto&                registry = figure_registry();
+        std::vector<Figure*> existing;
+        for (FigureId id : registry.all_ids())
+            if (Figure* figure = registry.get(id))
+                existing.push_back(figure);
+        const bool applied = Workspace::apply(data, existing);
+        if (applied)
+        {
+            for (size_t i = 0; i < existing.size() && i < data.figures.size(); ++i)
+            {
+                const FigureId id = registry.find_id(existing[i]);
+                restore_timeline(i, id);
+            }
+        }
+        if (workspace_bridge_)
+            workspace_bridge_->apply_layout(data);
+        if (applied)
+        {
+            std::vector<FigureId> existing_ids;
+            existing_ids.reserve(existing.size());
+            for (Figure* figure : existing)
+                existing_ids.push_back(registry.find_id(figure));
+            restore_transforms(existing_ids);
+            restore_axis_links(existing_ids);
+            restore_shortcuts();
+        }
+        return applied;
+    }
+
+    if (window_registry_)
+    {
+        for (HostId host_id : window_registry_->all_hosts())
+        {
+            auto* host   = window_registry_->native_host(host_id);
+            auto* window = host ? host->main_window() : nullptr;
+            if (!window)
+                continue;
+            for (FigureId id : window->open_figure_ids())
+                window->release_figure_tab(id);
+        }
+        window_registry_->close_all_detached();
+    }
+
+    if (services_)
+        services_->undo().clear();
+    timelines_.clear();
+    interpolators_.clear();
+    if (axis_link_manager_)
+        axis_link_manager_->clear();
+
+    auto& registry = figure_registry();
+    registry.clear();
+    std::unordered_map<FigureId, FigureId> id_map;
+    std::vector<FigureId>                  new_ids;
+    new_ids.reserve(restored.size());
+    for (size_t i = 0; i < restored.size(); ++i)
+    {
+        const FigureId new_id = registry.register_figure(std::move(restored[i]));
+        new_ids.push_back(new_id);
+        const FigureId old_id = data.figures[i].figure_id;
+        if (old_id != INVALID_FIGURE_ID)
+            id_map[old_id] = new_id;
+    }
+
+    for (size_t i = 0; i < new_ids.size() && i < data.figures.size(); ++i)
+        restore_timeline(i, new_ids[i]);
+    restore_axis_links(new_ids);
+
+    bool layout_applied = workspace_bridge_ && workspace_bridge_->apply_layout(data, id_map);
+    if (main_window_)
+    {
+        for (FigureId id : new_ids)
+        {
+            if (!window_registry_ || window_registry_->find_host_for_figure(id) == INVALID_HOST_ID)
+                main_window_->add_figure_tab(id);
+        }
+        if (!new_ids.empty())
+        {
+            const size_t active = std::min<size_t>(data.active_figure_index, new_ids.size() - 1);
+            main_window_->central_view()->activate_figure(new_ids[active]);
+        }
+
+        for (size_t i = 0; i < new_ids.size() && i < overlays.size(); ++i)
+        {
+            if (auto* canvas = canvas_for_figure(new_ids[i]))
+                canvas->restoreOverlaySnapshot(overlays[i]);
+        }
+
+        if (main_window_->is_inspector_open() != data.panels.inspector_visible)
+            main_window_->toggle_inspector();
+    }
+
+    restore_transforms(new_ids);
+
+    if (services_ && !data.theme_name.empty())
+    {
+        services_->theme().set_theme(data.theme_name);
+        if (main_window_)
+            main_window_->refresh_theme();
+    }
+    restore_shortcuts();
+    if (redraw_request_)
+        redraw_request_->request_redraw();
+    return layout_applied || !new_ids.empty() || data.figures.empty();
+}
+
 void QtApplicationController::check_crash_recovery()
 {
     if (!autosave_ || !autosave_->has_autosave())
         return;
 
-    // Use Qt dialog to prompt the user
-    QMessageBox::StandardButton reply =
-        QMessageBox::question(main_window_.get(),
-                              "Spectra — Crash Recovery",
-                              "An autosave file was found from a previous session.\n"
-                              "Would you like to restore your workspace?",
-                              QMessageBox::Yes | QMessageBox::No,
-                              QMessageBox::Yes);
+    QMessageBox::StandardButton reply           = QMessageBox::No;
+    const char*                 recovery_policy = std::getenv("SPECTRA_RECOVER_AUTOSAVE");
+    if (recovery_policy && std::string_view(recovery_policy) == "accept")
+    {
+        reply = QMessageBox::Yes;
+    }
+    else if (recovery_policy && std::string_view(recovery_policy) == "decline")
+    {
+        reply = QMessageBox::No;
+    }
+    else
+    {
+        // Interactive production policy. The environment override above is a
+        // deterministic launched-test seam and does not change the default UI.
+        reply = QMessageBox::question(main_window_.get(),
+                                      "Spectra — Crash Recovery",
+                                      "An autosave file was found from a previous session.\n"
+                                      "Would you like to restore your workspace?",
+                                      QMessageBox::Yes | QMessageBox::No,
+                                      QMessageBox::Yes);
+    }
 
     if (reply == QMessageBox::Yes)
     {
@@ -1519,9 +2108,10 @@ void QtApplicationController::check_crash_recovery()
         WorkspaceData data;
         if (Workspace::load(path, data))
         {
-            if (workspace_bridge_)
-                workspace_bridge_->apply_layout(data);
-            SPECTRA_LOG_INFO("qt_app", "Restored workspace from autosave: " + path);
+            if (restore_workspace_data(data))
+                SPECTRA_LOG_INFO("qt_app", "Restored workspace from autosave: " + path);
+            else
+                SPECTRA_LOG_WARN("qt_app", "Autosave contained no restorable workspace: " + path);
         }
         else
         {
@@ -1530,7 +2120,7 @@ void QtApplicationController::check_crash_recovery()
     }
 
     // Clear the autosave regardless — user has been prompted
-    Workspace::clear_autosave();
+    autosave_->clear_autosave();
 }
 
 std::string QtApplicationController::start_topic_server()

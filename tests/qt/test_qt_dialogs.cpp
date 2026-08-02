@@ -15,11 +15,13 @@
 
 #include "app/frontend_services.hpp"
 #include "adapters/qt/qt_frontend_services.hpp"
+#include "ui/native_dialog_policy.hpp"
 
 #include <spectra/fwd.hpp>
 
 #include <memory>
 #include <atomic>
+#include <cstdlib>
 
 namespace {
 
@@ -45,6 +47,7 @@ TEST(QtDialogs, NullDialogServiceReturnsNullopt)
         spectra::DialogService::FileType::Open,
         "Test", "/tmp", {});
     EXPECT_FALSE(result.has_value());
+    EXPECT_FALSE(svc.number_input("Number", "Value", 0.0, -1.0, 1.0, 2));
 }
 
 TEST(QtDialogs, NullDialogServiceMessageBoxReturnsTrue)
@@ -255,4 +258,40 @@ TEST(QtDialogs, DialogServiceExists)
     // message_box and file_dialog would block in offscreen mode,
     // so we skip actual invocation here. They are tested via
     // integration tests with a real display.
+}
+
+TEST(QtDialogs, AutomationFileDialogUsesExplicitPathAndOtherwiseCancels)
+{
+    spectra::adapters::qt::QtDialogService svc;
+    const bool                             dialogs_were_enabled = spectra::native_dialogs_enabled();
+    spectra::set_native_dialogs_enabled(false);
+    unsetenv("SPECTRA_QT_DIALOG_PATH");
+
+    EXPECT_FALSE(svc.file_dialog(spectra::DialogService::FileType::Save,
+                                 "Export PNG",
+                                 "spectra_export.png",
+                                 {{"PNG Image", "*.png"}}));
+
+    setenv("SPECTRA_QT_DIALOG_PATH", "/tmp/spectra-scripted.png", 1);
+    EXPECT_EQ(svc.file_dialog(spectra::DialogService::FileType::Save,
+                              "Export PNG",
+                              "spectra_export.png",
+                              {{"PNG Image", "*.png"}}),
+              "/tmp/spectra-scripted.png");
+
+    setenv("SPECTRA_QT_DIALOG_EXPORT_PNG", "/tmp/spectra-title.png", 1);
+    EXPECT_EQ(svc.file_dialog(spectra::DialogService::FileType::Save,
+                              "Export PNG",
+                              "spectra_export.png",
+                              {{"PNG Image", "*.png"}}),
+              "/tmp/spectra-title.png");
+
+    unsetenv("SPECTRA_QT_DIALOG_EXPORT_PNG");
+    unsetenv("SPECTRA_QT_DIALOG_PATH");
+
+    EXPECT_FALSE(svc.number_input("Add Horizontal Line", "Y value", 0.0, -10.0, 10.0, 3));
+    setenv("SPECTRA_QT_NUMBER_ADD_HORIZONTAL_LINE", "2.75", 1);
+    EXPECT_EQ(svc.number_input("Add Horizontal Line", "Y value", 0.0, -10.0, 10.0, 3), 2.75);
+    unsetenv("SPECTRA_QT_NUMBER_ADD_HORIZONTAL_LINE");
+    spectra::set_native_dialogs_enabled(dialogs_were_enabled);
 }
