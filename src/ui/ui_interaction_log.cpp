@@ -38,11 +38,7 @@ void log_ui_action(std::string_view kind,
     const std::string safe_id = sanitize_id(id);
     if (detail.empty())
     {
-        SPECTRA_LOG_DEBUG("ui.action",
-                          "kind={} id={} result={}",
-                          kind,
-                          safe_id,
-                          result);
+        SPECTRA_LOG_DEBUG("ui.action", "kind={} id={} result={}", kind, safe_id, result);
     }
     else
     {
@@ -58,8 +54,8 @@ void log_ui_action(std::string_view kind,
 #ifdef SPECTRA_USE_IMGUI
 void log_imgui_frame_activations()
 {
-    ImGuiContext& g = *GImGui;
-    const bool    mouse_click = g.IO.MouseClicked[0] || g.IO.MouseClicked[1];
+    ImGuiContext& g            = *GImGui;
+    const bool    mouse_click  = g.IO.MouseClicked[0] || g.IO.MouseClicked[1];
     const bool    nav_activate = g.NavActivateId != 0;
     if (!mouse_click && !nav_activate)
         return;
@@ -68,8 +64,8 @@ void log_imgui_frame_activations()
     if (id == 0)
         return;
 
-    const char* window = (g.ActiveIdWindow && g.ActiveIdWindow->Name) ? g.ActiveIdWindow->Name
-                                                                        : "unknown";
+    const char* window =
+        (g.ActiveIdWindow && g.ActiveIdWindow->Name) ? g.ActiveIdWindow->Name : "unknown";
     log_ui_action("imgui", std::to_string(id), "ok", window);
 }
 #endif

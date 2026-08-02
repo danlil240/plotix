@@ -160,10 +160,10 @@ TEST(Golden3DPhase3, LitSurface_SinCos)
                               std::vector<float> y_grid;
                               std::vector<float> z_values;
                               x_grid.reserve(nx);
-for (int i = 0; i < nx; ++i)
+                              for (int i = 0; i < nx; ++i)
                                   x_grid.push_back(static_cast<float>(i) / (nx - 1) * 6.0f - 3.0f);
                               y_grid.reserve(ny);
-for (int j = 0; j < ny; ++j)
+                              for (int j = 0; j < ny; ++j)
                                   y_grid.push_back(static_cast<float>(j) / (ny - 1) * 6.0f - 3.0f);
                               for (int j = 0; j < ny; ++j)
                                   for (int i = 0; i < nx; ++i)
@@ -529,8 +529,8 @@ TEST(Golden3DPhase3, Mixed2DAndLit3D)
 
             // 3D lit surface
             auto&              ax3d = fig.subplot3d(2, 1, 2);
-            const int          nx = 25;
-            const int          ny = 25;
+            const int          nx   = 25;
+            const int          ny   = 25;
             std::vector<float> x_grid;
             std::vector<float> y_grid;
             std::vector<float> z_values;

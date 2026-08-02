@@ -361,8 +361,8 @@ void BagInfoPanel::draw_topic_table()
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
 
-        const bool is_selected = (selected_index_ == i);
-        const std::string sel_id = std::format("##sel_{}", i);
+        const bool        is_selected = (selected_index_ == i);
+        const std::string sel_id      = std::format("##sel_{}", i);
 
         if (ImGui::Selectable(
                 sel_id.c_str(),

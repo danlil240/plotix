@@ -117,8 +117,8 @@ class ClipboardExportHarness
         {
             constexpr double EPS = 1e-12;
             auto             it  = std::unique(all_x.begin(),
-                                               all_x.end(),
-                                               [](double a, double b) { return (b - a) < EPS; });
+                                  all_x.end(),
+                                  [](double a, double b) { return (b - a) < EPS; });
             all_x.erase(it, all_x.end());
         }
 
@@ -766,7 +766,7 @@ TEST(SeriesData, EmptyNsAllowed)
 TEST(EdgeCases, EmptySeriesVectorReturnsEmpty)
 {
     std::vector<RosClipboardExport::SeriesData> empty;
-    std::string tsv = ClipboardExportHarness::build_tsv(empty,
+    std::string                                 tsv = ClipboardExportHarness::build_tsv(empty,
                                                         RosClipboardExport::SelectionRange::Full,
                                                         0.0,
                                                         0.0);

@@ -42,8 +42,8 @@ inline void EasyState::tick_interactive()
             f.param_scratch[i] = static_cast<double>(f.knobs[i]->value);
         const auto params = std::span<const double>(f.param_scratch);
         for (int i = 0; i < f.n; ++i)
-            f.ys[static_cast<size_t>(i)] =
-                static_cast<float>(f.func(static_cast<double>(f.xs[static_cast<size_t>(i)]), params));
+            f.ys[static_cast<size_t>(i)] = static_cast<float>(
+                f.func(static_cast<double>(f.xs[static_cast<size_t>(i)]), params));
         f.series->set_y(f.ys);
     }
 }
@@ -82,7 +82,7 @@ namespace spectra
 {
 
 // Interactive horizontal reference line — drag the slider to move y.
-inline LineSeries& ihline(double y,
+inline LineSeries& ihline(double             y,
                           double             range_min = -10.0,
                           double             range_max = 10.0,
                           std::string_view   fmt       = "k--",
@@ -100,7 +100,7 @@ inline LineSeries& ihline(double y,
 }
 
 // Interactive vertical reference line — drag the slider to move x.
-inline LineSeries& ivline(double x,
+inline LineSeries& ivline(double             x,
                           double             range_min = -10.0,
                           double             range_max = 10.0,
                           std::string_view   fmt       = "k--",
@@ -125,11 +125,11 @@ inline LineSeries& ivline(double x,
 //       {{"a", 1.0, -5.0, 5.0}, {"b", 0.0, -2.0, 2.0}});
 //
 inline LineSeries& ifplot(std::function<double(double, std::span<const double>)> func,
-                          double                                            xmin,
-                          double                                            xmax,
-                          std::initializer_list<FplotParam>                 params = {},
-                          int                                               n      = 200,
-                          std::string_view                                  fmt    = "-")
+                          double                                                 xmin,
+                          double                                                 xmax,
+                          std::initializer_list<FplotParam>                      params = {},
+                          int                                                    n      = 200,
+                          std::string_view                                       fmt    = "-")
 {
     auto& s = detail::easy_state();
     n       = std::max(n, 2);
@@ -143,8 +143,7 @@ inline LineSeries& ifplot(std::function<double(double, std::span<const double>)>
 
     const double dx = (xmax - xmin) / static_cast<double>(n - 1);
     for (int i = 0; i < n; ++i)
-        binding.xs[static_cast<size_t>(i)] =
-            static_cast<float>(xmin + dx * static_cast<double>(i));
+        binding.xs[static_cast<size_t>(i)] = static_cast<float>(xmin + dx * static_cast<double>(i));
 
     for (const auto& p : params)
     {
@@ -158,7 +157,7 @@ inline LineSeries& ifplot(std::function<double(double, std::span<const double>)>
 
     for (int i = 0; i < n; ++i)
     {
-        const auto span_params = std::span<const double>(binding.param_scratch);
+        const auto span_params             = std::span<const double>(binding.param_scratch);
         binding.ys[static_cast<size_t>(i)] = static_cast<float>(
             binding.func(static_cast<double>(binding.xs[static_cast<size_t>(i)]), span_params));
     }

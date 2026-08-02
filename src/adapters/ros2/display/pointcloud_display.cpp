@@ -181,7 +181,7 @@ void PointCloudDisplay::on_update(float)
     if (frames_decimated_ > 0)
     {
         status_text_ += " (dropped " + std::to_string(points_dropped_total_) + " pts in "
-                         + std::to_string(frames_decimated_) + " frames)";
+                        + std::to_string(frames_decimated_) + " frames)";
     }
 }
 
@@ -258,10 +258,10 @@ void PointCloudDisplay::submit_renderables(SceneManager& scene)
 
     const std::array<float, 4> default_color = unpack_rgba(entity.point_set->default_rgba);
     const std::string          color_str     = std::format("{:.3f}, {:.3f}, {:.3f}, {:.3f}",
-                                                  default_color[0],
-                                                  default_color[1],
-                                                  default_color[2],
-                                                  default_color[3]);
+                                              default_color[0],
+                                              default_color[1],
+                                              default_color[2],
+                                              default_color[3]);
 
     entity.properties.push_back({"points", std::to_string(frame->point_count)});
     entity.properties.push_back({"input_points", std::to_string(frame->original_point_count)});
@@ -308,17 +308,18 @@ void PointCloudDisplay::set_topic(const std::string& topic)
     topic_ = topic;
     topic_.copy(topic_input_.data(), topic_input_.size() - 1);
     topic_input_[std::min(topic_.size(), topic_input_.size() - 1)] = '\0';
-    resubscribe_requested_ = true;
+    resubscribe_requested_                                         = true;
 }
 
 std::string PointCloudDisplay::serialize_config_blob() const
 {
-    return std::format("topic={};color_mode={};point_size={:.2f};max_points={};use_message_stamp={}",
-                       topic_,
-                       static_cast<int>(color_mode_),
-                       point_size_,
-                       max_points_,
-                       use_message_stamp_ ? 1 : 0);
+    return std::format(
+        "topic={};color_mode={};point_size={:.2f};max_points={};use_message_stamp={}",
+        topic_,
+        static_cast<int>(color_mode_),
+        point_size_,
+        max_points_,
+        use_message_stamp_ ? 1 : 0);
 }
 
 void PointCloudDisplay::deserialize_config_blob(const std::string& blob)

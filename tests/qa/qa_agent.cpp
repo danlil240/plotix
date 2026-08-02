@@ -185,9 +185,9 @@ class ValidationMonitor
         ci.sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         ci.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
                              | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-        ci.messageType     = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-                             | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-                             | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+        ci.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+                         | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+                         | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         ci.pfnUserCallback = &ValidationMonitor::callback;
         ci.pUserData       = this;
 
@@ -4986,16 +4986,16 @@ static void crash_handler(int sig)
     // Minimal async-signal-safe output
     char buf[512];
     int  len = snprintf(buf,
-                        sizeof(buf),
-                        "\n[QA] ══════════════════════════════════════\n"
+                       sizeof(buf),
+                       "\n[QA] ══════════════════════════════════════\n"
                         "[QA] CRASH: %s\n"
                         "[QA] Seed: %lu\n"
                         "[QA] Last action: %s\n"
                         "[QA] Reproduce: --seed %lu\n",
-                        name,
-                        static_cast<unsigned long>(g_qa_seed),
-                        g_last_action,
-                        static_cast<unsigned long>(g_qa_seed));
+                       name,
+                       static_cast<unsigned long>(g_qa_seed),
+                       g_last_action,
+                       static_cast<unsigned long>(g_qa_seed));
     if (len > 0)
         if (write(STDERR_FILENO, buf, static_cast<size_t>(len)))
         {
@@ -5024,11 +5024,11 @@ static void crash_handler(int sig)
         {
             char crash_buf[512];
             int  clen = snprintf(crash_buf,
-                                 sizeof(crash_buf),
-                                 "CRASH: %s\nSeed: %lu\nLast action: %s\n",
-                                 name,
-                                 static_cast<unsigned long>(g_qa_seed),
-                                 g_last_action);
+                                sizeof(crash_buf),
+                                "CRASH: %s\nSeed: %lu\nLast action: %s\n",
+                                name,
+                                static_cast<unsigned long>(g_qa_seed),
+                                g_last_action);
             if (clen > 0)
                 if (write(fd, crash_buf, static_cast<size_t>(clen)))
                 {

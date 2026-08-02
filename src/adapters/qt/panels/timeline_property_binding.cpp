@@ -140,23 +140,27 @@ bool apply_property(Figure& figure, const ParsedPath& path, float value)
     {
         constexpr double epsilon = 1.0e-9;
         if (minimum)
-            setter(static_cast<double>(value), std::max(current.max, static_cast<double>(value) + epsilon));
+            setter(static_cast<double>(value),
+                   std::max(current.max, static_cast<double>(value) + epsilon));
         else
-            setter(std::min(current.min, static_cast<double>(value) - epsilon), static_cast<double>(value));
+            setter(std::min(current.min, static_cast<double>(value) - epsilon),
+                   static_cast<double>(value));
     };
 
     if (auto* axes2d = dynamic_cast<Axes*>(base))
     {
         if (path.property == "x_min" || path.property == "x_max")
         {
-            set_limits(axes2d->x_limits(), path.property == "x_min", [axes2d](double min, double max)
-                       { axes2d->xlim(min, max); });
+            set_limits(axes2d->x_limits(),
+                       path.property == "x_min",
+                       [axes2d](double min, double max) { axes2d->xlim(min, max); });
             return true;
         }
         if (path.property == "y_min" || path.property == "y_max")
         {
-            set_limits(axes2d->y_limits(), path.property == "y_min", [axes2d](double min, double max)
-                       { axes2d->ylim(min, max); });
+            set_limits(axes2d->y_limits(),
+                       path.property == "y_min",
+                       [axes2d](double min, double max) { axes2d->ylim(min, max); });
             return true;
         }
         return false;
@@ -166,14 +170,17 @@ bool apply_property(Figure& figure, const ParsedPath& path, float value)
     if (!axes3d)
         return false;
     if (path.property == "x_min" || path.property == "x_max")
-        set_limits(axes3d->x_limits(), path.property == "x_min", [axes3d](double min, double max)
-                   { axes3d->xlim(min, max); });
+        set_limits(axes3d->x_limits(),
+                   path.property == "x_min",
+                   [axes3d](double min, double max) { axes3d->xlim(min, max); });
     else if (path.property == "y_min" || path.property == "y_max")
-        set_limits(axes3d->y_limits(), path.property == "y_min", [axes3d](double min, double max)
-                   { axes3d->ylim(min, max); });
+        set_limits(axes3d->y_limits(),
+                   path.property == "y_min",
+                   [axes3d](double min, double max) { axes3d->ylim(min, max); });
     else if (path.property == "z_min" || path.property == "z_max")
-        set_limits(axes3d->z_limits(), path.property == "z_min", [axes3d](double min, double max)
-                   { axes3d->zlim(min, max); });
+        set_limits(axes3d->z_limits(),
+                   path.property == "z_min",
+                   [axes3d](double min, double max) { axes3d->zlim(min, max); });
     else
         return false;
     return true;
@@ -209,9 +216,8 @@ std::vector<TimelinePropertyTarget> timeline_property_targets(Figure& figure)
             const auto& owned = base->series()[series_index];
             if (!owned)
                 continue;
-            const std::string series_prefix =
-                prefix + "/series/" + std::to_string(series_index);
-            const std::string series_name = label + " / " + series_label(*owned, series_index);
+            const std::string series_prefix = prefix + "/series/" + std::to_string(series_index);
+            const std::string series_name   = label + " / " + series_label(*owned, series_index);
             targets.push_back({series_prefix + "/opacity",
                                series_name + " / Opacity",
                                owned->opacity(),
@@ -260,13 +266,15 @@ bool bind_timeline_property(TimelineEditor& timeline, Figure& figure, uint32_t t
     if (!parse_path(path, parsed))
         return false;
     const auto targets = timeline_property_targets(figure);
-    const auto target  = std::find_if(targets.begin(), targets.end(), [&path](const auto& item)
-                                     { return item.path == path; });
+    const auto target  = std::find_if(targets.begin(),
+                                     targets.end(),
+                                     [&path](const auto& item) { return item.path == path; });
     if (target == targets.end())
         return false;
     interpolator->bind_callback(track_id,
                                 target->label,
-                                [&figure, parsed](float value) { apply_property(figure, parsed, value); });
+                                [&figure, parsed](float value)
+                                { apply_property(figure, parsed, value); });
     return true;
 }
 

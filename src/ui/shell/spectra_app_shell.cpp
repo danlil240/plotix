@@ -24,10 +24,10 @@ namespace
 {
 using spectra::ui::Icon;
 
-MenuAction make_toggle_action(const char*               label,
-                              std::function<bool()>     checked,
-                              std::function<void()>     on_click,
-                              std::string               shortcut = {})
+MenuAction make_toggle_action(const char*           label,
+                              std::function<bool()> checked,
+                              std::function<void()> on_click,
+                              std::string           shortcut = {})
 {
     MenuAction action;
     action.label    = label;
@@ -40,8 +40,7 @@ MenuAction make_toggle_action(const char*               label,
 
 // ─── SpectraCanvasHost ───────────────────────────────────────────────────────
 
-SpectraCanvasHost::SpectraCanvasHost(spectra::ImGuiIntegration* imgui,
-                                     spectra::LayoutManager*    lm)
+SpectraCanvasHost::SpectraCanvasHost(spectra::ImGuiIntegration* imgui, spectra::LayoutManager* lm)
     : CanvasHost(lm), imgui_(imgui)
 {
 }
@@ -72,13 +71,12 @@ void SpectraNavRail::build_items(std::vector<NavItem>& out) const
     auto add_tool = [&](Icon icon, const char* label, ToolMode mode)
     {
         NavItem item;
-        item.icon    = icon;
-        item.label   = label;
-        item.id      = label;
-        item.tooltip = label;
-        item.is_active = [imgui = imgui_, mode]()
-        { return imgui->interaction_mode_ == mode; };
-        item.on_click = [imgui = imgui_, mode]() { imgui->interaction_mode_ = mode; };
+        item.icon      = icon;
+        item.label     = label;
+        item.id        = label;
+        item.tooltip   = label;
+        item.is_active = [imgui = imgui_, mode]() { return imgui->interaction_mode_ == mode; };
+        item.on_click  = [imgui = imgui_, mode]() { imgui->interaction_mode_ = mode; };
         out.push_back(std::move(item));
     };
 
@@ -102,12 +100,11 @@ void SpectraNavRail::build_items(std::vector<NavItem>& out) const
 
     {
         NavItem markers;
-        markers.icon    = Icon::MapPin;
-        markers.label   = "Markers";
-        markers.id      = "markers";
-        markers.tooltip = "Markers";
-        markers.is_active = [imgui = imgui_]()
-        {
+        markers.icon      = Icon::MapPin;
+        markers.label     = "Markers";
+        markers.id        = "markers";
+        markers.tooltip   = "Markers";
+        markers.is_active = [imgui = imgui_]() {
             return imgui->data_interaction_ != nullptr
                    && !imgui->data_interaction_->markers().empty();
         };
@@ -121,10 +118,10 @@ void SpectraNavRail::build_items(std::vector<NavItem>& out) const
 
     {
         NavItem xform;
-        xform.icon    = Icon::MagicWand;
-        xform.label   = "Transform";
-        xform.id      = "transform";
-        xform.tooltip = "Transform";
+        xform.icon      = Icon::MagicWand;
+        xform.label     = "Transform";
+        xform.id        = "transform";
+        xform.tooltip   = "Transform";
         xform.is_active = [imgui = imgui_]() { return imgui->custom_transform_dialog_.is_open(); };
         xform.on_click  = [imgui = imgui_]()
         {
@@ -170,17 +167,16 @@ void SpectraNavRail::build_items(std::vector<NavItem>& out) const
             }
 
             const std::string panel_id = item.id;
-            item.is_active             = [shell, panel_id]()
-            { return shell->panel_visible(panel_id); };
-            item.on_click = [shell, panel_id]() { shell->toggle_panel(panel_id); };
+            item.is_active = [shell, panel_id]() { return shell->panel_visible(panel_id); };
+            item.on_click  = [shell, panel_id]() { shell->toggle_panel(panel_id); };
         }
     }
 
     NavItem help;
-    help.icon    = Icon::Help;
-    help.label   = "Help";
-    help.id      = "help";
-    help.tooltip = "Help";
+    help.icon      = Icon::Help;
+    help.label     = "Help";
+    help.id        = "help";
+    help.tooltip   = "Help";
     help.is_active = []() { return false; };
     help.on_click  = [imgui = imgui_]()
     {
@@ -240,8 +236,8 @@ void SpectraNavRail::draw()
                         1.0f);
         }
 
-        ImFont* label_font = imgui_->font_heading_;
-        const float btn_w  = rail_w;
+        ImFont*     label_font = imgui_->font_heading_;
+        const float btn_w      = rail_w;
 
         std::vector<NavItem> items;
         build_items(items);
@@ -256,16 +252,16 @@ void SpectraNavRail::draw()
                 ++button_count;
         }
 
-        const float scale = LayoutManager::nav_rail_scale_for_height(
-            bounds.h, button_count, sep_count);
+        const float scale =
+            LayoutManager::nav_rail_scale_for_height(bounds.h, button_count, sep_count);
 
         auto draw_separator = [&]()
         {
             ImGui::Dummy(ImVec2(0, ui::tokens::SPACE_2 * scale));
             const float sep_inset = ui::tokens::SPACE_4 * scale;
             ImVec2      p0        = ImVec2(ImGui::GetWindowPos().x + sep_inset,
-                                  std::floor(ImGui::GetCursorScreenPos().y));
-            ImVec2 p1 = ImVec2(ImGui::GetWindowPos().x + rail_w - sep_inset, p0.y);
+                               std::floor(ImGui::GetCursorScreenPos().y));
+            ImVec2      p1        = ImVec2(ImGui::GetWindowPos().x + rail_w - sep_inset, p0.y);
             ImGui::GetWindowDrawList()->AddLine(
                 p0,
                 p1,
@@ -608,16 +604,22 @@ void SpectraAppShell::on_populate_menus(MenuBar& bar)
         return;
 
     auto& file = bar.menu("File");
-    file.add({.label = "New Figure", .on_click = [this]() {
+    file.add({.label    = "New Figure",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("figure.new");
               }});
     file.add_separator();
-    file.add({.label = "Export PNG", .on_click = [this]() {
+    file.add({.label    = "Export PNG",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("file.export_png");
               }});
-    file.add({.label = "Export SVG", .on_click = [this]() {
+    file.add({.label    = "Export SVG",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("file.export_svg");
               }});
@@ -628,35 +630,51 @@ void SpectraAppShell::on_populate_menus(MenuBar& bar)
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("file.copy_to_clipboard");
               }});
-    file.add({.label = "Save Workspace", .on_click = [this]() {
+    file.add({.label    = "Save Workspace",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("file.save_workspace");
               }});
-    file.add({.label = "Load Workspace", .on_click = [this]() {
+    file.add({.label    = "Load Workspace",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("file.load_workspace");
               }});
     file.add_separator();
-    file.add({.label = "Save Figure...", .on_click = [this]() {
+    file.add({.label    = "Save Figure...",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("file.save_figure");
               }});
-    file.add({.label = "Load Figure...", .on_click = [this]() {
+    file.add({.label    = "Load Figure...",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("file.load_figure");
               }});
     file.add_separator();
-    file.add({.label = "Exit", .on_click = [this]() {
+    file.add({.label    = "Exit",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("app.cancel");
               }});
 
     auto& edit = bar.menu("Edit");
-    edit.add({.label = "Undo", .shortcut = "Ctrl+Z", .on_click = [this]() {
+    edit.add({.label    = "Undo",
+              .shortcut = "Ctrl+Z",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("edit.undo");
               }});
-    edit.add({.label = "Redo", .shortcut = "Ctrl+Y", .on_click = [this]() {
+    edit.add({.label    = "Redo",
+              .shortcut = "Ctrl+Y",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("edit.redo");
               }});
@@ -674,23 +692,33 @@ void SpectraAppShell::on_populate_menus(MenuBar& bar)
         "Toggle Navigation Rail",
         [this]() { return imgui_->show_nav_rail_; },
         [this]() { imgui_->set_nav_rail_visible(!imgui_->show_nav_rail_); }));
-    view.add({.label = "Zoom to Fit", .on_click = [this]() {
+    view.add({.label    = "Zoom to Fit",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("view.autofit");
               }});
-    view.add({.label = "Reset View", .on_click = [this]() {
+    view.add({.label    = "Reset View",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("view.reset");
               }});
-    view.add({.label = "Toggle Grid", .on_click = [this]() {
+    view.add({.label    = "Toggle Grid",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("view.toggle_grid");
               }});
-    view.add({.label = "Toggle Legend", .on_click = [this]() {
+    view.add({.label    = "Toggle Legend",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("view.toggle_legend");
               }});
-    view.add({.label = "Remove All Data Tips", .on_click = [this]() {
+    view.add({.label    = "Remove All Data Tips",
+              .on_click = [this]()
+              {
                   if (imgui_->data_interaction_)
                       imgui_->data_interaction_->clear_markers();
               }});
@@ -711,11 +739,14 @@ void SpectraAppShell::on_populate_menus(MenuBar& bar)
             return p && p->visible();
         },
         [this]() { toggle_panel("core.curve_editor"); }));
-    view.add({.label = "Toggle Parameters", .on_click = [this]() {
+    view.add({.label    = "Toggle Parameters",
+              .on_click = [this]()
+              {
                   if (imgui_->knob_manager_ && !imgui_->knob_manager_->empty())
                       imgui_->knob_manager_->set_visible(!imgui_->knob_manager_->is_visible());
               }});
-    view.add({.label = "Toggle Data Editor", .on_click = [this]() { toggle_panel("core.inspector"); }});
+    view.add(
+        {.label = "Toggle Data Editor", .on_click = [this]() { toggle_panel("core.inspector"); }});
     view.add(make_toggle_action(
         "Toggle Topics",
         [this]()
@@ -734,7 +765,9 @@ void SpectraAppShell::on_populate_menus(MenuBar& bar)
         [this]() { toggle_panel("core.plugins"); }));
 
     auto& tools = bar.menu("Tools");
-    tools.add({.label = "Screenshot (PNG)", .on_click = [this]() {
+    tools.add({.label    = "Screenshot (PNG)",
+               .on_click = [this]()
+               {
                    if (imgui_->command_registry_)
                        imgui_->command_registry_->execute("file.export_png");
                }});
@@ -742,30 +775,42 @@ void SpectraAppShell::on_populate_menus(MenuBar& bar)
     tools.add({.label = "Theme Settings", .on_click = [this]() {
                    imgui_->show_theme_settings_ = !imgui_->show_theme_settings_;
                }});
-    tools.add({.label = "Command Palette", .on_click = [this]() {
+    tools.add({.label    = "Command Palette",
+               .on_click = [this]()
+               {
                    if (imgui_->command_registry_)
                        imgui_->command_registry_->execute("app.command_palette");
                }});
 
     auto& plot = bar.menu("Plot");
-    plot.add({.label = "Y = 0 Line", .on_click = [this]() {
+    plot.add({.label    = "Y = 0 Line",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("plot.hline_zero");
               }});
-    plot.add({.label = "X = 0 Line", .on_click = [this]() {
+    plot.add({.label    = "X = 0 Line",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("plot.vline_zero");
               }});
     plot.add_separator();
-    plot.add({.label = "Horizontal Line...", .on_click = [this]() {
+    plot.add({.label    = "Horizontal Line...",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("plot.hline");
               }});
-    plot.add({.label = "Vertical Line...", .on_click = [this]() {
+    plot.add({.label    = "Vertical Line...",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("plot.vline");
               }});
-    plot.add({.label = "Plot Function...", .on_click = [this]() {
+    plot.add({.label    = "Plot Function...",
+              .on_click = [this]()
+              {
                   if (imgui_->command_registry_)
                       imgui_->command_registry_->execute("plot.function");
               }});
@@ -793,7 +838,9 @@ void SpectraAppShell::sync_file_menu()
     {
         const std::string label = "Export " + fmt.name + " (." + fmt.extension + ")";
         const std::string name  = fmt.name;
-        plugin_parent.submenu.push_back({.label = label, .on_click = [this, name]() {
+        plugin_parent.submenu.push_back({.label    = label,
+                                         .on_click = [this, name]()
+                                         {
                                              if (imgui_->command_registry_)
                                                  imgui_->command_registry_->execute(
                                                      "file.export_plugin." + name);

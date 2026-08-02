@@ -175,7 +175,9 @@ bool Server::listen(const std::string& path)
     if (fd < 0)
         return false;
 
-    struct sockaddr_un addr{};
+    struct sockaddr_un addr
+    {
+    };
     addr.sun_family = AF_UNIX;
     if (path.size() >= sizeof(addr.sun_path))
     {
@@ -215,9 +217,11 @@ std::unique_ptr<Connection> Server::accept() const
     if (listen_fd_ < 0)
         return nullptr;
 
-    struct sockaddr_un client_addr{};
-    socklen_t          client_len = sizeof(client_addr);
-    int                client_fd =
+    struct sockaddr_un client_addr
+    {
+    };
+    socklen_t client_len = sizeof(client_addr);
+    int       client_fd =
         ::accept(listen_fd_, reinterpret_cast<struct sockaddr*>(&client_addr), &client_len);
     if (client_fd < 0)
         return nullptr;
@@ -239,9 +243,11 @@ std::unique_ptr<Connection> Server::try_accept() const
     if (listen_flags >= 0)
         ::fcntl(listen_fd_, F_SETFL, listen_flags | O_NONBLOCK);
 
-    struct sockaddr_un client_addr{};
-    socklen_t          client_len = sizeof(client_addr);
-    int                client_fd =
+    struct sockaddr_un client_addr
+    {
+    };
+    socklen_t client_len = sizeof(client_addr);
+    int       client_fd =
         ::accept(listen_fd_, reinterpret_cast<struct sockaddr*>(&client_addr), &client_len);
 
     // Restore listen socket to blocking
@@ -287,7 +293,9 @@ std::unique_ptr<Connection> Client::connect(const std::string& path)
     if (fd < 0)
         return nullptr;
 
-    struct sockaddr_un addr{};
+    struct sockaddr_un addr
+    {
+    };
     addr.sun_family = AF_UNIX;
     if (path.size() >= sizeof(addr.sun_path))
     {

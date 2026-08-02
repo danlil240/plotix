@@ -114,10 +114,10 @@ class Px4AppShell
     bool panel_visible(const char* id) const;
     void set_panel_visible(const char* id, bool v);
 
-    bool  nav_rail_visible() const;
-    bool  nav_rail_expanded() const;
-    void  set_nav_rail_visible(bool v);
-    void  set_nav_rail_expanded(bool v);
+    bool nav_rail_visible() const;
+    bool nav_rail_expanded() const;
+    void set_nav_rail_visible(bool v);
+    void set_nav_rail_expanded(bool v);
 
     // Initialise components.
     bool init();

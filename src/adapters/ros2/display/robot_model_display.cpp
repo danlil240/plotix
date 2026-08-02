@@ -195,8 +195,7 @@ void RobotModelDisplay::submit_renderables(SceneManager& scene)
                         if (it != joint_positions_.end())
                             joint_position = it->second;
                     }
-                    entity.properties.push_back(
-                        {"joint_position", std::to_string(joint_position)});
+                    entity.properties.push_back({"joint_position", std::to_string(joint_position)});
                 }
 
                 // Compose FK link transform with collision origin.

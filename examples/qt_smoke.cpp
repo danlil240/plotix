@@ -48,9 +48,9 @@ int main(int argc, char* argv[])
 
     // 2. Create a figure with a simple line plot
     spectra::Figure figure;
-    auto& ax = figure.subplot(1, 1, 1);
+    auto&           ax = figure.subplot(1, 1, 1);
 
-    constexpr int k_points = 200;
+    constexpr int      k_points = 200;
     std::vector<float> x(k_points), y(k_points);
     for (int i = 0; i < k_points; ++i)
     {
@@ -78,8 +78,8 @@ int main(int argc, char* argv[])
     main_window.setWindowTitle("Spectra Qt Smoke Test");
     main_window.resize(800, 600);
 
-    auto* canvas = new spectra::adapters::qt::FigureCanvasWidget(
-        &runtime, &figure, &input, &main_window);
+    auto* canvas =
+        new spectra::adapters::qt::FigureCanvasWidget(&runtime, &figure, &input, &main_window);
     main_window.setCentralWidget(canvas);
 
     // 5. Show the main window — Vulkan instance is already set by FigureCanvasWidget
@@ -89,22 +89,24 @@ int main(int argc, char* argv[])
     canvas->startAnimationTimer();
 
     // 7. Auto-exit after 3 seconds (smoke test — not interactive)
-    QTimer::singleShot(3000, [&]()
-    {
-        // Verify surface generation is valid
-        auto gen = canvas->vulkanWindow()->surface_generation();
-        if (gen > 0)
+    QTimer::singleShot(
+        3000,
+        [&]()
         {
-            std::cout << "PASS: surface_generation=" << gen << "\n";
-        }
-        else
-        {
-            std::cerr << "WARN: surface_generation=0 (surface may not have been created)\n";
-        }
+            // Verify surface generation is valid
+            auto gen = canvas->vulkanWindow()->surface_generation();
+            if (gen > 0)
+            {
+                std::cout << "PASS: surface_generation=" << gen << "\n";
+            }
+            else
+            {
+                std::cerr << "WARN: surface_generation=0 (surface may not have been created)\n";
+            }
 
-        std::cout << "PASS: Qt smoke test completed\n";
-        QApplication::quit();
-    });
+            std::cout << "PASS: Qt smoke test completed\n";
+            QApplication::quit();
+        });
 
     int result = app.exec();
 

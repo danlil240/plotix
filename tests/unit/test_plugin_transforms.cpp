@@ -279,10 +279,10 @@ class PluginTransformLoadTest : public ::testing::Test
 
     void TearDown() override { mgr_.unload_all(); }
 
-    std::string     plugin_path_;
-    CommandRegistry cmd_reg_;
-    ShortcutManager shortcut_mgr_;
-    UndoManager     undo_mgr_;
+    std::string       plugin_path_;
+    CommandRegistry   cmd_reg_;
+    ShortcutManager   shortcut_mgr_;
+    UndoManager       undo_mgr_;
     TransformRegistry transform_reg_;
     PluginManager     mgr_;
 };

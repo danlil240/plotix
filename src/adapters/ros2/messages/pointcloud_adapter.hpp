@@ -214,10 +214,10 @@ inline std::optional<PointCloudFrame> adapt_pointcloud_message(
     const auto* field_intensity = detail::find_field(message.fields, "intensity");
 
     PointCloudFrame frame;
-    frame.topic                = topic;
-    frame.frame_id             = message.header.frame_id;
-    frame.stamp_ns             = static_cast<uint64_t>(message.header.stamp.sec) * 1'000'000'000ULL
-                                 + static_cast<uint64_t>(message.header.stamp.nanosec);
+    frame.topic    = topic;
+    frame.frame_id = message.header.frame_id;
+    frame.stamp_ns = static_cast<uint64_t>(message.header.stamp.sec) * 1'000'000'000ULL
+                     + static_cast<uint64_t>(message.header.stamp.nanosec);
     frame.original_point_count = total_points;
 
     spectra::vec3 min_bounds{

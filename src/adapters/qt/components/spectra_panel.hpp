@@ -14,18 +14,18 @@ namespace spectra::adapters::qt
 class SpectraPanel : public QWidget
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraPanel(QWidget* parent = nullptr);
-    ~SpectraPanel() override = default;
-    SpectraPanel(const SpectraPanel&) = delete;
+    ~SpectraPanel() override                     = default;
+    SpectraPanel(const SpectraPanel&)            = delete;
     SpectraPanel& operator=(const SpectraPanel&) = delete;
 
     QVBoxLayout* content_layout() const { return layout_; }
 
-protected:
+   protected:
     void paintEvent(QPaintEvent* event) override;
 
-private:
+   private:
     QVBoxLayout* layout_ = nullptr;
 };
 

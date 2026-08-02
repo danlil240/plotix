@@ -270,8 +270,8 @@ bool DataTransform::changes_length() const
         case TransformType::Derivative:
         case TransformType::Diff:
         case TransformType::Log10:
-        case TransformType::Ln:   // may skip non-positive values
-        case TransformType::FFT:  // output is N/2+1 frequency bins (left-sided)
+        case TransformType::Ln:    // may skip non-positive values
+        case TransformType::FFT:   // output is N/2+1 frequency bins (left-sided)
             return true;
         case TransformType::Custom:
             return custom_xy_func_ != nullptr;

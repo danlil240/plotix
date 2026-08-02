@@ -667,9 +667,9 @@ bool RosSessionManager::toggle_favorite(const std::string& topic)
 {
     if (topic.empty())
         return false;
-    auto favorites = load_favorites();
-    const auto it = std::find(favorites.begin(), favorites.end(), topic);
-    bool added = false;
+    auto       favorites = load_favorites();
+    const auto it        = std::find(favorites.begin(), favorites.end(), topic);
+    bool       added     = false;
     if (it == favorites.end())
     {
         favorites.push_back(topic);
@@ -931,9 +931,11 @@ bool RosSessionManager::json_get_bool(const std::string& json,
 
 std::string RosSessionManager::current_iso8601()
 {
-    auto           now = std::chrono::system_clock::now();
-    std::time_t    t   = std::chrono::system_clock::to_time_t(now);
-    struct std::tm tm_utc{};
+    auto        now = std::chrono::system_clock::now();
+    std::time_t t   = std::chrono::system_clock::to_time_t(now);
+    struct std::tm tm_utc
+    {
+    };
 #if defined(_WIN32)
     gmtime_s(&tm_utc, &t);
 #else

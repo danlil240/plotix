@@ -194,7 +194,7 @@ void ExpressionEditor::draw_expression_input()
         {
             autocomplete_trigger_pos_ = dollar_pos;
             autocomplete_prefix_      = std::string(expr_buf_raw_ + dollar_pos + 1,
-                                                    static_cast<size_t>(cursor - dollar_pos - 1));
+                                               static_cast<size_t>(cursor - dollar_pos - 1));
             autocomplete_open_        = true;
             autocomplete_selected_    = 0;
             ImGui::OpenPopup("##field_ac");

@@ -21,22 +21,22 @@
 
 #include <memory>
 
-namespace {
+namespace
+{
 
 struct QtDockingEnv
 {
-    std::unique_ptr<spectra::FigureRegistry> registry;
-    std::unique_ptr<spectra::CommandRegistry> cmd_registry;
+    std::unique_ptr<spectra::FigureRegistry>               registry;
+    std::unique_ptr<spectra::CommandRegistry>              cmd_registry;
     std::unique_ptr<spectra::adapters::qt::QtActionBridge> action_bridge;
 
     QtDockingEnv()
     {
-        registry = std::make_unique<spectra::FigureRegistry>();
-        cmd_registry = std::make_unique<spectra::CommandRegistry>();
+        registry      = std::make_unique<spectra::FigureRegistry>();
+        cmd_registry  = std::make_unique<spectra::CommandRegistry>();
         action_bridge = std::make_unique<spectra::adapters::qt::QtActionBridge>(*cmd_registry);
         action_bridge->rebuild();
     }
-
 };
 
 QtDockingEnv& env()
@@ -45,14 +45,14 @@ QtDockingEnv& env()
     return e;
 }
 
-} // namespace
+}   // namespace
 
 TEST(QtDocking, PanelDescriptorDefaults)
 {
     spectra::adapters::qt::PanelDescriptor desc;
-    desc.id = "test_panel";
+    desc.id    = "test_panel";
     desc.title = "Test Panel";
-    desc.area = "left";
+    desc.area  = "left";
     EXPECT_TRUE(desc.default_visible);
 }
 
@@ -65,12 +65,9 @@ TEST(QtDocking, DocumentDescriptorDefaults)
 
 TEST(QtDocking, InvalidIdsAreSentinelValues)
 {
-    EXPECT_EQ(spectra::adapters::qt::INVALID_PANEL_ID,
-              ~spectra::adapters::qt::PanelId{0});
-    EXPECT_EQ(spectra::adapters::qt::INVALID_DOCUMENT_ID,
-              ~spectra::adapters::qt::DocumentId{0});
-    EXPECT_EQ(spectra::adapters::qt::INVALID_HOST_ID,
-              ~spectra::adapters::qt::HostId{0});
+    EXPECT_EQ(spectra::adapters::qt::INVALID_PANEL_ID, ~spectra::adapters::qt::PanelId{0});
+    EXPECT_EQ(spectra::adapters::qt::INVALID_DOCUMENT_ID, ~spectra::adapters::qt::DocumentId{0});
+    EXPECT_EQ(spectra::adapters::qt::INVALID_HOST_ID, ~spectra::adapters::qt::HostId{0});
 }
 
 TEST(QtDocking, NativeHostAddRemovePanel)
@@ -91,8 +88,10 @@ TEST(QtDocking, MainWindowRegistryTracking)
 
     // MainWindowRegistry requires QtRuntime for creating detached windows.
     // Test the registry's host tracking with a nullptr runtime (no detach).
-    spectra::adapters::qt::MainWindowRegistry registry(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    spectra::adapters::qt::MainWindowRegistry registry(nullptr,
+                                                       e.registry.get(),
+                                                       e.action_bridge.get(),
+                                                       nullptr);
 
     // Without runtime, create_detached_window should fail
     auto host_id = registry.create_detached_window();
@@ -105,13 +104,13 @@ TEST(QtDocking, MainWindowRegistryTracking)
 TEST(QtDocking, DockLayoutStateStructure)
 {
     spectra::adapters::qt::DockLayoutState state;
-    state.provider = "native";
+    state.provider         = "native";
     state.provider_version = "1.0";
 
     spectra::adapters::qt::DockLayoutState::DockWindowState ws;
-    ws.host_id = 1;
-    ws.title = "Main Window";
-    ws.state_base64 = "AAAA";
+    ws.host_id         = 1;
+    ws.title           = "Main Window";
+    ws.state_base64    = "AAAA";
     ws.geometry_base64 = "BBBB";
     state.windows.push_back(ws);
 
@@ -124,15 +123,15 @@ TEST(QtDocking, DockLayoutStateStructure)
 TEST(QtDocking, LayoutStateRoundTrip)
 {
     spectra::adapters::qt::DockLayoutState state1;
-    state1.provider = "native";
+    state1.provider         = "native";
     state1.provider_version = "2.0";
 
     for (int i = 0; i < 3; ++i)
     {
         spectra::adapters::qt::DockLayoutState::DockWindowState ws;
-        ws.host_id = static_cast<spectra::adapters::qt::HostId>(i + 1);
-        ws.title = "Window " + std::to_string(i);
-        ws.state_base64 = "state_" + std::to_string(i);
+        ws.host_id         = static_cast<spectra::adapters::qt::HostId>(i + 1);
+        ws.title           = "Window " + std::to_string(i);
+        ws.state_base64    = "state_" + std::to_string(i);
         ws.geometry_base64 = "geo_" + std::to_string(i);
         state1.windows.push_back(ws);
     }

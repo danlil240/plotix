@@ -200,8 +200,8 @@ class BagRecorder
     bool subscribe_topics();
 
     // Message callback for all subscriptions (executor thread).
-    void on_message(const std::string&                                      topic_name,
-                    const std::string&                                      message_type,
+    void on_message(const std::string&                       topic_name,
+                    const std::string&                       message_type,
                     sub_compat::SerializedMessageCallbackArg msg);
 
     // Check auto-split conditions and perform split if needed.

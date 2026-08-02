@@ -205,11 +205,8 @@ void DataEditor::draw(Figure& figure)
             const char* lbl  = s->label().empty() ? "Unnamed" : s->label().c_str();
             const char* type = series_type_label(s);
 
-            const std::string header_buf = std::format("{} ({}) [{} pts]##series_{}",
-                                                       lbl,
-                                                       type,
-                                                       get_point_count(s),
-                                                       i);
+            const std::string header_buf =
+                std::format("{} ({}) [{} pts]##series_{}", lbl, type, get_point_count(s), i);
 
             bool sec_open = true;
             if (widgets::section_header(header_buf.c_str(), &sec_open, font_heading_))
@@ -338,8 +335,8 @@ void DataEditor::draw_series_selector(AxesBase& axes)
     {
         // "All" option
         {
-            bool selected = (current < 0);
-            const std::string all_buf = std::format("All Series ({})", series_vec.size());
+            bool              selected = (current < 0);
+            const std::string all_buf  = std::format("All Series ({})", series_vec.size());
             if (ImGui::Selectable(all_buf.c_str(), selected))
                 selected_series_ = -1;
             if (selected)
@@ -451,9 +448,9 @@ void DataEditor::draw_data_table_2d(Series& series, int series_idx)
 
         // Use clipper for performance with large datasets
         ImU32            highlight_col = IM_COL32(static_cast<int>(theme().accent_subtle.r * 255),
-                                                  static_cast<int>(theme().accent_subtle.g * 255),
-                                                  static_cast<int>(theme().accent_subtle.b * 255),
-                                                  96);
+                                       static_cast<int>(theme().accent_subtle.g * 255),
+                                       static_cast<int>(theme().accent_subtle.b * 255),
+                                       96);
         ImGuiListClipper clipper;
         clipper.Begin(static_cast<int>(count));
         while (clipper.Step())
@@ -733,9 +730,9 @@ void DataEditor::draw_data_table_3d(Series& series, int series_idx)
         ImGui::TableHeadersRow();
 
         ImU32            highlight_col = IM_COL32(static_cast<int>(theme().accent_subtle.r * 255),
-                                                  static_cast<int>(theme().accent_subtle.g * 255),
-                                                  static_cast<int>(theme().accent_subtle.b * 255),
-                                                  96);
+                                       static_cast<int>(theme().accent_subtle.g * 255),
+                                       static_cast<int>(theme().accent_subtle.b * 255),
+                                       96);
         ImGuiListClipper clipper;
         clipper.Begin(static_cast<int>(count));
         while (clipper.Step())

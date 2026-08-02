@@ -199,15 +199,13 @@ void LiveConnectionPanel::draw_channel_list()
         if (!latest)
             continue;
 
-        const std::string label =
-            std::format("{} ({} fields)", ch_name, latest->fields.size());
+        const std::string label = std::format("{} ({} fields)", ch_name, latest->fields.size());
 
         if (ImGui::TreeNode(label.c_str()))
         {
             for (auto& field : latest->fields)
             {
-                const std::string field_label =
-                    std::format("{} = {:.4f}", field.name, field.value);
+                const std::string field_label = std::format("{} = {:.4f}", field.name, field.value);
 
                 if (ImGui::Selectable(field_label.c_str(),
                                       false,

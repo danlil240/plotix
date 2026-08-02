@@ -50,10 +50,10 @@ class QtCurveCanvas final : public QWidget
         setMouseTracking(true);
     }
 
-    TimelineEditor* timeline = nullptr;
-    std::function<void()> begin_edit;
+    TimelineEditor*                         timeline = nullptr;
+    std::function<void()>                   begin_edit;
     std::function<void(const std::string&)> commit_edit;
-    std::function<void()> cancel_edit;
+    std::function<void()>                   cancel_edit;
 
    protected:
     void paintEvent(QPaintEvent*) override
@@ -62,7 +62,7 @@ class QtCurveCanvas final : public QWidget
         painter.setRenderHint(QPainter::Antialiasing);
         const QColor background = palette().color(QPalette::Base);
         const QColor foreground = palette().color(QPalette::Text);
-        const QColor grid = palette().color(QPalette::Mid);
+        const QColor grid       = palette().color(QPalette::Mid);
         painter.fillRect(rect(), background);
         if (!editor_)
             return;
@@ -105,12 +105,14 @@ class QtCurveCanvas final : public QWidget
                 curve_pen.setWidthF(2.0);
                 painter.setPen(curve_pen);
                 QPainterPath curve;
-                const int samples = std::clamp(static_cast<int>(view.width * 1.5f), 32, 1200);
+                const int    samples = std::clamp(static_cast<int>(view.width * 1.5f), 32, 1200);
                 for (int sample = 0; sample < samples; ++sample)
                 {
-                    const float alpha = static_cast<float>(sample) / static_cast<float>(samples - 1);
-                    const float time = view.time_min + (view.time_max - view.time_min) * alpha;
-                    const QPointF point(view.time_to_x(time), view.value_to_y(channel.evaluate(time)));
+                    const float alpha =
+                        static_cast<float>(sample) / static_cast<float>(samples - 1);
+                    const float   time = view.time_min + (view.time_max - view.time_min) * alpha;
+                    const QPointF point(view.time_to_x(time),
+                                        view.value_to_y(channel.evaluate(time)));
                     if (sample == 0)
                         curve.moveTo(point);
                     else
@@ -120,7 +122,8 @@ class QtCurveCanvas final : public QWidget
 
                 for (const auto& keyframe : channel.keyframes())
                 {
-                    const QPointF key(view.time_to_x(keyframe.time), view.value_to_y(keyframe.value));
+                    const QPointF key(view.time_to_x(keyframe.time),
+                                      view.value_to_y(keyframe.value));
                     if (editor_->show_tangents() && keyframe.selected)
                     {
                         QPen tangent_pen(curve_pen.color());
@@ -128,8 +131,9 @@ class QtCurveCanvas final : public QWidget
                         painter.setPen(tangent_pen);
                         const QPointF in(view.time_to_x(keyframe.time + keyframe.in_tangent.dt),
                                          view.value_to_y(keyframe.value + keyframe.in_tangent.dv));
-                        const QPointF out(view.time_to_x(keyframe.time + keyframe.out_tangent.dt),
-                                          view.value_to_y(keyframe.value + keyframe.out_tangent.dv));
+                        const QPointF out(
+                            view.time_to_x(keyframe.time + keyframe.out_tangent.dt),
+                            view.value_to_y(keyframe.value + keyframe.out_tangent.dv));
                         if (keyframe.in_tangent.dt != 0.0f || keyframe.in_tangent.dv != 0.0f)
                         {
                             painter.drawLine(key, in);
@@ -188,8 +192,8 @@ class QtCurveCanvas final : public QWidget
             return;
         if (event->button() == Qt::MiddleButton)
         {
-            panning_      = true;
-            last_mouse_   = event->position();
+            panning_    = true;
+            last_mouse_ = event->position();
             event->accept();
             return;
         }
@@ -197,7 +201,8 @@ class QtCurveCanvas final : public QWidget
             return;
         setFocus();
         const QPointF point = event->position();
-        active_hit_ = editor_->hit_test(static_cast<float>(point.x()), static_cast<float>(point.y()));
+        active_hit_ =
+            editor_->hit_test(static_cast<float>(point.x()), static_cast<float>(point.y()));
         if (!(event->modifiers() & Qt::ShiftModifier))
             editor_->deselect_all();
         if (active_hit_.type == CurveHitType::Keyframe
@@ -267,13 +272,14 @@ class QtCurveCanvas final : public QWidget
             return;
         if (box_selecting_)
         {
-            box_current_ = event->position();
+            box_current_           = event->position();
             const QRectF selection = QRectF(box_start_, box_current_).normalized();
-            const auto& view       = editor_->view();
-            editor_->select_keyframes_in_rect(view.x_to_time(static_cast<float>(selection.left())),
-                                              view.x_to_time(static_cast<float>(selection.right())),
-                                              view.y_to_value(static_cast<float>(selection.bottom())),
-                                              view.y_to_value(static_cast<float>(selection.top())));
+            const auto&  view      = editor_->view();
+            editor_->select_keyframes_in_rect(
+                view.x_to_time(static_cast<float>(selection.left())),
+                view.x_to_time(static_cast<float>(selection.right())),
+                view.y_to_value(static_cast<float>(selection.bottom())),
+                view.y_to_value(static_cast<float>(selection.top())));
             if (timeline)
                 timeline->synchronize_markers_from_interpolator();
             box_selecting_ = false;
@@ -289,8 +295,9 @@ class QtCurveCanvas final : public QWidget
             timeline->evaluate_at_playhead();
         }
         if (commit_edit)
-            commit_edit(active_hit_.type == CurveHitType::Keyframe ? "Edit animation curve keyframe"
-                                                                   : "Edit animation curve tangent");
+            commit_edit(active_hit_.type == CurveHitType::Keyframe
+                            ? "Edit animation curve keyframe"
+                            : "Edit animation curve tangent");
         active_hit_ = {};
         update();
     }
@@ -337,7 +344,7 @@ class QtCurveCanvas final : public QWidget
    private:
     AnimationCurveEditor* editor_ = nullptr;
     CurveHitResult        active_hit_;
-    bool                  panning_ = false;
+    bool                  panning_       = false;
     bool                  box_selecting_ = false;
     QPointF               last_mouse_;
     QPointF               box_start_;
@@ -369,9 +376,9 @@ QtCurveEditorWidget::QtCurveEditorWidget(TimelineEditor* timeline, QWidget* pare
     toolbar->addWidget(tangents);
     toolbar->addStretch();
     layout->addLayout(toolbar);
-    canvas_ = new QtCurveCanvas(&editor_, content);
-    canvas_->timeline = timeline_;
-    canvas_->begin_edit = [this]() { begin_edit(); };
+    canvas_              = new QtCurveCanvas(&editor_, content);
+    canvas_->timeline    = timeline_;
+    canvas_->begin_edit  = [this]() { begin_edit(); };
     canvas_->commit_edit = [this](const std::string& description) { commit_edit(description); };
     canvas_->cancel_edit = [this]() { cancel_edit(); };
     layout->addWidget(canvas_, 1);
@@ -382,10 +389,22 @@ QtCurveEditorWidget::QtCurveEditorWidget(TimelineEditor* timeline, QWidget* pare
 
     connect(fit, &QPushButton::clicked, this, &QtCurveEditorWidget::fit_view);
     connect(reset, &QPushButton::clicked, this, &QtCurveEditorWidget::reset_view);
-    connect(grid, &QCheckBox::toggled, this, [this](bool checked)
-            { editor_.set_show_grid(checked); canvas_->update(); });
-    connect(tangents, &QCheckBox::toggled, this, [this](bool checked)
-            { editor_.set_show_tangents(checked); canvas_->update(); });
+    connect(grid,
+            &QCheckBox::toggled,
+            this,
+            [this](bool checked)
+            {
+                editor_.set_show_grid(checked);
+                canvas_->update();
+            });
+    connect(tangents,
+            &QCheckBox::toggled,
+            this,
+            [this](bool checked)
+            {
+                editor_.set_show_tangents(checked);
+                canvas_->update();
+            });
 
     timer_ = new QTimer(this);
     timer_->setInterval(33);

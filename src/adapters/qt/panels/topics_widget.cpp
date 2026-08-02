@@ -43,7 +43,7 @@ QtTopicsWidget::QtTopicsWidget(DataSourceRegistry* data_sources, QWidget* parent
 
     // Button row
     auto* button_row = new QHBoxLayout();
-    start_button_ = new QPushButton("Start", content);
+    start_button_    = new QPushButton("Start", content);
     start_button_->setObjectName("source_start_btn");
     start_button_->setEnabled(false);
     button_row->addWidget(start_button_);
@@ -55,12 +55,12 @@ QtTopicsWidget::QtTopicsWidget(DataSourceRegistry* data_sources, QWidget* parent
 
     layout->addLayout(button_row);
 
-    connect(start_button_, &QPushButton::clicked,
-            this, &QtTopicsWidget::on_start_clicked);
-    connect(stop_button_, &QPushButton::clicked,
-            this, &QtTopicsWidget::on_stop_clicked);
-    connect(sources_list_, &QListWidget::itemSelectionChanged,
-            this, &QtTopicsWidget::on_item_selection_changed);
+    connect(start_button_, &QPushButton::clicked, this, &QtTopicsWidget::on_start_clicked);
+    connect(stop_button_, &QPushButton::clicked, this, &QtTopicsWidget::on_stop_clicked);
+    connect(sources_list_,
+            &QListWidget::itemSelectionChanged,
+            this,
+            &QtTopicsWidget::on_item_selection_changed);
 
     refresh();
 }
@@ -78,8 +78,8 @@ void QtTopicsWidget::refresh()
     auto names = data_sources_->source_names();
     for (const auto& name : names)
     {
-        auto* adapter = data_sources_->find(name);
-        QString label = QString::fromStdString(name);
+        auto*   adapter = data_sources_->find(name);
+        QString label   = QString::fromStdString(name);
         if (adapter && adapter->is_running())
             label += "  [running]";
         else
@@ -102,8 +102,8 @@ void QtTopicsWidget::on_start_clicked()
     if (!item || !data_sources_)
         return;
 
-    QString name = item->data(Qt::UserRole).toString();
-    auto* adapter = data_sources_->find(name.toStdString());
+    QString name    = item->data(Qt::UserRole).toString();
+    auto*   adapter = data_sources_->find(name.toStdString());
     if (adapter && !adapter->is_running())
         adapter->start();
 
@@ -116,8 +116,8 @@ void QtTopicsWidget::on_stop_clicked()
     if (!item || !data_sources_)
         return;
 
-    QString name = item->data(Qt::UserRole).toString();
-    auto* adapter = data_sources_->find(name.toStdString());
+    QString name    = item->data(Qt::UserRole).toString();
+    auto*   adapter = data_sources_->find(name.toStdString());
     if (adapter && adapter->is_running())
         adapter->stop();
 
@@ -126,8 +126,8 @@ void QtTopicsWidget::on_stop_clicked()
 
 void QtTopicsWidget::on_item_selection_changed()
 {
-    auto* item = sources_list_->currentItem();
-    bool has_selection = (item != nullptr);
+    auto* item          = sources_list_->currentItem();
+    bool  has_selection = (item != nullptr);
     start_button_->setEnabled(has_selection);
     stop_button_->setEnabled(has_selection);
 }

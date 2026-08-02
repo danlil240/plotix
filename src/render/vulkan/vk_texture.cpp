@@ -29,16 +29,16 @@ TextureHandle VulkanBackend::create_texture(uint32_t       width,
 
     // Create VkImage
     VkImageCreateInfo image_info{};
-    image_info.sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    image_info.imageType     = VK_IMAGE_TYPE_2D;
-    image_info.format        = VK_FORMAT_R8G8B8A8_UNORM;
-    image_info.extent        = {width, height, 1};
-    image_info.mipLevels     = mip_levels;
-    image_info.arrayLayers   = 1;
-    image_info.samples       = VK_SAMPLE_COUNT_1_BIT;
-    image_info.tiling        = VK_IMAGE_TILING_OPTIMAL;
-    image_info.usage         = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
-                               | VK_IMAGE_USAGE_SAMPLED_BIT;
+    image_info.sType       = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    image_info.imageType   = VK_IMAGE_TYPE_2D;
+    image_info.format      = VK_FORMAT_R8G8B8A8_UNORM;
+    image_info.extent      = {width, height, 1};
+    image_info.mipLevels   = mip_levels;
+    image_info.arrayLayers = 1;
+    image_info.samples     = VK_SAMPLE_COUNT_1_BIT;
+    image_info.tiling      = VK_IMAGE_TILING_OPTIMAL;
+    image_info.usage       = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT
+                       | VK_IMAGE_USAGE_SAMPLED_BIT;
     image_info.sharingMode   = VK_SHARING_MODE_EXCLUSIVE;
     image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 

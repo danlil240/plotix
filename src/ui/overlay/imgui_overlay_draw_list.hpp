@@ -26,7 +26,7 @@ struct ImGuiOverlayFont : OverlayFont
 // Maps OverlayDrawList calls to an ImDrawList.
 class ImGuiOverlayDrawList final : public OverlayDrawList
 {
-public:
+   public:
     explicit ImGuiOverlayDrawList(ImDrawList* dl) : dl_(dl) {}
 
     void set_draw_list(ImDrawList* dl) { dl_ = dl; }
@@ -36,28 +36,46 @@ public:
 
     void add_line(OverlayPoint p0, OverlayPoint p1, OverlayColor color, float thickness) override;
 
-    void add_rect_filled(OverlayPoint p0, OverlayPoint p1, OverlayColor color,
-                         float rounding, OverlayRoundCorners corners) override;
+    void add_rect_filled(OverlayPoint        p0,
+                         OverlayPoint        p1,
+                         OverlayColor        color,
+                         float               rounding,
+                         OverlayRoundCorners corners) override;
 
-    void add_rect(OverlayPoint p0, OverlayPoint p1, OverlayColor color,
-                  float rounding, OverlayRoundCorners corners, float thickness) override;
+    void add_rect(OverlayPoint        p0,
+                  OverlayPoint        p1,
+                  OverlayColor        color,
+                  float               rounding,
+                  OverlayRoundCorners corners,
+                  float               thickness) override;
 
-    void add_circle_filled(OverlayPoint center, float radius, OverlayColor color,
-                           int num_segments) override;
+    void add_circle_filled(OverlayPoint center,
+                           float        radius,
+                           OverlayColor color,
+                           int          num_segments) override;
 
-    void add_circle(OverlayPoint center, float radius, OverlayColor color,
-                    int num_segments, float thickness) override;
+    void add_circle(OverlayPoint center,
+                    float        radius,
+                    OverlayColor color,
+                    int          num_segments,
+                    float        thickness) override;
 
-    void add_triangle_filled(OverlayPoint p0, OverlayPoint p1, OverlayPoint p2,
+    void add_triangle_filled(OverlayPoint p0,
+                             OverlayPoint p1,
+                             OverlayPoint p2,
                              OverlayColor color) override;
 
-    void add_text(OverlayFont* font, float font_size, OverlayPoint pos,
-                  OverlayColor color, std::string_view text) override;
+    void add_text(OverlayFont*     font,
+                  float            font_size,
+                  OverlayPoint     pos,
+                  OverlayColor     color,
+                  std::string_view text) override;
 
-    OverlayPoint text_size(OverlayFont* font, float font_size,
+    OverlayPoint text_size(OverlayFont*     font,
+                           float            font_size,
                            std::string_view text) const override;
 
-private:
+   private:
     ImDrawList* dl_ = nullptr;
 };
 

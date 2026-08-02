@@ -67,95 +67,89 @@ void Px4AppShell::on_register_panels()
 void Px4AppShell::on_populate_menus(spectra::ui::shell::MenuBar& bar)
 {
     auto& file = bar.menu("File");
-    file.add({.label = "Open ULog...", .shortcut = "Ctrl+O", .on_click = [this]() { open_ulog_with_dialog(); }});
+    file.add({.label = "Open ULog...", .shortcut = "Ctrl+O", .on_click = [this]() {
+                  open_ulog_with_dialog();
+              }});
     file.add_separator();
     file.add({.label = "Exit", .shortcut = "Ctrl+Q", .on_click = [this]() { request_shutdown(); }});
 
     auto& plots = bar.menu("Plots");
-    plots.add(
-        {.label    = "Auto Plot",
-         .on_click = [this]() { auto_plot_ulog(); },
-         .enabled  = [this]() { return reader_.is_open(); }});
+    plots.add({.label    = "Auto Plot",
+               .on_click = [this]() { auto_plot_ulog(); },
+               .enabled  = [this]() { return reader_.is_open(); }});
     plots.add_separator();
-    plots.add(
-        {.label    = "Close All Plots",
-         .on_click = [this]() { close_all_plots(); },
-         .enabled  = [this]() { return auto_plot_active_ || plot_mgr_.field_count() > 0; }});
+    plots.add({.label    = "Close All Plots",
+               .on_click = [this]() { close_all_plots(); },
+               .enabled  = [this]() { return auto_plot_active_ || plot_mgr_.field_count() > 0; }});
 
     auto& view = bar.menu("View");
-    view.add(
-        {.label    = "Navigation Rail",
-         .on_click =
-             [this]()
-             {
-                 set_nav_rail_visible(!nav_rail_visible());
-                 sync_layout_chrome();
-             },
-         .checked = [this]() { return nav_rail_visible(); }});
-    view.add(
-        {.label    = "Expand Rail",
-         .on_click =
-             [this]()
-             {
-                 set_nav_rail_expanded(!nav_rail_expanded());
-                 sync_layout_chrome();
-             },
-         .enabled = [this]() { return nav_rail_visible(); },
-         .checked = [this]() { return nav_rail_expanded(); }});
+    view.add({.label = "Navigation Rail",
+              .on_click =
+                  [this]()
+              {
+                  set_nav_rail_visible(!nav_rail_visible());
+                  sync_layout_chrome();
+              },
+              .checked = [this]() { return nav_rail_visible(); }});
+    view.add({.label = "Expand Rail",
+              .on_click =
+                  [this]()
+              {
+                  set_nav_rail_expanded(!nav_rail_expanded());
+                  sync_layout_chrome();
+              },
+              .enabled = [this]() { return nav_rail_visible(); },
+              .checked = [this]() { return nav_rail_expanded(); }});
     view.add_separator();
     view.add({.label = "Reset Dock Layout", .on_click = [this]() { request_dock_layout_reset(); }});
     view.add_separator();
 
     if (file_panel_)
     {
-        view.add(
-            {.label    = "Detach ULog Panel",
-             .on_click =
-                 [this]()
-                 {
-                     if (file_panel_->is_detached())
-                         file_panel_->attach();
-                     else
-                         file_panel_->detach();
-                 },
-             .checked = [this]() { return file_panel_->is_detached(); }});
+        view.add({.label = "Detach ULog Panel",
+                  .on_click =
+                      [this]()
+                  {
+                      if (file_panel_->is_detached())
+                          file_panel_->attach();
+                      else
+                          file_panel_->detach();
+                  },
+                  .checked = [this]() { return file_panel_->is_detached(); }});
     }
     if (live_panel_)
     {
-        view.add(
-            {.label    = "Detach Live Panel",
-             .on_click =
-                 [this]()
-                 {
-                     if (live_panel_->is_detached())
-                         live_panel_->attach();
-                     else
-                         live_panel_->detach();
-                 },
-             .checked = [this]() { return live_panel_->is_detached(); }});
+        view.add({.label = "Detach Live Panel",
+                  .on_click =
+                      [this]()
+                  {
+                      if (live_panel_->is_detached())
+                          live_panel_->attach();
+                      else
+                          live_panel_->detach();
+                  },
+                  .checked = [this]() { return live_panel_->is_detached(); }});
     }
 
     auto& connection = bar.menu("Connection");
-    connection.add(
-        {.label    = "Connect",
-         .on_click =
-             [this]()
-             {
-                 bridge_.init(cfg_.host, cfg_.port);
-                 bridge_.start();
-                 plot_mgr_.set_bridge(&bridge_);
-                 set_panel_visible("px4.live_connection", true);
-             },
-         .enabled = [this]() { return !bridge_.is_connected(); }});
-    connection.add(
-        {.label    = "Disconnect",
-         .on_click =
-             [this]()
-             {
-                 bridge_.shutdown();
-                 plot_mgr_.set_bridge(nullptr);
-             },
-         .enabled = [this]() { return bridge_.is_connected(); }});
+    connection.add({.label = "Connect",
+                    .on_click =
+                        [this]()
+                    {
+                        bridge_.init(cfg_.host, cfg_.port);
+                        bridge_.start();
+                        plot_mgr_.set_bridge(&bridge_);
+                        set_panel_visible("px4.live_connection", true);
+                    },
+                    .enabled = [this]() { return !bridge_.is_connected(); }});
+    connection.add({.label = "Disconnect",
+                    .on_click =
+                        [this]()
+                    {
+                        bridge_.shutdown();
+                        plot_mgr_.set_bridge(nullptr);
+                    },
+                    .enabled = [this]() { return bridge_.is_connected(); }});
 }
 
 void Px4AppShell::on_populate_nav_rail(spectra::ui::shell::NavRail& rail)
@@ -225,39 +219,38 @@ void Px4AppShell::on_build_status_bar(spectra::ui::shell::StatusBar& bar)
 {
     bar.clear();
 
-    bar.add_segment(
-        {.align   = spectra::ui::shell::StatusAlign::Left,
-         .draw_fn = [this]()
-         {
-             if (!last_open_error_.empty())
-             {
-                 ImGui::Text("ULog open failed: %s", last_open_error_.c_str());
-                 ImGui::SameLine();
-             }
+    bar.add_segment({.align   = spectra::ui::shell::StatusAlign::Left,
+                     .draw_fn = [this]()
+                     {
+                         if (!last_open_error_.empty())
+                         {
+                             ImGui::Text("ULog open failed: %s", last_open_error_.c_str());
+                             ImGui::SameLine();
+                         }
 
-             if (reader_.is_open())
-             {
-                 ImGui::Text("ULog: %s | Duration: %.1fs | Topics: %zu | Messages: %zu",
-                             reader_.metadata().path.c_str(),
-                             reader_.metadata().duration_sec(),
-                             reader_.topic_count(),
-                             reader_.metadata().message_count);
-             }
+                         if (reader_.is_open())
+                         {
+                             ImGui::Text("ULog: %s | Duration: %.1fs | Topics: %zu | Messages: %zu",
+                                         reader_.metadata().path.c_str(),
+                                         reader_.metadata().duration_sec(),
+                                         reader_.topic_count(),
+                                         reader_.metadata().message_count);
+                         }
 
-             if (bridge_.is_receiving())
-             {
-                 if (reader_.is_open())
-                     ImGui::SameLine();
-                 ImGui::Text("Live: %s:%d (%.0f msg/s)",
-                             bridge_.host().c_str(),
-                             bridge_.port(),
-                             bridge_.message_rate());
-             }
+                         if (bridge_.is_receiving())
+                         {
+                             if (reader_.is_open())
+                                 ImGui::SameLine();
+                             ImGui::Text("Live: %s:%d (%.0f msg/s)",
+                                         bridge_.host().c_str(),
+                                         bridge_.port(),
+                                         bridge_.message_rate());
+                         }
 
-             if (reader_.is_open() || bridge_.is_receiving())
-                 ImGui::SameLine();
-             ImGui::Text("Fields: %zu", plot_mgr_.field_count());
-         }});
+                         if (reader_.is_open() || bridge_.is_receiving())
+                             ImGui::SameLine();
+                         ImGui::Text("Fields: %zu", plot_mgr_.field_count());
+                     }});
 }
 #endif
 

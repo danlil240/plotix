@@ -30,14 +30,14 @@ class PlotOverlayDialog
     void apply();
     void validate_function();
 
-    bool  open_  = false;
-    Mode  mode_  = Mode::HorizontalLine;
-    Axes* axes_  = nullptr;
+    bool  open_ = false;
+    Mode  mode_ = Mode::HorizontalLine;
+    Axes* axes_ = nullptr;
 
-    float value_     = 0.0f;
-    float xmin_      = -1.0f;
-    float xmax_      = 1.0f;
-    int   samples_   = 200;
+    float value_        = 0.0f;
+    float xmin_         = -1.0f;
+    float xmax_         = 1.0f;
+    int   samples_      = 200;
     char  formula_[256] = "x^2";
 
     std::string validation_error_;

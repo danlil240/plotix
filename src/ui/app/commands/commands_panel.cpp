@@ -30,10 +30,9 @@ std::vector<CommandDescriptor> make_panel_commands(CommandContext& ctx)
             return;
         const bool was = shell->panel_visible(id);
         shell->toggle_panel(id);
-        undo_mgr.push(UndoAction{
-            was ? undo_hide : undo_show,
-            [shell, id, was]() { shell->set_panel_visible(id, was); },
-            [shell, id, was]() { shell->set_panel_visible(id, !was); }});
+        undo_mgr.push(UndoAction{was ? undo_hide : undo_show,
+                                 [shell, id, was]() { shell->set_panel_visible(id, was); },
+                                 [shell, id, was]() { shell->set_panel_visible(id, !was); }});
     };
 
     cmds.push_back({"panel.toggle_timeline",
@@ -49,20 +48,19 @@ std::vector<CommandDescriptor> make_panel_commands(CommandContext& ctx)
                             imgui_ui->set_timeline_visible(!imgui_ui->is_timeline_visible());
                     }});
 
-    cmds.push_back({"panel.toggle_curve_editor",
-                    "Toggle Curve Editor",
-                    "",
-                    "Panel",
-                    0,
-                    [&]()
-                    {
-                        if (shell)
-                            toggle_shell_panel(
-                                "core.curve_editor", "Show curve editor", "Hide curve editor");
-                        else if (imgui_ui)
-                            imgui_ui->set_curve_editor_visible(
-                                !imgui_ui->is_curve_editor_visible());
-                    }});
+    cmds.push_back(
+        {"panel.toggle_curve_editor",
+         "Toggle Curve Editor",
+         "",
+         "Panel",
+         0,
+         [&]()
+         {
+             if (shell)
+                 toggle_shell_panel("core.curve_editor", "Show curve editor", "Hide curve editor");
+             else if (imgui_ui)
+                 imgui_ui->set_curve_editor_visible(!imgui_ui->is_curve_editor_visible());
+         }});
 
     cmds.push_back({"panel.toggle_plugins",
                     "Toggle Plugins Panel",
@@ -91,12 +89,9 @@ std::vector<CommandDescriptor> make_panel_commands(CommandContext& ctx)
                             ui_ctx.topics_panel.set_visible(!ui_ctx.topics_panel.is_visible());
                     }});
 
-    cmds.push_back({"panel.open_settings",
-                    "Settings",
-                    "",
-                    "Panel",
-                    0,
-                    [&]() { ui_ctx.settings_panel.open(); }});
+    cmds.push_back({"panel.open_settings", "Settings", "", "Panel", 0, [&]() {
+                        ui_ctx.settings_panel.open();
+                    }});
 
     cmds.push_back(
         {"panel.toggle_inspector",

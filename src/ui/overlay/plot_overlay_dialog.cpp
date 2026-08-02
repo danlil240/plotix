@@ -25,8 +25,8 @@ void PlotOverlayDialog::open(Axes* axes, Mode mode)
     {
         const auto xl = axes_->x_limits();
         const auto yl = axes_->y_limits();
-        xmin_ = static_cast<float>(xl.min);
-        xmax_ = static_cast<float>(xl.max);
+        xmin_         = static_cast<float>(xl.min);
+        xmax_         = static_cast<float>(xl.max);
         if (mode_ == Mode::HorizontalLine)
             value_ = 0.0f;
         else if (mode_ == Mode::VerticalLine)

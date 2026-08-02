@@ -54,7 +54,7 @@ class QtAccessibilityWidget : public QDockWidget
    private:
     void build_ui();
 
-    FigureRegistry* registry_ = nullptr;
+    FigureRegistry* registry_  = nullptr;
     DialogService*  dialogs_   = nullptr;
     FigureId        active_id_ = INVALID_FIGURE_ID;
 
@@ -68,8 +68,8 @@ class QtAccessibilityWidget : public QDockWidget
     QLabel*         sonify_status_  = nullptr;
 
     // HTML table export
-    QPushButton*    html_btn_       = nullptr;
-    QLabel*         html_status_    = nullptr;
+    QPushButton* html_btn_    = nullptr;
+    QLabel*      html_status_ = nullptr;
 };
 
 }   // namespace spectra::adapters::qt

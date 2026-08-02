@@ -57,8 +57,8 @@ class QtCommandPaletteDialog : public QDialog
 
     CommandRegistry& registry_;
 
-    QLineEdit*   search_edit_    = nullptr;
-    QListWidget* results_list_   = nullptr;
+    QLineEdit*   search_edit_  = nullptr;
+    QListWidget* results_list_ = nullptr;
 
     // Cached search results parallel to results_list_ items
     std::vector<std::string> result_command_ids_;

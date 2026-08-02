@@ -154,7 +154,7 @@ static void trim_to_capacity(SpectraSeries* s)
 {
     if (!s || s->capacity == 0)
         return;
-    const auto cap = static_cast<size_t>(s->capacity);
+    const auto cap  = static_cast<size_t>(s->capacity);
     auto       trim = [cap](auto* series)
     {
         auto         x     = series->x_data();
@@ -255,12 +255,12 @@ extern "C"
         cfg.show_imgui_chrome = (in->show_imgui_chrome != 0) || (in->show_command_bar != 0)
                                 || (in->show_status_bar != 0) || (in->show_nav_rail != 0)
                                 || (in->show_inspector != 0);
-        cfg.show_command_bar  = in->show_command_bar != 0;
-        cfg.show_status_bar   = in->show_status_bar != 0;
-        cfg.show_nav_rail     = in->show_nav_rail != 0;
-        cfg.show_inspector    = in->show_inspector != 0;
-        cfg.show_legend       = in->show_legend != 0;
-        cfg.show_crosshair    = in->show_crosshair != 0;
+        cfg.show_command_bar = in->show_command_bar != 0;
+        cfg.show_status_bar  = in->show_status_bar != 0;
+        cfg.show_nav_rail    = in->show_nav_rail != 0;
+        cfg.show_inspector   = in->show_inspector != 0;
+        cfg.show_legend      = in->show_legend != 0;
+        cfg.show_crosshair   = in->show_crosshair != 0;
 
         auto* s = new (std::nothrow) SpectraEmbed(cfg);
         if (!s || !s->surface.is_valid())

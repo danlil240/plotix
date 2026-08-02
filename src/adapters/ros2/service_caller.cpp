@@ -528,17 +528,13 @@ std::string ServiceCaller::record_to_json(const CallRecord& rec)
 {
     std::string        state_str = call_state_name(rec.state.load(std::memory_order_acquire));
     std::ostringstream oss;
-    oss << "{"
-        << "\"id\": " << rec.id << ", "
-        << R"("service": ")" << json_escape(rec.service_name) << "\", "
-        << R"("type": ")" << json_escape(rec.service_type) << "\", "
+    oss << "{" << "\"id\": " << rec.id << ", " << R"("service": ")" << json_escape(rec.service_name)
+        << "\", " << R"("type": ")" << json_escape(rec.service_type) << "\", "
         << "\"request\": " << (rec.request_json.empty() ? "{}" : rec.request_json) << ", "
         << "\"response\": " << (rec.response_json.empty() ? "{}" : rec.response_json) << ", "
         << R"("state": ")" << json_escape(state_str) << "\", "
-        << "\"latency_ms\": " << rec.latency_ms << ", "
-        << "\"call_time\": " << rec.call_time_s << ", "
-        << R"("error": ")" << json_escape(rec.error_message) << "\""
-        << "}";
+        << "\"latency_ms\": " << rec.latency_ms << ", " << "\"call_time\": " << rec.call_time_s
+        << ", " << R"("error": ")" << json_escape(rec.error_message) << "\"" << "}";
     return oss.str();
 }
 

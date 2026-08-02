@@ -173,17 +173,18 @@ void PathDisplay::set_topic(const std::string& topic)
     topic_ = topic;
     topic_.copy(topic_input_.data(), topic_input_.size() - 1);
     topic_input_[std::min(topic_.size(), topic_input_.size() - 1)] = '\0';
-    resubscribe_requested_ = true;
+    resubscribe_requested_                                         = true;
 }
 
 std::string PathDisplay::serialize_config_blob() const
 {
-    return std::format("topic={};line_width={:.2f};alpha={:.2f};pose_arrows={};use_message_stamp={}",
-                       topic_,
-                       line_width_,
-                       alpha_,
-                       show_pose_arrows_ ? 1 : 0,
-                       use_message_stamp_ ? 1 : 0);
+    return std::format(
+        "topic={};line_width={:.2f};alpha={:.2f};pose_arrows={};use_message_stamp={}",
+        topic_,
+        line_width_,
+        alpha_,
+        show_pose_arrows_ ? 1 : 0,
+        use_message_stamp_ ? 1 : 0);
 }
 
 void PathDisplay::deserialize_config_blob(const std::string& blob)

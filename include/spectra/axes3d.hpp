@@ -134,10 +134,10 @@ class Axes3D : public AxesBase
     std::string zlabel_;
 
     std::unique_ptr<Camera> camera_;
-    int                     grid_planes_       = static_cast<int>(GridPlane::All);
-    bool                    show_bounding_box_ = true;
-    vec3                    light_dir_         = {1.0f, 1.0f, 1.0f};   // Default: top-right-front
-    bool                    lighting_enabled_  = true;
+    int                     grid_planes_        = static_cast<int>(GridPlane::All);
+    bool                    show_bounding_box_  = true;
+    vec3                    light_dir_          = {1.0f, 1.0f, 1.0f};   // Default: top-right-front
+    bool                    lighting_enabled_   = true;
     AxisArrowHover          hovered_axis_arrow_ = AxisArrowHover::None;
 };
 

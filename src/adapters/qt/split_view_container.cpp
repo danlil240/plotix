@@ -218,9 +218,7 @@ class WelcomePage final : public QWidget
 #else
         version = QStringLiteral("v0.1.2");
 #endif
-        p.drawText(QRect(0, h - 30 - 30, w, 30),
-                   Qt::AlignHCenter | Qt::AlignBottom,
-                   version);
+        p.drawText(QRect(0, h - 30 - 30, w, 30), Qt::AlignHCenter | Qt::AlignBottom, version);
     }
 
    private:

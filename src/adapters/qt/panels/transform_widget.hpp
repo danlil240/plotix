@@ -40,7 +40,7 @@ class QtTransformWidget : public QDockWidget
                                QWidget*                  parent       = nullptr);
     ~QtTransformWidget() override = default;
 
-    void set_active_figure(FigureId id);
+    void                                         set_active_figure(FigureId id);
     std::optional<WorkspaceData::TransformState> capture_pipeline_state(FigureId id,
                                                                         size_t   figure_index);
     void restore_pipeline_state(FigureId id, const WorkspaceData::TransformState& state);
@@ -72,7 +72,7 @@ class QtTransformWidget : public QDockWidget
     void on_apply_formula();
 
    private:
-    void build_ui();
+    void        build_ui();
     void        save_active_pipeline();
     void        load_active_pipeline();
     void        rebuild_pipeline_list();
@@ -91,10 +91,10 @@ class QtTransformWidget : public QDockWidget
     ::spectra::RedrawRequest* redraw_       = nullptr;
     FigureId                  active_id_    = INVALID_FIGURE_ID;
 
-    QComboBox* transform_combo_   = nullptr;
+    QComboBox*   transform_combo_   = nullptr;
     QComboBox*   target_combo_      = nullptr;
     QListWidget* target_list_       = nullptr;
-    QLabel*    description_label_ = nullptr;
+    QLabel*      description_label_ = nullptr;
     QLabel*      preview_label_     = nullptr;
     QLineEdit*   formula_edit_      = nullptr;
     QLabel*      formula_status_    = nullptr;
@@ -121,7 +121,7 @@ class QtTransformWidget : public QDockWidget
     QPushButton* save_preset_btn_  = nullptr;
     QPushButton* load_preset_btn_  = nullptr;
 
-    TransformPipeline pipeline_;
+    TransformPipeline                            pipeline_;
     std::unordered_map<FigureId, StoredPipeline> figure_pipelines_;
 };
 

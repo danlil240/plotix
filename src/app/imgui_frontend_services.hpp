@@ -28,20 +28,16 @@ class ImGuiDialogService final : public DialogService
    public:
     ImGuiDialogService() = default;
 
-    std::optional<std::string> file_dialog(
-        FileType                     type,
-        const std::string&           title,
-        const std::string&           default_path,
-        const std::vector<FileFilter>& filters) override;
+    std::optional<std::string> file_dialog(FileType                       type,
+                                           const std::string&             title,
+                                           const std::string&             default_path,
+                                           const std::vector<FileFilter>& filters) override;
 
-    bool message_box(
-        const std::string& title,
-        const std::string& message,
-        bool               cancel_button = false) override;
+    bool message_box(const std::string& title,
+                     const std::string& message,
+                     bool               cancel_button = false) override;
 
-    std::optional<Color> color_picker(
-        const std::string& title,
-        const Color&       initial) override;
+    std::optional<Color> color_picker(const std::string& title, const Color& initial) override;
 };
 
 // ─── ImGuiClipboardService ───────────────────────────────────────────────────
@@ -51,8 +47,8 @@ class ImGuiClipboardService final : public ClipboardService
    public:
     ImGuiClipboardService() = default;
 
-    void copy_text(const std::string& text) override;
-    void copy_image(const std::vector<uint8_t>& png_data) override;
+    void        copy_text(const std::string& text) override;
+    void        copy_image(const std::vector<uint8_t>& png_data) override;
     std::string paste_text() override;
 };
 
@@ -77,19 +73,18 @@ class ImGuiWindowService final : public WindowService
    public:
     explicit ImGuiWindowService(WindowManager& wm) : wm_(wm) {}
 
-    FigureId create_window(
-        const std::string& title,
-        uint32_t           width  = 800,
-        uint32_t           height = 600) override;
+    FigureId create_window(const std::string& title,
+                           uint32_t           width  = 800,
+                           uint32_t           height = 600) override;
 
-    void close_window(FigureId figure_id) override;
-    void focus_window(FigureId figure_id) override;
+    void   close_window(FigureId figure_id) override;
+    void   focus_window(FigureId figure_id) override;
     size_t window_count() const override;
 
    private:
     WindowManager& wm_;
 };
 
-#endif // SPECTRA_USE_GLFW || SPECTRA_USE_SDL3
+#endif   // SPECTRA_USE_GLFW || SPECTRA_USE_SDL3
 
 }   // namespace spectra

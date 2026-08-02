@@ -195,22 +195,23 @@ void NavRail::draw()
                 ++button_count;
         }
 
-        const float scale = layout_manager_
-                                ? LayoutManager::nav_rail_scale_for_height(
-                                      layout_manager_->nav_rail_rect().h, button_count, sep_count)
-                                : 1.0f;
+        const float scale = layout_manager_ ? LayoutManager::nav_rail_scale_for_height(
+                                                  layout_manager_->nav_rail_rect().h,
+                                                  button_count,
+                                                  sep_count)
+                                            : 1.0f;
 
         auto draw_separator = [&]()
         {
             if (!layout_manager_)
                 return;
             const spectra::Rect bounds = layout_manager_->nav_rail_rect();
-            const float       rail_w   = bounds.w;
+            const float         rail_w = bounds.w;
             ImGui::Dummy(ImVec2(0, ui::tokens::SPACE_2 * scale));
             const float sep_inset = ui::tokens::SPACE_4 * scale;
             ImVec2      p0        = ImVec2(ImGui::GetWindowPos().x + sep_inset,
-                                  std::floor(ImGui::GetCursorScreenPos().y));
-            ImVec2 p1 = ImVec2(ImGui::GetWindowPos().x + rail_w - sep_inset, p0.y);
+                               std::floor(ImGui::GetCursorScreenPos().y));
+            ImVec2      p1        = ImVec2(ImGui::GetWindowPos().x + rail_w - sep_inset, p0.y);
             ImGui::GetWindowDrawList()->AddLine(
                 p0,
                 p1,
@@ -247,12 +248,12 @@ void NavRail::draw()
             if (imgui_chrome_)
             {
                 clicked = imgui_chrome_->icon_label_button_rail(ui::icon_str(item.icon),
-                                                                  item.label.c_str(),
-                                                                  active,
-                                                                  imgui_chrome_->icon_font(),
-                                                                  imgui_chrome_->heading_font(),
-                                                                  btn_w,
-                                                                  scale);
+                                                                item.label.c_str(),
+                                                                active,
+                                                                imgui_chrome_->icon_font(),
+                                                                imgui_chrome_->heading_font(),
+                                                                btn_w,
+                                                                scale);
             }
             else
             {
@@ -315,13 +316,12 @@ void NavRail::draw()
                                   IM_COL32(0, 0, 0, static_cast<int>(alpha * 255)));
             }
         }
-        dl->AddLine(ImVec2(right_edge - 1.0f, bounds.y),
-                    ImVec2(right_edge - 1.0f, bounds.y + bounds.h),
-                    ImGui::ColorConvertFloat4ToU32(ImVec4(theme.border_subtle.r,
-                                                          theme.border_subtle.g,
-                                                          theme.border_subtle.b,
-                                                          0.52f)),
-                    1.0f);
+        dl->AddLine(
+            ImVec2(right_edge - 1.0f, bounds.y),
+            ImVec2(right_edge - 1.0f, bounds.y + bounds.h),
+            ImGui::ColorConvertFloat4ToU32(
+                ImVec4(theme.border_subtle.r, theme.border_subtle.g, theme.border_subtle.b, 0.52f)),
+            1.0f);
         draw_content();
     }
     ImGui::End();

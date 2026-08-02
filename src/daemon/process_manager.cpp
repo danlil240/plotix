@@ -10,7 +10,7 @@
     #ifdef __APPLE__
         #include <crt_externs.h>
     #else
-        extern char** environ;
+extern char** environ;
     #endif
 #endif
 

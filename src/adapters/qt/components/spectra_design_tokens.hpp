@@ -29,6 +29,7 @@ struct SpectraColors
     QColor header_surface{0x0A, 0x0F, 0x18};
     QColor workspace_surface{0x10, 0x17, 0x25};
     QColor panel_surface{0x11, 0x18, 0x27};
+    QColor bg_tertiary{0x18, 0x20, 0x2E};
     QColor input_surface{0x1E, 0x28, 0x38};
     QColor elevated_surface{0x22, 0x2D, 0x3F};
 
@@ -56,6 +57,9 @@ struct SpectraColors
     // Glow
     QColor cyan_glow{0x8C, 0xD1, 0xFF, 0x73};
     QColor purple_glow{0x94, 0x73, 0xF5, 0x20};
+
+    // Inspector section header band
+    QColor section_header_bg{0xB3, 0xC7, 0xD6, 0x0E};
 };
 
 // ─── Geometry Tokens ─────────────────────────────────────────────────────────

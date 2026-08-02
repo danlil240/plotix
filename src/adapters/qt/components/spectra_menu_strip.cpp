@@ -5,11 +5,18 @@
 
 #include <QCursor>
 #include <QEnterEvent>
+#include <QHash>
 #include <QHBoxLayout>
 #include <QMenu>
+#include <QPoint>
 #include <QSizePolicy>
 #include <QString>
 #include <QTimer>
+
+namespace
+{
+constexpr int k_menu_exit_threshold = 5;
+}   // namespace
 
 namespace spectra::adapters::qt
 {
@@ -77,13 +84,12 @@ void SpectraMenuButton::enterEvent(QEnterEvent* event)
 
 SpectraMenuStrip::~SpectraMenuStrip() = default;
 
-SpectraMenuStrip::SpectraMenuStrip(QWidget* parent) : QWidget(parent)
+SpectraMenuStrip::SpectraMenuStrip(QWidget* parent)
+    : QWidget(parent), layout_(new QHBoxLayout(this)), hover_timer_(new QTimer(this))
 {
-    layout_ = new QHBoxLayout(this);
     layout_->setContentsMargins(0, 0, 0, 0);
     layout_->setSpacing(6);
 
-    hover_timer_ = new QTimer(this);
     hover_timer_->setInterval(30);
     hover_timer_->setSingleShot(false);
     connect(hover_timer_, &QTimer::timeout, this, &SpectraMenuStrip::on_hover_poll);
@@ -95,20 +101,15 @@ void SpectraMenuStrip::add_menu_button(const QString& label, QMenu* menu)
     // Widths are the measured legacy ImGui menu advances minus the six-pixel
     // inter-item gap. This keeps every label on the same x coordinate even
     // though Qt and ImGui use different text rasterizers.
-    if (label == "File")
-        btn->setFixedWidth(52);
-    else if (label == "Edit")
-        btn->setFixedWidth(53);
-    else if (label == "View")
-        btn->setFixedWidth(59);
-    else if (label == "Tools")
-        btn->setFixedWidth(62);
-    else if (label == "Plot")
-        btn->setFixedWidth(53);
-    else if (label == "Data")
-        btn->setFixedWidth(55);
-    else if (label == "Axes")
-        btn->setFixedWidth(60);
+    static const QHash<QString, int> k_label_widths = {{"File", 52},
+                                                       {"Edit", 53},
+                                                       {"View", 59},
+                                                       {"Tools", 62},
+                                                       {"Plot", 53},
+                                                       {"Data", 55},
+                                                       {"Axes", 60}};
+    if (auto it = k_label_widths.find(label); it != k_label_widths.end())
+        btn->setFixedWidth(it.value());
     layout_->addWidget(btn);
     buttons_.append(btn);
 
@@ -121,6 +122,8 @@ void SpectraMenuStrip::add_menu_button(const QString& label, QMenu* menu)
 
 void SpectraMenuStrip::on_button_entered(SpectraMenuButton* button)
 {
+    if (switching_)
+        return;
     if (!open_menu_)
         return;
     if (open_button_ == button)
@@ -128,8 +131,27 @@ void SpectraMenuStrip::on_button_entered(SpectraMenuButton* button)
     if (!button || !button->menu())
         return;
 
+    switching_         = true;
+    menu_exit_counter_ = 0;
+
+    SpectraMenuButton* old_button = open_button_;
     open_menu_->close();
     button->popup_menu();
+
+    // The active popup can prevent normal enter/leave events from reaching
+    // the QPushButton children, so update their hover state explicitly.
+    if (old_button && old_button != button)
+    {
+        old_button->setAttribute(Qt::WA_UnderMouse, false);
+        old_button->update();
+    }
+    if (is_cursor_over_button(button))
+    {
+        button->setAttribute(Qt::WA_UnderMouse, true);
+        button->update();
+    }
+
+    switching_ = false;
 }
 
 SpectraMenuButton* SpectraMenuStrip::button_for_menu(QMenu* menu) const
@@ -149,16 +171,46 @@ bool SpectraMenuStrip::is_cursor_over_button(SpectraMenuButton* button) const
     return global_rect.contains(QCursor::pos());
 }
 
+bool SpectraMenuStrip::is_cursor_in_top_zone(const QPoint& cursor) const
+{
+    if (!isVisible() || buttons_.isEmpty())
+        return false;
+    QRect rect = this->rect();
+    rect.moveTopLeft(mapToGlobal(rect.topLeft()));
+    const int margin = 20;
+    rect.adjust(-margin, -margin, margin, margin);
+    return rect.contains(cursor);
+}
+
+bool SpectraMenuStrip::is_cursor_in_menu_zone(const QPoint& cursor) const
+{
+    if (!open_menu_)
+        return false;
+    QRect     menu_geo = open_menu_->frameGeometry();
+    const int margin   = 10;
+    menu_geo.adjust(-margin, -margin, margin, margin);
+    return menu_geo.contains(cursor);
+}
+
 void SpectraMenuStrip::on_menu_about_to_show()
 {
     auto* menu = qobject_cast<QMenu*>(sender());
     if (!menu)
         return;
-    open_menu_   = menu;
-    open_button_ = button_for_menu(menu);
-    had_hover_   = is_cursor_over_button(open_button_);
+    open_menu_         = menu;
+    open_button_       = button_for_menu(menu);
+    had_hover_         = is_cursor_over_button(open_button_);
+    menu_exit_counter_ = 0;
     if (hover_timer_ && !hover_timer_->isActive())
         hover_timer_->start();
+
+    // Ensure the button under the cursor is highlighted even if the popup
+    // prevented the normal enter event from being delivered.
+    if (open_button_ && had_hover_ && !open_button_->underMouse())
+    {
+        open_button_->setAttribute(Qt::WA_UnderMouse, true);
+        open_button_->update();
+    }
 }
 
 void SpectraMenuStrip::on_menu_about_to_hide()
@@ -166,9 +218,18 @@ void SpectraMenuStrip::on_menu_about_to_hide()
     auto* menu = qobject_cast<QMenu*>(sender());
     if (open_menu_ == menu)
     {
-        open_menu_   = nullptr;
-        open_button_ = nullptr;
-        had_hover_   = false;
+        // Clear the highlight from the previously open button if the cursor
+        // is no longer over it, otherwise stale hover states can linger.
+        if (open_button_ && !is_cursor_over_button(open_button_))
+        {
+            open_button_->setAttribute(Qt::WA_UnderMouse, false);
+            open_button_->update();
+        }
+
+        open_menu_         = nullptr;
+        open_button_       = nullptr;
+        had_hover_         = false;
+        menu_exit_counter_ = 0;
         if (hover_timer_ && hover_timer_->isActive())
             hover_timer_->stop();
     }
@@ -176,7 +237,7 @@ void SpectraMenuStrip::on_menu_about_to_hide()
 
 void SpectraMenuStrip::on_hover_poll()
 {
-    if (!open_menu_)
+    if (!open_menu_ || switching_)
         return;
 
     const QPoint cursor = QCursor::pos();
@@ -193,38 +254,33 @@ void SpectraMenuStrip::on_hover_poll()
         global_rect.moveTopLeft(btn->mapToGlobal(global_rect.topLeft()));
         if (global_rect.contains(cursor))
         {
+            menu_exit_counter_ = 0;
             on_button_entered(btn);
             return;
         }
     }
 
-    // Track that the cursor has entered the open menu's zone.
-    if (open_button_ && is_cursor_over_button(open_button_))
+    // Keep the menu open while the cursor is anywhere in the menu bar or
+    // inside the open popup. This prevents fast mouse movements from
+    // dismissing the menu when the cursor briefly crosses empty space.
+    if (is_cursor_in_top_zone(cursor) || is_cursor_in_menu_zone(cursor))
     {
-        had_hover_ = true;
+        had_hover_         = true;
+        menu_exit_counter_ = 0;
         return;
-    }
-
-    // Keep open while the cursor is inside the menu (with a small margin to
-    // bridge the gap between the button and the popup).
-    if (open_menu_)
-    {
-        QRect     menu_geo = open_menu_->frameGeometry();
-        const int margin   = 10;
-        menu_geo.adjust(-margin, -margin, margin, margin);
-        if (menu_geo.contains(cursor))
-        {
-            had_hover_ = true;
-            return;
-        }
     }
 
     // If the cursor has never entered the menu zone, keep the menu open
-    // (e.g. it was opened by a keyboard shortcut or automation call).
+    // (e.g., it was opened by a keyboard shortcut or automation call).
     if (!had_hover_)
         return;
 
-    // Cursor has left the menu zone; close it.
+    // Require the cursor to be outside the menu zone for several polls
+    // before closing, so brief overshoots during fast movement do not
+    // dismiss the menu.
+    if (++menu_exit_counter_ < k_menu_exit_threshold)
+        return;
+
     open_menu_->close();
 }
 

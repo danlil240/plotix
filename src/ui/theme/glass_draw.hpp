@@ -48,25 +48,24 @@ inline void draw_ambient_gradient(ImDrawList*        dl,
                                     color_u32(bottom_right),
                                     color_u32(bottom_left));
 
-        const int teal_a   = static_cast<int>(22.0f + 34.0f * g);
-        const int indigo_a = static_cast<int>(14.0f + 26.0f * g);
-        const Color teal   = colors.accent.lerp(Color::from_hex(0x67E8F9), 0.32f);
-        const Color indigo = colors.info.lerp(Color::from_hex(0xA78BFA), 0.40f);
-        dl->AddRectFilledMultiColor(p0,
-                                    ImVec2(p0.x + (p1.x - p0.x) * 0.42f, p1.y),
-                                    color_u32(teal.with_alpha(static_cast<float>(teal_a) / 255.0f)),
-                                    IM_COL32(255, 255, 255, 0),
-                                    IM_COL32(255, 255, 255, 0),
-                                    color_u32(
-                                        teal.with_alpha(static_cast<float>(teal_a / 2) / 255.0f)));
-        dl->AddRectFilledMultiColor(ImVec2(p0.x + (p1.x - p0.x) * 0.55f, p0.y),
-                                    p1,
-                                    IM_COL32(255, 255, 255, 0),
-                                    color_u32(
-                                        indigo.with_alpha(static_cast<float>(indigo_a) / 255.0f)),
-                                    color_u32(
-                                        indigo.with_alpha(static_cast<float>(indigo_a / 2) / 255.0f)),
-                                    IM_COL32(255, 255, 255, 0));
+        const int   teal_a   = static_cast<int>(22.0f + 34.0f * g);
+        const int   indigo_a = static_cast<int>(14.0f + 26.0f * g);
+        const Color teal     = colors.accent.lerp(Color::from_hex(0x67E8F9), 0.32f);
+        const Color indigo   = colors.info.lerp(Color::from_hex(0xA78BFA), 0.40f);
+        dl->AddRectFilledMultiColor(
+            p0,
+            ImVec2(p0.x + (p1.x - p0.x) * 0.42f, p1.y),
+            color_u32(teal.with_alpha(static_cast<float>(teal_a) / 255.0f)),
+            IM_COL32(255, 255, 255, 0),
+            IM_COL32(255, 255, 255, 0),
+            color_u32(teal.with_alpha(static_cast<float>(teal_a / 2) / 255.0f)));
+        dl->AddRectFilledMultiColor(
+            ImVec2(p0.x + (p1.x - p0.x) * 0.55f, p0.y),
+            p1,
+            IM_COL32(255, 255, 255, 0),
+            color_u32(indigo.with_alpha(static_cast<float>(indigo_a) / 255.0f)),
+            color_u32(indigo.with_alpha(static_cast<float>(indigo_a / 2) / 255.0f)),
+            IM_COL32(255, 255, 255, 0));
         return;
     }
 
@@ -83,24 +82,24 @@ inline void draw_ambient_gradient(ImDrawList*        dl,
                                     color_u32(bottom_right),
                                     color_u32(bottom_left));
 
-        const int cool_a  = static_cast<int>(14.0f + 24.0f * g);
-        const int slate_a = static_cast<int>(10.0f + 18.0f * g);
-        const Color cool  = colors.accent.lerp(Color::from_hex(0x7DD3FC), 0.24f);
-        const Color slate = colors.border_strong.lerp(Color::from_hex(0xA5B4FC), 0.18f);
-        dl->AddRectFilledMultiColor(p0,
-                                    ImVec2(p0.x + (p1.x - p0.x) * 0.40f, p1.y),
-                                    color_u32(cool.with_alpha(static_cast<float>(cool_a) / 255.0f)),
-                                    IM_COL32(0, 0, 0, 0),
-                                    IM_COL32(0, 0, 0, 0),
-                                    color_u32(
-                                        cool.with_alpha(static_cast<float>(cool_a / 2) / 255.0f)));
-        dl->AddRectFilledMultiColor(ImVec2(p0.x + (p1.x - p0.x) * 0.62f, p0.y),
-                                    p1,
-                                    IM_COL32(0, 0, 0, 0),
-                                    color_u32(slate.with_alpha(static_cast<float>(slate_a) / 255.0f)),
-                                    color_u32(
-                                        slate.with_alpha(static_cast<float>(slate_a / 2) / 255.0f)),
-                                    IM_COL32(0, 0, 0, 0));
+        const int   cool_a  = static_cast<int>(14.0f + 24.0f * g);
+        const int   slate_a = static_cast<int>(10.0f + 18.0f * g);
+        const Color cool    = colors.accent.lerp(Color::from_hex(0x7DD3FC), 0.24f);
+        const Color slate   = colors.border_strong.lerp(Color::from_hex(0xA5B4FC), 0.18f);
+        dl->AddRectFilledMultiColor(
+            p0,
+            ImVec2(p0.x + (p1.x - p0.x) * 0.40f, p1.y),
+            color_u32(cool.with_alpha(static_cast<float>(cool_a) / 255.0f)),
+            IM_COL32(0, 0, 0, 0),
+            IM_COL32(0, 0, 0, 0),
+            color_u32(cool.with_alpha(static_cast<float>(cool_a / 2) / 255.0f)));
+        dl->AddRectFilledMultiColor(
+            ImVec2(p0.x + (p1.x - p0.x) * 0.62f, p0.y),
+            p1,
+            IM_COL32(0, 0, 0, 0),
+            color_u32(slate.with_alpha(static_cast<float>(slate_a) / 255.0f)),
+            color_u32(slate.with_alpha(static_cast<float>(slate_a / 2) / 255.0f)),
+            IM_COL32(0, 0, 0, 0));
         return;
     }
 
@@ -188,8 +187,7 @@ inline void draw_glass_rect(ImDrawList*               dl,
     // Top inner highlight (glass edge catch-light)
     if (glow > 0.01f)
     {
-        const int hi_a =
-            static_cast<int>((30.0f + 26.0f * (1.0f - alpha)) * glow);
+        const int hi_a = static_cast<int>((30.0f + 26.0f * (1.0f - alpha)) * glow);
         dl->AddLine(ImVec2(p0.x + rounding * 0.5f, p0.y + 1.0f),
                     ImVec2(p1.x - rounding * 0.5f, p0.y + 1.0f),
                     IM_COL32(225, 244, 255, hi_a),
@@ -419,7 +417,7 @@ inline void draw_vision_canvas_frame(ImDrawList*        dl,
         {
             float e = static_cast<float>(i) * 1.25f;
             int   a = static_cast<int>(ui::tokens::CANVAS_FRAME_GLOW_ALPHA * 255.0f * glow * master
-                                      * (3 - i) / 2.0f);
+                                     * (3 - i) / 2.0f);
             dl->AddRect(ImVec2(p0.x - e, p0.y - e),
                         ImVec2(p1.x + e, p1.y + e),
                         color_u32(frame_col.with_alpha(static_cast<float>(a) / 255.0f)),
@@ -431,12 +429,7 @@ inline void draw_vision_canvas_frame(ImDrawList*        dl,
 
     // Primary border — crisp but quiet.
     const float edge_alpha = ui::tokens::CANVAS_FRAME_BORDER_ALPHA + 0.18f * glow * master;
-    dl->AddRect(p0,
-                p1,
-                color_u32(frame_col.with_alpha(edge_alpha)),
-                rounding,
-                corner_flags,
-                1.25f);
+    dl->AddRect(p0, p1, color_u32(frame_col.with_alpha(edge_alpha)), rounding, corner_flags, 1.25f);
 
     // Inner rim — gives the plot a recessed, intentional feel.
     dl->AddRect(ImVec2(p0.x + inset, p0.y + inset),
@@ -450,7 +443,7 @@ inline void draw_vision_canvas_frame(ImDrawList*        dl,
     // Subtle inner shadow / vignette to integrate the canvas with the chrome.
     const float vignette_band = std::min(24.0f, (p1.y - p0.y) * 0.10f);
     const int   vignette_a    = static_cast<int>(ui::tokens::CANVAS_VIGNETTE_ALPHA * 255.0f
-                                              * (0.7f + 0.3f * glow * master));
+                                            * (0.7f + 0.3f * glow * master));
     dl->AddRectFilledMultiColor(p0,
                                 ImVec2(p1.x, p0.y + vignette_band),
                                 IM_COL32(0, 0, 0, vignette_a),

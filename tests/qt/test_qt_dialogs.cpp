@@ -23,7 +23,8 @@
 #include <atomic>
 #include <cstdlib>
 
-namespace {
+namespace
+{
 
 struct QtDialogEnv
 {
@@ -36,16 +37,14 @@ QtDialogEnv& env()
     return e;
 }
 
-} // namespace
+}   // namespace
 
 // ── NullDialogService ────────────────────────────────────────────────────────
 
 TEST(QtDialogs, NullDialogServiceReturnsNullopt)
 {
     spectra::NullDialogService svc;
-    auto result = svc.file_dialog(
-        spectra::DialogService::FileType::Open,
-        "Test", "/tmp", {});
+    auto result = svc.file_dialog(spectra::DialogService::FileType::Open, "Test", "/tmp", {});
     EXPECT_FALSE(result.has_value());
     EXPECT_FALSE(svc.number_input("Number", "Value", 0.0, -1.0, 1.0, 2));
 }
@@ -60,8 +59,8 @@ TEST(QtDialogs, NullDialogServiceMessageBoxReturnsTrue)
 TEST(QtDialogs, NullDialogServiceColorPickerReturnsNullopt)
 {
     spectra::NullDialogService svc;
-    spectra::Color c{1.0f, 0.0f, 0.0f, 1.0f};
-    auto result = svc.color_picker("Pick", c);
+    spectra::Color             c{1.0f, 0.0f, 0.0f, 1.0f};
+    auto                       result = svc.color_picker("Pick", c);
     EXPECT_FALSE(result.has_value());
 }
 
@@ -90,8 +89,8 @@ TEST(QtDialogs, NullWindowServiceReturnsInvalid)
 {
     spectra::NullWindowService svc;
     EXPECT_EQ(svc.create_window("Test", 800, 600), spectra::INVALID_FIGURE_ID);
-    svc.close_window(spectra::FigureId{1}); // should not crash
-    svc.focus_window(spectra::FigureId{1}); // should not crash
+    svc.close_window(spectra::FigureId{1});   // should not crash
+    svc.focus_window(spectra::FigureId{1});   // should not crash
     EXPECT_EQ(svc.window_count(), 0u);
 }
 
@@ -99,7 +98,7 @@ TEST(QtDialogs, NullWindowServiceReturnsInvalid)
 
 TEST(QtDialogs, ClipboardCopyPasteText)
 {
-    auto& e = env();
+    auto&                                     e = env();
     spectra::adapters::qt::QtClipboardService svc;
     svc.copy_text("test_clipboard_value");
     EXPECT_EQ(svc.paste_text(), "test_clipboard_value");
@@ -107,7 +106,7 @@ TEST(QtDialogs, ClipboardCopyPasteText)
 
 TEST(QtDialogs, ClipboardCopyEmptyText)
 {
-    auto& e = env();
+    auto&                                     e = env();
     spectra::adapters::qt::QtClipboardService svc;
     svc.copy_text("");
     EXPECT_EQ(svc.paste_text(), "");
@@ -115,7 +114,7 @@ TEST(QtDialogs, ClipboardCopyEmptyText)
 
 TEST(QtDialogs, ClipboardCopyImageDoesNotCrash)
 {
-    auto& e = env();
+    auto&                                     e = env();
     spectra::adapters::qt::QtClipboardService svc;
     // Minimal PNG header — just verify it doesn't crash
     std::vector<uint8_t> png = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
@@ -126,9 +125,8 @@ TEST(QtDialogs, ClipboardCopyImageDoesNotCrash)
 
 TEST(QtDialogs, RedrawRequestCallback)
 {
-    std::atomic<int> call_count{0};
-    spectra::adapters::qt::QtRedrawRequest req(
-        [&call_count]() { call_count++; });
+    std::atomic<int>                       call_count{0};
+    spectra::adapters::qt::QtRedrawRequest req([&call_count]() { call_count++; });
     req.request_redraw();
     EXPECT_EQ(call_count.load(), 1);
     req.request_redraw();
@@ -137,18 +135,15 @@ TEST(QtDialogs, RedrawRequestCallback)
 
 TEST(QtDialogs, RedrawRequestFigureCallback)
 {
-    std::atomic<int> global_count{0};
+    std::atomic<int>               global_count{0};
     std::atomic<spectra::FigureId> last_figure_id{spectra::INVALID_FIGURE_ID};
 
-    spectra::adapters::qt::QtRedrawRequest req(
-        [&global_count]() { global_count++; });
+    spectra::adapters::qt::QtRedrawRequest req([&global_count]() { global_count++; });
 
-    req.set_figure_callback([&last_figure_id](spectra::FigureId id) {
-        last_figure_id = id;
-    });
+    req.set_figure_callback([&last_figure_id](spectra::FigureId id) { last_figure_id = id; });
 
     req.request_redraw(spectra::FigureId{42});
-    EXPECT_EQ(global_count.load(), 0); // global callback not called for figure-specific
+    EXPECT_EQ(global_count.load(), 0);   // global callback not called for figure-specific
     EXPECT_EQ(last_figure_id.load(), spectra::FigureId{42});
 }
 
@@ -157,8 +152,7 @@ TEST(QtDialogs, RedrawRequestGlobalAndFigure)
     std::atomic<int> global_count{0};
     std::atomic<int> figure_count{0};
 
-    spectra::adapters::qt::QtRedrawRequest req(
-        [&global_count]() { global_count++; });
+    spectra::adapters::qt::QtRedrawRequest req([&global_count]() { global_count++; });
     req.set_figure_callback([&figure_count](spectra::FigureId) { figure_count++; });
 
     req.request_redraw();
@@ -177,19 +171,21 @@ TEST(QtDialogs, RedrawRequestGlobalAndFigure)
 
 TEST(QtDialogs, WindowServiceCreateWindow)
 {
-    auto& e = env();
+    auto&                                  e = env();
     spectra::adapters::qt::QtWindowService svc;
 
     std::string created_title;
-    uint32_t created_w = 0;
-    uint32_t created_h = 0;
+    uint32_t    created_w = 0;
+    uint32_t    created_h = 0;
 
-    svc.set_create_window([&](const std::string& title, uint32_t w, uint32_t h) {
-        created_title = title;
-        created_w = w;
-        created_h = h;
-        return spectra::FigureId{99};
-    });
+    svc.set_create_window(
+        [&](const std::string& title, uint32_t w, uint32_t h)
+        {
+            created_title = title;
+            created_w     = w;
+            created_h     = h;
+            return spectra::FigureId{99};
+        });
 
     auto id = svc.create_window("My Window", 1024, 768);
     EXPECT_EQ(id, spectra::FigureId{99});
@@ -200,7 +196,7 @@ TEST(QtDialogs, WindowServiceCreateWindow)
 
 TEST(QtDialogs, WindowServiceCloseWindow)
 {
-    auto& e = env();
+    auto&                                  e = env();
     spectra::adapters::qt::QtWindowService svc;
 
     std::atomic<spectra::FigureId> closed_id{spectra::INVALID_FIGURE_ID};
@@ -212,7 +208,7 @@ TEST(QtDialogs, WindowServiceCloseWindow)
 
 TEST(QtDialogs, WindowServiceFocusWindow)
 {
-    auto& e = env();
+    auto&                                  e = env();
     spectra::adapters::qt::QtWindowService svc;
 
     std::atomic<spectra::FigureId> focused_id{spectra::INVALID_FIGURE_ID};
@@ -224,7 +220,7 @@ TEST(QtDialogs, WindowServiceFocusWindow)
 
 TEST(QtDialogs, WindowServiceWindowCount)
 {
-    auto& e = env();
+    auto&                                  e = env();
     spectra::adapters::qt::QtWindowService svc;
 
     std::atomic<size_t> count{0};
@@ -237,21 +233,21 @@ TEST(QtDialogs, WindowServiceWindowCount)
 
 TEST(QtDialogs, WindowServiceDefaultBehavior)
 {
-    auto& e = env();
+    auto&                                  e = env();
     spectra::adapters::qt::QtWindowService svc;
 
     // Without setting callbacks, should not crash and return defaults
     EXPECT_EQ(svc.create_window("Test"), spectra::INVALID_FIGURE_ID);
     EXPECT_EQ(svc.window_count(), 0u);
-    svc.close_window(spectra::FigureId{1}); // no crash
-    svc.focus_window(spectra::FigureId{1}); // no crash
+    svc.close_window(spectra::FigureId{1});   // no crash
+    svc.focus_window(spectra::FigureId{1});   // no crash
 }
 
 // ── QtDialogService (skipped in offscreen — modal dialogs block) ─────────────
 
 TEST(QtDialogs, DialogServiceExists)
 {
-    auto& e = env();
+    auto&                                  e = env();
     spectra::adapters::qt::QtDialogService svc;
     // Just verify the service can be instantiated
     (void)svc;

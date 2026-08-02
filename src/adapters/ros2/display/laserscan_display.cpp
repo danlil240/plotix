@@ -199,14 +199,14 @@ void LaserScanDisplay::submit_renderables(SceneManager& scene)
             continue;
 
         SceneEntity entity;
-        entity.type         = "laserscan";
-        entity.label        = topic_.empty() ? display_name()
-                                             : topic_ + " [" + std::to_string(index + 1) + "/"
-                                                   + std::to_string(scans.size()) + "]";
-        entity.display_name = display_name();
-        entity.topic        = frame.topic;
-        entity.frame_id     = frame.frame_id;
-        entity.transform    = frame_transform;
+        entity.type                  = "laserscan";
+        entity.label                 = topic_.empty() ? display_name()
+                                                      : topic_ + " [" + std::to_string(index + 1) + "/"
+                                            + std::to_string(scans.size()) + "]";
+        entity.display_name          = display_name();
+        entity.topic                 = frame.topic;
+        entity.frame_id              = frame.frame_id;
+        entity.transform             = frame_transform;
         entity.transform.translation = frame_transform.transform_point(frame.centroid);
         entity.scale                 = frame.max_bounds - frame.min_bounds;
         entity.stamp_ns              = frame.stamp_ns;
@@ -220,7 +220,7 @@ void LaserScanDisplay::submit_renderables(SceneManager& scene)
         const bool use_intensity_color = color_mode_ == ColorMode::Intensity && frame.has_intensity;
         const uint32_t default_rgba    = laserscan_flat_color(fade);
         const auto     default_color   = unpack_rgba(default_rgba);
-        std::string color_buffer = std::format("{:.3f}, {:.3f}, {:.3f}, {:.3f}",
+        std::string    color_buffer    = std::format("{:.3f}, {:.3f}, {:.3f}, {:.3f}",
                                                default_color[0],
                                                default_color[1],
                                                default_color[2],
@@ -342,7 +342,7 @@ void LaserScanDisplay::set_topic(const std::string& topic)
     topic_ = topic;
     topic_.copy(topic_input_.data(), topic_input_.size() - 1);
     topic_input_[std::min(topic_.size(), topic_input_.size() - 1)] = '\0';
-    resubscribe_requested_ = true;
+    resubscribe_requested_                                         = true;
 }
 
 std::string LaserScanDisplay::serialize_config_blob() const

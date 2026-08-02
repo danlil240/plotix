@@ -37,7 +37,7 @@ PackageResolveResult resolve_ros_resource_uri(const std::string& uri)
     }
 
 #ifdef SPECTRA_USE_ROS2
-    const std::string rest = uri.substr(10);
+    const std::string rest  = uri.substr(10);
     const auto        slash = rest.find('/');
     if (slash == std::string::npos)
     {

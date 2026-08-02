@@ -1194,8 +1194,8 @@ TEST(EdgeCases, FormatVersionConst)
 
 TEST(SessionPresets, TuningPresetLoadsWithPlots)
 {
-    const std::string path = std::string(SPECTRA_SOURCE_DIR)
-                             + "/sessions/presets/tuning.spectra-ros-session";
+    const std::string path =
+        std::string(SPECTRA_SOURCE_DIR) + "/sessions/presets/tuning.spectra-ros-session";
     ASSERT_TRUE(std::filesystem::exists(path)) << path;
 
     RosSessionManager mgr;
@@ -1207,8 +1207,8 @@ TEST(SessionPresets, TuningPresetLoadsWithPlots)
 
 TEST(SessionPresets, BagReviewPresetEnablesBagPanels)
 {
-    const std::string path = std::string(SPECTRA_SOURCE_DIR)
-                             + "/sessions/presets/bag_review.spectra-ros-session";
+    const std::string path =
+        std::string(SPECTRA_SOURCE_DIR) + "/sessions/presets/bag_review.spectra-ros-session";
     ASSERT_TRUE(std::filesystem::exists(path)) << path;
 
     RosSessionManager mgr;
@@ -1221,8 +1221,8 @@ TEST(SessionPresets, BagReviewPresetEnablesBagPanels)
 
 TEST(SessionPresets, BringupPresetHasCmdVelPlots)
 {
-    const std::string path = std::string(SPECTRA_SOURCE_DIR)
-                             + "/sessions/presets/bringup.spectra-ros-session";
+    const std::string path =
+        std::string(SPECTRA_SOURCE_DIR) + "/sessions/presets/bringup.spectra-ros-session";
     ASSERT_TRUE(std::filesystem::exists(path)) << path;
 
     RosSessionManager mgr;

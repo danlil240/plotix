@@ -56,13 +56,17 @@ class SpectraMenuStrip : public QWidget
    private:
     QHBoxLayout*              layout_ = nullptr;
     QList<SpectraMenuButton*> buttons_;
-    QMenu*                    open_menu_   = nullptr;
-    SpectraMenuButton*        open_button_ = nullptr;
-    QTimer*                   hover_timer_ = nullptr;
-    bool                      had_hover_   = false;
+    QMenu*                    open_menu_         = nullptr;
+    SpectraMenuButton*        open_button_       = nullptr;
+    QTimer*                   hover_timer_       = nullptr;
+    bool                      had_hover_         = false;
+    bool                      switching_         = false;
+    int                       menu_exit_counter_ = 0;
 
     SpectraMenuButton* button_for_menu(QMenu* menu) const;
     bool               is_cursor_over_button(SpectraMenuButton* button) const;
+    bool               is_cursor_in_top_zone(const QPoint& cursor) const;
+    bool               is_cursor_in_menu_zone(const QPoint& cursor) const;
 
    private slots:
     void on_menu_about_to_show();

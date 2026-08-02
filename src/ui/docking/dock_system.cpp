@@ -133,9 +133,9 @@ bool DockSystem::end_drag(float mouse_x, float mouse_y)
     {
         case DropZone::Left:
             result     = split_view_.split_pane(target_figure,
-                                                SplitDirection::Horizontal,
-                                                dragging_figure_index_,
-                                                0.5f);
+                                            SplitDirection::Horizontal,
+                                            dragging_figure_index_,
+                                            0.5f);
             needs_swap = true;
             break;
         case DropZone::Right:
@@ -146,9 +146,9 @@ bool DockSystem::end_drag(float mouse_x, float mouse_y)
             break;
         case DropZone::Top:
             result     = split_view_.split_pane(target_figure,
-                                                SplitDirection::Vertical,
-                                                dragging_figure_index_,
-                                                0.5f);
+                                            SplitDirection::Vertical,
+                                            dragging_figure_index_,
+                                            0.5f);
             needs_swap = true;
             break;
         case DropZone::Bottom:

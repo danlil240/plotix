@@ -380,7 +380,7 @@ void Axes3D::zoom_limits(float factor)
         double center     = (lim.min + lim.max) * 0.5;
         double half_range = (lim.max - lim.min) * 0.5 * factor;
         double min_half   = std::max(std::abs(lim.min), std::abs(lim.max))
-                            * std::numeric_limits<double>::epsilon() * 16.0;
+                          * std::numeric_limits<double>::epsilon() * 16.0;
         if (min_half < 1e-300)
             min_half = 1e-300;
         if (half_range < min_half)
@@ -403,7 +403,7 @@ void Axes3D::zoom_limits_x(float factor)
     double center     = (xl.min + xl.max) * 0.5;
     double half_range = (xl.max - xl.min) * 0.5 * factor;
     double min_half   = std::max(std::abs(xl.min), std::abs(xl.max))
-                        * std::numeric_limits<double>::epsilon() * 16.0;
+                      * std::numeric_limits<double>::epsilon() * 16.0;
     if (min_half < 1e-300)
         min_half = 1e-300;
     if (half_range < min_half)
@@ -417,7 +417,7 @@ void Axes3D::zoom_limits_y(float factor)
     double center     = (yl.min + yl.max) * 0.5;
     double half_range = (yl.max - yl.min) * 0.5 * factor;
     double min_half   = std::max(std::abs(yl.min), std::abs(yl.max))
-                        * std::numeric_limits<double>::epsilon() * 16.0;
+                      * std::numeric_limits<double>::epsilon() * 16.0;
     if (min_half < 1e-300)
         min_half = 1e-300;
     if (half_range < min_half)
@@ -431,7 +431,7 @@ void Axes3D::zoom_limits_z(float factor)
     double center     = (zl.min + zl.max) * 0.5;
     double half_range = (zl.max - zl.min) * 0.5 * factor;
     double min_half   = std::max(std::abs(zl.min), std::abs(zl.max))
-                        * std::numeric_limits<double>::epsilon() * 16.0;
+                      * std::numeric_limits<double>::epsilon() * 16.0;
     if (min_half < 1e-300)
         min_half = 1e-300;
     if (half_range < min_half)

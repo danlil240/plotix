@@ -50,10 +50,10 @@ class SpectraAppShell : public AppShell
     void                        apply_panel_visibility(const std::map<std::string, bool>& vis);
 
    protected:
-    void on_register_panels() override;
-    void on_populate_menus(MenuBar& bar) override;
-    void on_populate_nav_rail(NavRail& rail) override;
-    void on_build_status_bar(StatusBar& bar) override;
+    void                        on_register_panels() override;
+    void                        on_populate_menus(MenuBar& bar) override;
+    void                        on_populate_nav_rail(NavRail& rail) override;
+    void                        on_build_status_bar(StatusBar& bar) override;
     std::unique_ptr<CanvasHost> create_canvas_host() override;
 
    private:
@@ -62,11 +62,11 @@ class SpectraAppShell : public AppShell
     void sync_status_bar_segments();
     void sync_file_menu();
 
-    spectra::ImGuiIntegration*  imgui_          = nullptr;
-    spectra::Figure*            current_figure_ = nullptr;
-    std::unique_ptr<SpectraNavRail>   spectra_nav_;
-    SpectraCanvasHost*                spectra_canvas_ = nullptr;
-    bool menus_populated_ = false;
+    spectra::ImGuiIntegration*      imgui_          = nullptr;
+    spectra::Figure*                current_figure_ = nullptr;
+    std::unique_ptr<SpectraNavRail> spectra_nav_;
+    SpectraCanvasHost*              spectra_canvas_  = nullptr;
+    bool                            menus_populated_ = false;
 };
 
 /// Nav rail with core tool-mode buttons + registry panel toggles (Vision icon+label style).

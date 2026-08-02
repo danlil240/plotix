@@ -93,7 +93,7 @@ void App::run()
     // graceful shutdown through shutdown_runtime() instead of killing the
     // process mid-frame (which would leak Vulkan resources).  This covers
     // all entry points: the main spectra binary, examples, and the easy API.
-    std::signal(SIGINT,  [](int) { App::request_exit(); });
+    std::signal(SIGINT, [](int) { App::request_exit(); });
     std::signal(SIGTERM, [](int) { App::request_exit(); });
 #ifndef _WIN32
     std::signal(SIGPIPE, SIG_IGN);

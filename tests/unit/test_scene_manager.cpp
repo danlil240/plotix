@@ -148,11 +148,11 @@ TEST(SceneManager, PickArrowEntityByBounds)
     arrow_ent.label                 = "PoseArrow";
     arrow_ent.transform.translation = {0.0, 0.0, -3.0};
     arrow_ent.arrow                 = SceneArrow{
-        .origin       = {0.0, 0.0, 0.0},
-        .direction    = {1.0, 0.0, 0.0},
-        .shaft_length = 1.0,
-        .head_length  = 0.2,
-        .head_width   = 0.15,
+                        .origin       = {0.0, 0.0, 0.0},
+                        .direction    = {1.0, 0.0, 0.0},
+                        .shaft_length = 1.0,
+                        .head_length  = 0.2,
+                        .head_width   = 0.15,
     };
     scene.add_entity(std::move(arrow_ent));
 
@@ -169,8 +169,8 @@ TEST(SceneManager, PickPointSetEntityByBounds)
     ps_ent.label                 = "PC";
     ps_ent.transform.translation = {0.0, 0.0, -4.0};
     ps_ent.point_set             = ScenePointSet{
-        .points =
-            {
+                    .points =
+                        {
                 {spectra::vec3{-0.5, 0.0, 0.0}, 0xFFFFFFFFu},
                 {spectra::vec3{0.5, 0.0, 0.0}, 0xFFFFFFFFu},
             },

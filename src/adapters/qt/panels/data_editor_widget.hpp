@@ -69,10 +69,10 @@ class QtDataEditorWidget : public QDockWidget
     void on_export_csv();
 
    private:
-    void build_ui();
-    void populate_axes_combo(Figure& figure);
-    void populate_series_combo(AxesBase& axes);
-    void populate_data_table(Series& series);
+    void             build_ui();
+    void             populate_axes_combo(Figure& figure);
+    void             populate_series_combo(AxesBase& axes);
+    void             populate_data_table(Series& series);
     void             show_empty_state(const QString& message, bool can_import);
     void             show_data_state();
     Series*          current_series(size_t& axes_index, size_t& series_index) const;
@@ -85,22 +85,22 @@ class QtDataEditorWidget : public QDockWidget
     bool             current_axes_is_3d() const;
     std::vector<int> selected_rows() const;
 
-    FigureRegistry*           registry_     = nullptr;
-    ::spectra::UndoManager*   undo_manager_ = nullptr;
-    ::spectra::RedrawRequest* redraw_       = nullptr;
+    FigureRegistry*              registry_     = nullptr;
+    ::spectra::UndoManager*      undo_manager_ = nullptr;
+    ::spectra::RedrawRequest*    redraw_       = nullptr;
     ::spectra::ClipboardService* clipboard_    = nullptr;
     ::spectra::DialogService*    dialog_       = nullptr;
-    FigureId                  active_id_    = INVALID_FIGURE_ID;
+    FigureId                     active_id_    = INVALID_FIGURE_ID;
 
-    QComboBox*    axes_combo_   = nullptr;
-    QComboBox*    series_combo_ = nullptr;
-    QTableWidget* table_        = nullptr;
+    QComboBox*    axes_combo_           = nullptr;
+    QComboBox*    series_combo_         = nullptr;
+    QTableWidget* table_                = nullptr;
     QGroupBox*    selection_group_      = nullptr;
     QGroupBox*    table_group_          = nullptr;
     QWidget*      empty_state_          = nullptr;
     QLabel*       empty_state_label_    = nullptr;
     QPushButton*  empty_import_button_  = nullptr;
-    QLabel*       info_label_   = nullptr;
+    QLabel*       info_label_           = nullptr;
     QGroupBox*    import_mapping_group_ = nullptr;
     QComboBox*    import_x_column_      = nullptr;
     QLabel*       import_z_label_       = nullptr;

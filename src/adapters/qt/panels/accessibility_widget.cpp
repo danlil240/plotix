@@ -113,9 +113,9 @@ void QtAccessibilityWidget::build_ui()
     html_group->setObjectName("accessibility_html_group");
     auto* html_layout = new QVBoxLayout(html_group);
 
-    auto* html_desc = new QLabel(
-        "Export an accessible HTML table representation\n"
-        "of the active figure for screen readers.", html_group);
+    auto* html_desc = new QLabel("Export an accessible HTML table representation\n"
+                                 "of the active figure for screen readers.",
+                                 html_group);
     html_desc->setStyleSheet("color: gray;");
     html_layout->addWidget(html_desc);
 
@@ -132,10 +132,8 @@ void QtAccessibilityWidget::build_ui()
     layout->addStretch();
 
     // ── Connections ───────────────────────────────────────────────────
-    connect(sonify_btn_, &QPushButton::clicked,
-            this, &QtAccessibilityWidget::on_sonify_clicked);
-    connect(html_btn_, &QPushButton::clicked,
-            this, &QtAccessibilityWidget::on_export_html_clicked);
+    connect(sonify_btn_, &QPushButton::clicked, this, &QtAccessibilityWidget::on_sonify_clicked);
+    connect(html_btn_, &QPushButton::clicked, this, &QtAccessibilityWidget::on_export_html_clicked);
 }
 
 void QtAccessibilityWidget::set_active_figure(FigureId id)

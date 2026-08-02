@@ -65,8 +65,8 @@ VkSurfaceFormatKHR choose_surface_format(const std::vector<VkSurfaceFormatKHR>& 
     // Avoid SRGB swapchain formats — they apply gamma and shift theme colours.
     for (const auto& f : formats)
     {
-        if (f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-            && f.format != VK_FORMAT_B8G8R8A8_SRGB && f.format != VK_FORMAT_R8G8B8A8_SRGB)
+        if (f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR && f.format != VK_FORMAT_B8G8R8A8_SRGB
+            && f.format != VK_FORMAT_R8G8B8A8_SRGB)
         {
             SPECTRA_LOG_WARN("Vulkan",
                              "swapchain format: UNORM unavailable, using format {}",
@@ -107,7 +107,7 @@ VkPresentModeKHR choose_present_mode(const std::vector<VkPresentModeKHR>& modes)
     for (auto m : modes)
         SPECTRA_LOG_DEBUG("Vulkan", "  available present mode: {}", mode_name(m));
 
-    // Select based on compile-time SPECTRA_PRESENT_MODE_* define
+        // Select based on compile-time SPECTRA_PRESENT_MODE_* define
 #if defined(SPECTRA_PRESENT_MODE_MAILBOX)
     VkPresentModeKHR preferred = VK_PRESENT_MODE_MAILBOX_KHR;
 #elif defined(SPECTRA_PRESENT_MODE_IMMEDIATE)
@@ -139,11 +139,11 @@ VkExtent2D choose_extent(const VkSurfaceCapabilitiesKHR& capabilities,
     }
     VkExtent2D extent = {width, height};
     extent.width      = std::clamp(extent.width,
-                                   capabilities.minImageExtent.width,
-                                   capabilities.maxImageExtent.width);
+                              capabilities.minImageExtent.width,
+                              capabilities.maxImageExtent.width);
     extent.height     = std::clamp(extent.height,
-                                   capabilities.minImageExtent.height,
-                                   capabilities.maxImageExtent.height);
+                               capabilities.minImageExtent.height,
+                               capabilities.maxImageExtent.height);
     return extent;
 }
 
@@ -199,13 +199,13 @@ VkRenderPass create_render_pass(VkDevice              device,
         subpass.pDepthStencilAttachment = &depth_ref;
 
         VkSubpassDependency dependency{};
-        dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass    = 0;
-        dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                                   | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependency.srcSubpass   = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass   = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+                                  | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.srcAccessMask = 0;
         dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                                   | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                                  | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.dstAccessMask =
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
@@ -853,13 +853,13 @@ OffscreenContext create_offscreen_framebuffer(VkDevice              device,
         subpass.pDepthStencilAttachment = &depth_ref;
 
         VkSubpassDependency dependency{};
-        dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass    = 0;
-        dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                                   | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependency.srcSubpass   = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass   = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+                                  | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.srcAccessMask = 0;
         dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                                   | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                                  | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.dstAccessMask =
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
@@ -932,13 +932,13 @@ OffscreenContext create_offscreen_framebuffer(VkDevice              device,
         subpass.pResolveAttachments     = &resolve_ref;
 
         VkSubpassDependency dependency{};
-        dependency.srcSubpass    = VK_SUBPASS_EXTERNAL;
-        dependency.dstSubpass    = 0;
-        dependency.srcStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                                   | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependency.srcSubpass   = VK_SUBPASS_EXTERNAL;
+        dependency.dstSubpass   = 0;
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+                                  | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.srcAccessMask = 0;
         dependency.dstStageMask  = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-                                   | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+                                  | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.dstAccessMask =
             VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 

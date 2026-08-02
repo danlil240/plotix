@@ -136,7 +136,7 @@ void QtPluginsWidget::refresh()
     for (const auto& plugin : plugins)
     {
         auto* group = new QGroupBox(QString::fromStdString(plugin.name), content);
-        auto* form = new QVBoxLayout(group);
+        auto* form  = new QVBoxLayout(group);
 
         QStringList capabilities;
         for (const auto& capability : plugin.manifest.capabilities)
@@ -172,25 +172,31 @@ void QtPluginsWidget::refresh()
         enable_cb->setObjectName("plugin_enabled_" + QString::fromStdString(plugin.name));
         enable_cb->setChecked(plugin.enabled);
         QString plugin_name = QString::fromStdString(plugin.name);
-        connect(enable_cb, &QCheckBox::toggled, group,
-            [this, plugin_name](bool checked) {
-                if (mgr_)
-                    mgr_->set_plugin_enabled(plugin_name.toStdString(), checked);
-            });
+        connect(enable_cb,
+                &QCheckBox::toggled,
+                group,
+                [this, plugin_name](bool checked)
+                {
+                    if (mgr_)
+                        mgr_->set_plugin_enabled(plugin_name.toStdString(), checked);
+                });
         controls->addWidget(enable_cb);
 
         auto* unload_btn = new QPushButton("Unload", group);
         unload_btn->setObjectName("plugin_unload_" + QString::fromStdString(plugin.name));
-        connect(unload_btn, &QPushButton::clicked, group,
-            [this, plugin_name]() {
-                if (mgr_ && mgr_->unload_plugin(plugin_name.toStdString()))
+        connect(unload_btn,
+                &QPushButton::clicked,
+                group,
+                [this, plugin_name]()
                 {
-                    if (ui_reg_)
-                        ui_reg_->unregister_plugin(plugin_name.toStdString());
-                    status_ = "Unloaded: " + plugin_name.toStdString();
-                    refresh();
-                }
-            });
+                    if (mgr_ && mgr_->unload_plugin(plugin_name.toStdString()))
+                    {
+                        if (ui_reg_)
+                            ui_reg_->unregister_plugin(plugin_name.toStdString());
+                        status_ = "Unloaded: " + plugin_name.toStdString();
+                        refresh();
+                    }
+                });
         controls->addWidget(unload_btn);
 
         form->addLayout(controls);
@@ -285,8 +291,8 @@ void QtPluginsWidget::on_scan_default()
     }
 
     SPECTRA_LOG_INFO("qt_plugins",
-                     "Default scan: loaded " + std::to_string(loaded) +
-                     ", failed/skipped " + std::to_string(failed));
+                     "Default scan: loaded " + std::to_string(loaded) + ", failed/skipped "
+                         + std::to_string(failed));
     status_ = "Default scan: loaded " + std::to_string(loaded) + ", failed/skipped "
               + std::to_string(failed);
     refresh();

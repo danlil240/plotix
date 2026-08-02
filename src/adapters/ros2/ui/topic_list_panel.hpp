@@ -164,9 +164,9 @@ class TopicListPanel
     using PlotCallback = std::function<void(const std::string& topic_name)>;
     void set_plot_callback(PlotCallback cb) { plot_cb_ = std::move(cb); }
 
-    using FavoriteQueryCallback = std::function<bool(const std::string& topic_name)>;
+    using FavoriteQueryCallback  = std::function<bool(const std::string& topic_name)>;
     using FavoriteToggleCallback = std::function<void(const std::string& topic_name)>;
-    void set_favorite_callbacks(FavoriteQueryCallback is_favorite,
+    void set_favorite_callbacks(FavoriteQueryCallback  is_favorite,
                                 FavoriteToggleCallback toggle_favorite)
     {
         is_favorite_cb_     = std::move(is_favorite);
@@ -174,8 +174,8 @@ class TopicListPanel
     }
 
     // Fired when user double-clicks a numeric field (topic, field_path, type).
-    using FieldPlotCallback =
-        std::function<void(const std::string& topic, const std::string& field, const std::string& type)>;
+    using FieldPlotCallback = std::function<
+        void(const std::string& topic, const std::string& field, const std::string& type)>;
     void set_field_plot_callback(FieldPlotCallback cb) { field_plot_cb_ = std::move(cb); }
 
     // ---------- drag-and-drop (C3) -------------------------------------------
@@ -250,7 +250,7 @@ class TopicListPanel
     void set_filter(const std::string& f);
 
     TopicCategoryFilter category_filter() const { return category_filter_; }
-    void set_category_filter(TopicCategoryFilter filter);
+    void                set_category_filter(TopicCategoryFilter filter);
 
    private:
     // ---------- internal helpers ---------------------------------------------
@@ -326,14 +326,14 @@ class TopicListPanel
     std::vector<std::string>                       root_topics_;       // topics at "/" level
 
     // UI state (render-thread only).
-    std::string selected_topic_;
-    char        filter_buf_[256]{};
-    std::string filter_str_;
+    std::string         selected_topic_;
+    char                filter_buf_[256]{};
+    std::string         filter_str_;
     TopicCategoryFilter category_filter_{TopicCategoryFilter::All};
-    bool        group_by_namespace_{true};
-    int         stale_threshold_ms_{2000};
-    int         stats_window_ms_{1000};
-    std::string title_{"ROS2 Topics"};
+    bool                group_by_namespace_{true};
+    int                 stale_threshold_ms_{2000};
+    int                 stats_window_ms_{1000};
+    std::string         title_{"ROS2 Topics"};
 
     // Column visibility (render-thread only).
     bool col_show_type_{true};
@@ -348,9 +348,9 @@ class TopicListPanel
     mutable std::vector<std::string> filtered_names_;   // filtered topic names
 
     // Callbacks.
-    SelectCallback select_cb_;
-    PlotCallback       plot_cb_;
-    FieldPlotCallback  field_plot_cb_;
+    SelectCallback         select_cb_;
+    PlotCallback           plot_cb_;
+    FieldPlotCallback      field_plot_cb_;
     FavoriteQueryCallback  is_favorite_cb_;
     FavoriteToggleCallback toggle_favorite_cb_;
 

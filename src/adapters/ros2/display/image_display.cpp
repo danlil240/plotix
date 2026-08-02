@@ -80,9 +80,9 @@ void draw_preview(const ImageFrame& frame)
         {
             const size_t index = (static_cast<size_t>(y) * frame.preview_width + x) * 4u;
             const ImU32  color = IM_COL32(frame.preview_rgba[index + 0],
-                                          frame.preview_rgba[index + 1],
-                                          frame.preview_rgba[index + 2],
-                                          frame.preview_rgba[index + 3]);
+                                         frame.preview_rgba[index + 1],
+                                         frame.preview_rgba[index + 2],
+                                         frame.preview_rgba[index + 3]);
             draw_list->AddRectFilled(ImVec2(origin.x + static_cast<float>(x) * scale,
                                             origin.y + static_cast<float>(y) * scale),
                                      ImVec2(origin.x + static_cast<float>(x + 1u) * scale,
@@ -192,7 +192,7 @@ void ImageDisplay::submit_renderables(SceneManager& scene)
     entity.transform    = frame_transform;
     entity.scale        = {
         frame->height == 0 ? 1.0
-                           : static_cast<double>(frame->width) / static_cast<double>(frame->height),
+                                  : static_cast<double>(frame->width) / static_cast<double>(frame->height),
         1.0,
         1.0,
     };
@@ -307,20 +307,19 @@ void ImageDisplay::set_topic(const std::string& topic)
     topic_ = topic;
     topic_.copy(topic_input_.data(), topic_input_.size() - 1);
     topic_input_[std::min(topic_.size(), topic_input_.size() - 1)] = '\0';
-    resubscribe_requested_ = true;
+    resubscribe_requested_                                         = true;
 }
 
 std::string ImageDisplay::serialize_config_blob() const
 {
-    return std::format(
-        "topic={};mode={};encoding_override={};panel_visible={};preview_max_dim={};"
-        "use_message_stamp={}",
-        topic_,
-        static_cast<int>(mode_),
-        static_cast<int>(encoding_override_),
-        panel_visible_ ? 1 : 0,
-        preview_max_dim_,
-        use_message_stamp_ ? 1 : 0);
+    return std::format("topic={};mode={};encoding_override={};panel_visible={};preview_max_dim={};"
+                       "use_message_stamp={}",
+                       topic_,
+                       static_cast<int>(mode_),
+                       static_cast<int>(encoding_override_),
+                       panel_visible_ ? 1 : 0,
+                       preview_max_dim_,
+                       use_message_stamp_ ? 1 : 0);
 }
 
 void ImageDisplay::deserialize_config_blob(const std::string& blob)
@@ -328,12 +327,12 @@ void ImageDisplay::deserialize_config_blob(const std::string& blob)
     if (blob.empty())
         return;
 
-    char     topic[256]        = {};
-    int      mode              = static_cast<int>(mode_);
-    int      encoding_override = static_cast<int>(encoding_override_);
-    int      panel_visible     = panel_visible_ ? 1 : 0;
-    unsigned preview_max_dim   = preview_max_dim_;
-    int      use_message_stamp = use_message_stamp_ ? 1 : 0;
+    char       topic[256]            = {};
+    int        mode                  = static_cast<int>(mode_);
+    int        encoding_override     = static_cast<int>(encoding_override_);
+    int        panel_visible         = panel_visible_ ? 1 : 0;
+    unsigned   preview_max_dim       = preview_max_dim_;
+    int        use_message_stamp     = use_message_stamp_ ? 1 : 0;
     const bool has_encoding_override = blob.find("encoding_override=") != std::string::npos;
     if (has_encoding_override
         && std::sscanf(
@@ -363,7 +362,7 @@ void ImageDisplay::deserialize_config_blob(const std::string& blob)
                          &panel_visible,
                          &preview_max_dim,
                          &use_message_stamp)
-                >= 1)
+             >= 1)
     {
         set_topic(topic);
         mode_              = static_cast<Mode>(std::clamp(mode, 0, 2));
@@ -433,18 +432,15 @@ void ImageDisplay::refresh_decoded_frame()
     if (!raw_message_.has_value())
         return;
 
-    const bool need_full = (mode_ == Mode::Billboard3D || mode_ == Mode::PanelAndBillboard);
+    const bool        need_full = (mode_ == Mode::Billboard3D || mode_ == Mode::PanelAndBillboard);
     const std::string override_encoding = encoding_override_string(encoding_override_);
     const auto        frame             = override_encoding.empty()
-                                              ? adapt_image_message(*raw_message_,
-                                                                    topic_,
-                                                                    preview_max_dim_,
-                                                                    need_full)
+                                              ? adapt_image_message(*raw_message_, topic_, preview_max_dim_, need_full)
                                               : adapt_image_message_with_encoding(*raw_message_,
-                                                                                  topic_,
-                                                                                  preview_max_dim_,
-                                                                                  need_full,
-                                                                                  override_encoding);
+                                                               topic_,
+                                                               preview_max_dim_,
+                                                               need_full,
+                                                               override_encoding);
     if (frame.has_value())
         ingest_image_frame(*frame);
 #endif

@@ -11,10 +11,10 @@ namespace spectra
 SeriesSnapshot SeriesClipboard::snapshot(const Series& series)
 {
     SeriesSnapshot snap;
-    snap.label   = series.label();
-    snap.color   = series.color();
-    snap.style   = series.plot_style();
-    snap.visible = series.visible();
+    snap.label    = series.label();
+    snap.color    = series.color();
+    snap.style    = series.plot_style();
+    snap.visible  = series.visible();
     snap.x_offset = series.x_offset();
 
     // 2D types

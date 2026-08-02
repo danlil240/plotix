@@ -29,10 +29,10 @@ class FigureCanvasWidget : public QWidget
     Q_OBJECT
 
    public:
-    explicit FigureCanvasWidget(QtRuntime*   runtime,
-                                Figure*      figure   = nullptr,
-                                InputHandler* input   = nullptr,
-                                QWidget*     parent   = nullptr);
+    explicit FigureCanvasWidget(QtRuntime*    runtime,
+                                Figure*       figure = nullptr,
+                                InputHandler* input  = nullptr,
+                                QWidget*      parent = nullptr);
 
     // Access the underlying Vulkan window
     SpectraVulkanWindow* vulkanWindow() const { return window_; }

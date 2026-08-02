@@ -185,13 +185,13 @@ TEST(SurfaceSeriesTransparency, MaterialChaining)
 {
     SurfaceSeries s;
     auto&         ref = s.color(Color{1.0f, 0.0f, 0.0f, 0.5f})
-                            .opacity(0.8f)
-                            .blend_mode(BlendMode::Alpha)
-                            .double_sided(true)
-                            .wireframe(false)
-                            .ambient(0.2f)
-                            .specular(0.5f)
-                            .shininess(64.0f);
+                    .opacity(0.8f)
+                    .blend_mode(BlendMode::Alpha)
+                    .double_sided(true)
+                    .wireframe(false)
+                    .ambient(0.2f)
+                    .specular(0.5f)
+                    .shininess(64.0f);
     EXPECT_FLOAT_EQ(ref.opacity(), 0.8f);
     EXPECT_EQ(ref.blend_mode(), BlendMode::Alpha);
     EXPECT_TRUE(ref.double_sided());
@@ -267,13 +267,13 @@ TEST(MeshSeriesTransparency, MaterialChaining)
 {
     MeshSeries m;
     auto&      ref = m.color(Color{0.5f, 0.5f, 0.5f, 0.7f})
-                         .opacity(0.9f)
-                         .blend_mode(BlendMode::Premultiplied)
-                         .double_sided(false)
-                         .wireframe(true)
-                         .ambient(0.1f)
-                         .specular(0.8f)
-                         .shininess(128.0f);
+                    .opacity(0.9f)
+                    .blend_mode(BlendMode::Premultiplied)
+                    .double_sided(false)
+                    .wireframe(true)
+                    .ambient(0.1f)
+                    .specular(0.8f)
+                    .shininess(128.0f);
     EXPECT_FLOAT_EQ(ref.opacity(), 0.9f);
     EXPECT_EQ(ref.blend_mode(), BlendMode::Premultiplied);
     EXPECT_FALSE(ref.double_sided());

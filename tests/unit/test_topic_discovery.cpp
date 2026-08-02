@@ -63,8 +63,7 @@ class TopicDiscoveryTest : public ::testing::Test
         // Unique node name per test to avoid ROS2 graph conflicts.
         static std::atomic<int> counter{0};
         const int               id = counter.fetch_add(1);
-        const std::string       name =
-            "td_test_" + std::to_string(::getpid()) + "_" + std::to_string(id);
+        const std::string name = "td_test_" + std::to_string(::getpid()) + "_" + std::to_string(id);
         topic_prefix_ = "/spectra_td_" + std::to_string(::getpid()) + "_" + std::to_string(id);
 
         node_ = std::make_shared<rclcpp::Node>(name);
@@ -271,9 +270,9 @@ TEST_F(TopicDiscoveryTest, TopicsReturnsVector)
 
 TEST_F(TopicDiscoveryTest, MultipleTopicsDiscovered)
 {
-    const std::string t1 = topic_prefix_ + "_t1";
-    const std::string t2 = topic_prefix_ + "_t2";
-    const std::string t3 = topic_prefix_ + "_t3";
+    const std::string t1   = topic_prefix_ + "_t1";
+    const std::string t2   = topic_prefix_ + "_t2";
+    const std::string t3   = topic_prefix_ + "_t3";
     auto              pub1 = node_->create_publisher<std_msgs::msg::Float64>(t1, 10);
     auto              pub2 = node_->create_publisher<std_msgs::msg::Float64>(t2, 10);
     auto              pub3 = node_->create_publisher<std_msgs::msg::String>(t3, 10);

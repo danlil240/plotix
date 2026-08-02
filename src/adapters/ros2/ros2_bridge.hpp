@@ -87,7 +87,7 @@ class Ros2Bridge
 
     const std::string& node_name() const { return node_name_; }
     const std::string& node_namespace() const { return node_namespace_; }
-    int domain_id() const;
+    int                domain_id() const;
 
     // ---------- callbacks ------------------------------------------------
 

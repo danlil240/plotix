@@ -28,19 +28,18 @@ class SettingsStore;
 
 struct WindowManagerBootstrapOptions
 {
-    VulkanBackend*               backend                 = nullptr;
-    FigureRegistry*              registry                = nullptr;
-    Renderer*                    renderer                = nullptr;
-    ui::ThemeManager*            theme_mgr               = nullptr;
-    SessionRuntime*              session                 = nullptr;
-    ui::settings::SettingsStore* settings_store          = nullptr;
-    PluginManager*               plugin_manager          = nullptr;
-    ExportFormatRegistry*        export_format_registry  = nullptr;
+    VulkanBackend*               backend                = nullptr;
+    FigureRegistry*              registry               = nullptr;
+    Renderer*                    renderer               = nullptr;
+    ui::ThemeManager*            theme_mgr              = nullptr;
+    SessionRuntime*              session                = nullptr;
+    ui::settings::SettingsStore* settings_store         = nullptr;
+    PluginManager*               plugin_manager         = nullptr;
+    ExportFormatRegistry*        export_format_registry = nullptr;
 };
 
 // Apply shared session/tab/settings wiring used by App and the window agent.
-void configure_window_manager(WindowManager&                      wm,
-                              const WindowManagerBootstrapOptions& options);
+void configure_window_manager(WindowManager& wm, const WindowManagerBootstrapOptions& options);
 
 std::unique_ptr<WindowManager> create_configured_window_manager(
     const WindowManagerBootstrapOptions& options);

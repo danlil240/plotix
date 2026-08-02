@@ -840,9 +840,8 @@ std::string KeyframeInterpolator::serialize() const
             ss << "{\"t\":" << kf.time << ",\"v\":" << kf.value
                << ",\"i\":" << static_cast<int>(kf.interp)
                << ",\"tm\":" << static_cast<int>(kf.tangent_mode) << ",\"it\":[" << kf.in_tangent.dt
-               << "," << kf.in_tangent.dv << "]"
-               << ",\"ot\":[" << kf.out_tangent.dt << "," << kf.out_tangent.dv << "]"
-               << "}";
+               << "," << kf.in_tangent.dv << "]" << ",\"ot\":[" << kf.out_tangent.dt << ","
+               << kf.out_tangent.dv << "]" << "}";
         }
         ss << "]}";
     }

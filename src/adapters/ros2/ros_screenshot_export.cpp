@@ -180,11 +180,11 @@ bool RosScreenshotExport::write_png(const std::string& path,
 
     const int stride = static_cast<int>(width) * 4;
     const int ret    = stbi_write_png(path.c_str(),
-                                      static_cast<int>(width),
-                                      static_cast<int>(height),
-                                      4,
-                                      rgba,
-                                      stride);
+                                   static_cast<int>(width),
+                                   static_cast<int>(height),
+                                   4,
+                                   rgba,
+                                   stride);
     return ret != 0;
 }
 

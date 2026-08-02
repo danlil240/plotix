@@ -39,11 +39,10 @@ std::string automation_key(const char* prefix, const std::string& title)
 
 // ─── QtDialogService ──────────────────────────────────────────────────────────
 
-std::optional<std::string>
-QtDialogService::file_dialog(FileType                       type,
-                              const std::string&             title,
-                              const std::string&             default_path,
-                              const std::vector<FileFilter>& filters)
+std::optional<std::string> QtDialogService::file_dialog(FileType                       type,
+                                                        const std::string&             title,
+                                                        const std::string&             default_path,
+                                                        const std::vector<FileFilter>& filters)
 {
     // Automation must never block on a native modal dialog. An explicit path
     // provides a deterministic launched-process seam for artifact tests; with
@@ -74,13 +73,11 @@ QtDialogService::file_dialog(FileType                       type,
     QString result;
     if (type == FileType::Open)
     {
-        result = QFileDialog::getOpenFileName(
-            nullptr, qt_title, qt_path, filter_list.join(";;"));
+        result = QFileDialog::getOpenFileName(nullptr, qt_title, qt_path, filter_list.join(";;"));
     }
     else
     {
-        result = QFileDialog::getSaveFileName(
-            nullptr, qt_title, qt_path, filter_list.join(";;"));
+        result = QFileDialog::getSaveFileName(nullptr, qt_title, qt_path, filter_list.join(";;"));
     }
 
     if (result.isEmpty())
@@ -89,8 +86,8 @@ QtDialogService::file_dialog(FileType                       type,
 }
 
 bool QtDialogService::message_box(const std::string& title,
-                                   const std::string& message,
-                                   bool               cancel_button)
+                                  const std::string& message,
+                                  bool               cancel_button)
 {
     if (!native_dialogs_enabled())
         return false;
@@ -98,31 +95,29 @@ bool QtDialogService::message_box(const std::string& title,
     QMessageBox::StandardButtons buttons =
         cancel_button ? QMessageBox::Ok | QMessageBox::Cancel : QMessageBox::Ok;
 
-    QMessageBox::StandardButton rc =
-        QMessageBox::question(nullptr,
-                               QString::fromStdString(title),
-                               QString::fromStdString(message),
-                               buttons,
-                               QMessageBox::Ok);
+    QMessageBox::StandardButton rc = QMessageBox::question(nullptr,
+                                                           QString::fromStdString(title),
+                                                           QString::fromStdString(message),
+                                                           buttons,
+                                                           QMessageBox::Ok);
 
     return rc == QMessageBox::Ok;
 }
 
-std::optional<Color>
-QtDialogService::color_picker(const std::string& title, const Color& initial)
+std::optional<Color> QtDialogService::color_picker(const std::string& title, const Color& initial)
 {
     if (!native_dialogs_enabled())
         return std::nullopt;
 
-    QColor initial_qt(
-        static_cast<int>(initial.r * 255.0f),
-        static_cast<int>(initial.g * 255.0f),
-        static_cast<int>(initial.b * 255.0f),
-        static_cast<int>(initial.a * 255.0f));
+    QColor initial_qt(static_cast<int>(initial.r * 255.0f),
+                      static_cast<int>(initial.g * 255.0f),
+                      static_cast<int>(initial.b * 255.0f),
+                      static_cast<int>(initial.a * 255.0f));
 
-    QColor result = QColorDialog::getColor(
-        initial_qt, nullptr, QString::fromStdString(title),
-        QColorDialog::ShowAlphaChannel);
+    QColor result = QColorDialog::getColor(initial_qt,
+                                           nullptr,
+                                           QString::fromStdString(title),
+                                           QColorDialog::ShowAlphaChannel);
 
     if (!result.isValid())
         return std::nullopt;
@@ -216,9 +211,7 @@ void QtRedrawRequest::request_redraw(FigureId figure_id)
 
 // ─── QtWindowService ──────────────────────────────────────────────────────────
 
-FigureId QtWindowService::create_window(const std::string& title,
-                                         uint32_t           width,
-                                         uint32_t           height)
+FigureId QtWindowService::create_window(const std::string& title, uint32_t width, uint32_t height)
 {
     if (create_fn_)
         return create_fn_(title, width, height);

@@ -579,8 +579,8 @@ TEST(Golden3D, MultiSubplot3D)
             ax2.title("Helix");
 
             auto&              ax3 = fig.subplot3d(2, 2, 3);
-            const int          nx = 15;
-            const int          ny = 15;
+            const int          nx  = 15;
+            const int          ny  = 15;
             std::vector<float> xg;
             std::vector<float> yg;
             std::vector<float> zv;

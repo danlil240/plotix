@@ -36,9 +36,10 @@ class QtExportWidget : public QDockWidget
     Q_OBJECT
 
    public:
-    using ExportPathCallback = std::function<std::optional<std::string>(
-        const std::string& title, const std::string& default_name,
-        const std::string& filter)>;
+    using ExportPathCallback =
+        std::function<std::optional<std::string>(const std::string& title,
+                                                 const std::string& default_name,
+                                                 const std::string& filter)>;
     using ExportCallback =
         std::function<bool(FigureId, const std::string&, const std::string&, uint32_t, uint32_t)>;
 
@@ -61,20 +62,20 @@ class QtExportWidget : public QDockWidget
     void on_export_clicked();
 
    private:
-    ExportFormatRegistry* formats_   = nullptr;
-    FigureRegistry*       registry_  = nullptr;
-    DialogService*        dialogs_   = nullptr;
+    ExportFormatRegistry* formats_  = nullptr;
+    FigureRegistry*       registry_ = nullptr;
+    DialogService*        dialogs_  = nullptr;
     ExportCallback        export_callback_;
 
     FigureId active_id_ = INVALID_FIGURE_ID;
 
-    QComboBox*  format_combo_    = nullptr;
-    QSpinBox*   width_spin_      = nullptr;
-    QSpinBox*   height_spin_     = nullptr;
-    QLineEdit*  path_edit_       = nullptr;
-    QPushButton* browse_btn_     = nullptr;
-    QPushButton* export_btn_     = nullptr;
-    QLabel*     status_label_    = nullptr;
+    QComboBox*   format_combo_ = nullptr;
+    QSpinBox*    width_spin_   = nullptr;
+    QSpinBox*    height_spin_  = nullptr;
+    QLineEdit*   path_edit_    = nullptr;
+    QPushButton* browse_btn_   = nullptr;
+    QPushButton* export_btn_   = nullptr;
+    QLabel*      status_label_ = nullptr;
 };
 
 }   // namespace spectra::adapters::qt

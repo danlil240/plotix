@@ -88,33 +88,35 @@ void RosAppShell::wire_panel_callbacks()
 
     if (topic_stats_)
     {
-        topic_stats_->set_plot_callback([this](const std::string& topic)
-                                        {
-                                            if (!topic.empty())
-                                                on_topic_plot(topic);
-                                        });
-        topic_stats_->set_echo_callback([this](const std::string& topic)
-                                        {
-                                            if (!topic.empty())
-                                                on_topic_selected(topic);
-                                            set_panel_visible("ros.topic_echo", true);
-                                        });
-        topic_stats_->set_favorite_callback([this](const std::string& topic)
-                                            {
-                                                if (topic.empty())
-                                                    return;
-                                                if (favorite_topics_.contains(topic))
-                                                    favorite_topics_.erase(topic);
-                                                else
-                                                    favorite_topics_.insert(topic);
-                                                if (session_mgr_)
-                                                {
-                                                    std::vector<std::string> favorites(
-                                                        favorite_topics_.begin(),
-                                                        favorite_topics_.end());
-                                                    session_mgr_->save_favorites(favorites);
-                                                }
-                                            });
+        topic_stats_->set_plot_callback(
+            [this](const std::string& topic)
+            {
+                if (!topic.empty())
+                    on_topic_plot(topic);
+            });
+        topic_stats_->set_echo_callback(
+            [this](const std::string& topic)
+            {
+                if (!topic.empty())
+                    on_topic_selected(topic);
+                set_panel_visible("ros.topic_echo", true);
+            });
+        topic_stats_->set_favorite_callback(
+            [this](const std::string& topic)
+            {
+                if (topic.empty())
+                    return;
+                if (favorite_topics_.contains(topic))
+                    favorite_topics_.erase(topic);
+                else
+                    favorite_topics_.insert(topic);
+                if (session_mgr_)
+                {
+                    std::vector<std::string> favorites(favorite_topics_.begin(),
+                                                       favorite_topics_.end());
+                    session_mgr_->save_favorites(favorites);
+                }
+            });
     }
 
     if (node_graph_panel_)

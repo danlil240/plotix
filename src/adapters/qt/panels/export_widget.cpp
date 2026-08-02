@@ -25,7 +25,8 @@ QtExportWidget::QtExportWidget(ExportFormatRegistry* formats,
                                FigureRegistry*       registry,
                                DialogService*        dialog_service,
                                QWidget*              parent)
-    : QDockWidget("Export", parent), formats_(formats), registry_(registry), dialogs_(dialog_service)
+    : QDockWidget("Export", parent), formats_(formats), registry_(registry),
+      dialogs_(dialog_service)
 {
     setObjectName("export_panel");
     setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
@@ -68,7 +69,7 @@ QtExportWidget::QtExportWidget(ExportFormatRegistry* formats,
 
     // ── Output path ───────────────────────────────────────────────────
     auto* path_layout = new QHBoxLayout();
-    path_edit_ = new QLineEdit(content);
+    path_edit_        = new QLineEdit(content);
     path_edit_->setObjectName("export_path");
     path_edit_->setPlaceholderText("Select output file...");
     path_layout->addWidget(path_edit_);
@@ -92,10 +93,8 @@ QtExportWidget::QtExportWidget(ExportFormatRegistry* formats,
     layout->addStretch();
 
     // ── Connections ───────────────────────────────────────────────────
-    connect(browse_btn_, &QPushButton::clicked,
-            this, &QtExportWidget::on_browse_clicked);
-    connect(export_btn_, &QPushButton::clicked,
-            this, &QtExportWidget::on_export_clicked);
+    connect(browse_btn_, &QPushButton::clicked, this, &QtExportWidget::on_browse_clicked);
+    connect(export_btn_, &QPushButton::clicked, this, &QtExportWidget::on_export_clicked);
 
     refresh_formats();
 }
@@ -158,29 +157,26 @@ void QtExportWidget::on_browse_clicked()
     if (!dialogs_)
         return;
 
-    QString current_format = format_combo_->currentData().toString();
+    QString     current_format = format_combo_->currentData().toString();
     std::string filter;
     std::string default_ext = "png";
 
     if (current_format == "png_builtin")
     {
-        filter = "PNG Image;;*.png";
+        filter      = "PNG Image;;*.png";
         default_ext = "png";
     }
     else
     {
         default_ext = current_format.toStdString();
-        filter = current_format.toStdString();
+        filter      = current_format.toStdString();
     }
 
     std::vector<DialogService::FileFilter> filters;
     filters.push_back({current_format.toStdString(), "*." + default_ext});
 
-    auto result = dialogs_->file_dialog(
-        DialogService::FileType::Save,
-        "Export Figure",
-        "",
-        filters);
+    auto result =
+        dialogs_->file_dialog(DialogService::FileType::Save, "Export Figure", "", filters);
 
     if (result)
         path_edit_->setText(QString::fromStdString(*result));
@@ -211,9 +207,9 @@ void QtExportWidget::on_export_clicked()
         return;
     }
 
-    QString format_key = format_combo_->currentData().toString();
-    uint32_t w = static_cast<uint32_t>(width_spin_->value());
-    uint32_t h = static_cast<uint32_t>(height_spin_->value());
+    QString  format_key = format_combo_->currentData().toString();
+    uint32_t w          = static_cast<uint32_t>(width_spin_->value());
+    uint32_t h          = static_cast<uint32_t>(height_spin_->value());
 
     if (export_callback_)
     {

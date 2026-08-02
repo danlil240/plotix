@@ -288,7 +288,7 @@ void SettingsPanel::draw_appearance_tab()
     ImGui::TextUnformatted("Glass / Transparency");
     ImGui::Spacing();
 
-    ui::ThemeGlassSettings glass = theme_mgr_->glass();
+    ui::ThemeGlassSettings glass         = theme_mgr_->glass();
     bool                   glass_changed = false;
 
     auto glass_slider = [&](const char* label, float* value)
@@ -442,8 +442,8 @@ void SettingsPanel::draw_shortcuts_tab()
             {
                 std::string sc_str   = b.shortcut.valid() ? b.shortcut.to_string() : "(none)";
                 bool        conflict = b.shortcut.valid()
-                                       && shortcut_count.contains(b.shortcut.to_string())
-                                       && shortcut_count.at(b.shortcut.to_string()) > 1;
+                                && shortcut_count.contains(b.shortcut.to_string())
+                                && shortcut_count.at(b.shortcut.to_string()) > 1;
 
                 if (conflict)
                 {

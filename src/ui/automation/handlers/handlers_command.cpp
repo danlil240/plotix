@@ -18,7 +18,7 @@ namespace spectra
 #ifdef SPECTRA_USE_IMGUI
 namespace
 {
-void append_menu_actions_json(std::ostringstream& oss,
+void append_menu_actions_json(std::ostringstream&                       oss,
                               const std::vector<ui::shell::MenuAction>& actions,
                               bool&                                     first)
 {
@@ -41,8 +41,8 @@ void append_menu_actions_json(std::ostringstream& oss,
             continue;
         if (!first)
             oss << ",";
-        first = false;
-        const bool enabled = !action.enabled || action.enabled();
+        first                = false;
+        const bool enabled   = !action.enabled || action.enabled();
         const bool checkable = static_cast<bool>(action.checked);
         oss << R"({"label":")" << json_escape(action.label) << R"(","enabled":)"
             << (enabled ? "true" : "false") << R"(,"checkable":)" << (checkable ? "true" : "false")
@@ -114,7 +114,7 @@ std::vector<AutomationHandlerEntry> make_command_handlers()
             }
             ui_ctx->app_shell->sync_before_frame();
             ui::shell::MenuBar& bar = ui_ctx->app_shell->menu_bar();
-            std::ostringstream        oss;
+            std::ostringstream  oss;
             oss << R"({"menus":[)";
             bool first_menu = true;
             for (const std::string& menu_name : bar.menu_names())

@@ -79,8 +79,8 @@ class QtTimelineWidget : public QDockWidget
     void timeline_changed();
 
    private:
-    void build_ui();
-    void update_playback_state();
+    void                 build_ui();
+    void                 update_playback_state();
     void                 refresh_keyframes();
     void                 refresh_property_targets();
     uint32_t             selected_track_id() const;

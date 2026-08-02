@@ -70,9 +70,8 @@ static std::string series_2d_table(const Series& s, int series_idx)
     std::ostringstream o;
     o << "<table>\n"
       << "  <caption>" << html_escape(lbl) << "</caption>\n"
-      << "  <thead><tr><th scope=\"col\">Index</th>"
-      << "<th scope=\"col\">" << html_escape(xname) << "</th>"
-      << "<th scope=\"col\">" << html_escape(yname) << "</th></tr></thead>\n"
+      << "  <thead><tr><th scope=\"col\">Index</th>" << "<th scope=\"col\">" << html_escape(xname)
+      << "</th>" << "<th scope=\"col\">" << html_escape(yname) << "</th></tr></thead>\n"
       << "  <tbody>\n";
 
     size_t n = line ? line->point_count() : (scatter ? scatter->point_count() : 0);
@@ -112,10 +111,8 @@ static std::string series_3d_table(const Series& s, int series_idx)
     std::ostringstream o;
     o << "<table>\n"
       << "  <caption>" << html_escape(lbl) << "</caption>\n"
-      << "  <thead><tr><th scope=\"col\">Index</th>"
-      << "<th scope=\"col\">X</th>"
-      << "<th scope=\"col\">Y</th>"
-      << "<th scope=\"col\">Z</th></tr></thead>\n"
+      << "  <thead><tr><th scope=\"col\">Index</th>" << "<th scope=\"col\">X</th>"
+      << "<th scope=\"col\">Y</th>" << "<th scope=\"col\">Z</th></tr></thead>\n"
       << "  <tbody>\n";
 
     size_t n = line3 ? line3->point_count() : (scat3 ? scat3->point_count() : 0);
@@ -152,8 +149,7 @@ std::string figure_to_html_table(const Figure& fig)
 
     o << "<!DOCTYPE html>\n"
       << "<html lang=\"en\">\n"
-      << "<head><meta charset=\"UTF-8\">"
-      << "<title>Spectra Figure Data</title></head>\n"
+      << "<head><meta charset=\"UTF-8\">" << "<title>Spectra Figure Data</title></head>\n"
       << "<body>\n"
       << "<h1>Figure Data</h1>\n";
 

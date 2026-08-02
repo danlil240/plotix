@@ -173,11 +173,11 @@ void QtTransformWidget::build_ui()
     move_step_up_btn_->setObjectName("move_transform_step_up_btn");
     move_step_down_btn_ = new QPushButton("Down", pipeline_group);
     move_step_down_btn_->setObjectName("move_transform_step_down_btn");
-    remove_step_btn_      = new QPushButton("Remove", pipeline_group);
+    remove_step_btn_ = new QPushButton("Remove", pipeline_group);
     remove_step_btn_->setObjectName("remove_transform_step_btn");
-    clear_pipeline_btn_   = new QPushButton("Clear", pipeline_group);
+    clear_pipeline_btn_ = new QPushButton("Clear", pipeline_group);
     clear_pipeline_btn_->setObjectName("clear_transform_pipeline_btn");
-    apply_pipeline_btn_   = new QPushButton("Apply Pipeline", pipeline_group);
+    apply_pipeline_btn_ = new QPushButton("Apply Pipeline", pipeline_group);
     apply_pipeline_btn_->setObjectName("apply_transform_pipeline_btn");
     pipe_btn_layout->addWidget(move_step_up_btn_);
     pipe_btn_layout->addWidget(move_step_down_btn_);
@@ -1106,13 +1106,13 @@ void QtTransformWidget::on_apply_transform()
     if (name.isEmpty())
         return;
 
-    auto          params = collect_params(scale_spin_,
+    auto                        params = collect_params(scale_spin_,
                                  offset_spin_,
                                  clamp_min_spin_,
                                  clamp_max_spin_,
                                  fft_db_check_,
                                  fft_sr_spin_);
-    DataTransform xform  = create_transform_from_ui(name, params);
+    DataTransform               xform  = create_transform_from_ui(name, params);
     const TransformTarget       target = selected_target(target_combo_, target_list_);
     QPointer<QtTransformWidget> self(this);
     undoable_edit_figure_data(
@@ -1255,7 +1255,7 @@ void QtTransformWidget::on_apply_pipeline()
     if (pipeline_.is_identity())
         return;
 
-    const TransformPipeline pipeline = pipeline_;
+    const TransformPipeline     pipeline = pipeline_;
     const TransformTarget       target   = selected_target(target_combo_, target_list_);
     QPointer<QtTransformWidget> self(this);
     undoable_edit_figure_data(

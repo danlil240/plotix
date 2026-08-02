@@ -18,7 +18,7 @@
 namespace spectra::adapters::ros2::sub_compat
 {
 
-using SerializedMessageConstPtr = std::shared_ptr<const rclcpp::SerializedMessage>;
+using SerializedMessageConstPtr    = std::shared_ptr<const rclcpp::SerializedMessage>;
 using SerializedMessageCallbackArg = const SerializedMessageConstPtr&;
 
 }   // namespace spectra::adapters::ros2::sub_compat

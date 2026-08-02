@@ -48,16 +48,16 @@ LineSeries& add_function_plot(Axes&            ax,
     std::vector<float> xs(static_cast<size_t>(n));
     std::vector<float> ys(static_cast<size_t>(n));
 
-    const double dx = (static_cast<double>(xmax) - static_cast<double>(xmin))
-                      / static_cast<double>(n - 1);
+    const double dx =
+        (static_cast<double>(xmax) - static_cast<double>(xmin)) / static_cast<double>(n - 1);
     for (int i = 0; i < n; ++i)
     {
         const float x = static_cast<float>(static_cast<double>(xmin) + dx * static_cast<double>(i));
         ExprContext ctx;
-        ctx.x = x;
-        ctx.t = x;
-        ctx.i = static_cast<size_t>(i);
-        ctx.n = static_cast<size_t>(n);
+        ctx.x                      = x;
+        ctx.t                      = x;
+        ctx.i                      = static_cast<size_t>(i);
+        ctx.n                      = static_cast<size_t>(n);
         xs[static_cast<size_t>(i)] = x;
         ys[static_cast<size_t>(i)] = evaluate(ast, ctx);
     }

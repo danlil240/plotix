@@ -40,7 +40,7 @@ class OccupancyGridDisplay : public DisplayPlugin
     void        deserialize_config_blob(const std::string& blob) override;
 
    private:
-    void ensure_subscription();
+    void                              ensure_subscription();
     std::optional<OccupancyGridFrame> latest_frame() const;
 
     const TfBuffer*       tf_buffer_{nullptr};

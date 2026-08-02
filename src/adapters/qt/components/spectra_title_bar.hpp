@@ -22,13 +22,13 @@ class SpectraTitleBar : public QWidget
 {
     Q_OBJECT
 
-public:
+   public:
     explicit SpectraTitleBar(QWidget* parent = nullptr);
     ~SpectraTitleBar() override;
-    SpectraTitleBar(const SpectraTitleBar&) = delete;
+    SpectraTitleBar(const SpectraTitleBar&)            = delete;
     SpectraTitleBar& operator=(const SpectraTitleBar&) = delete;
 
-    void set_title(const QString& title);
+    void    set_title(const QString& title);
     QString title() const { return title_; }
 
     // Set the window that this title bar controls
@@ -36,29 +36,29 @@ public:
 
     int height_hint() const;
 
-signals:
+   signals:
     void minimized();
     void maximized();
     void closed();
 
-protected:
+   protected:
     void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
 
-private:
+   private:
     void build_buttons();
     void on_minimize();
     void on_maximize();
     void on_close();
 
-    QWidget*    window_     = nullptr;
-    QString     title_      = "Spectra";
-    QPushButton* btn_min_   = nullptr;
-    QPushButton* btn_max_   = nullptr;
-    QPushButton* btn_close_ = nullptr;
+    QWidget*     window_       = nullptr;
+    QString      title_        = "Spectra";
+    QPushButton* btn_min_      = nullptr;
+    QPushButton* btn_max_      = nullptr;
+    QPushButton* btn_close_    = nullptr;
     bool         is_maximized_ = false;
 };
 

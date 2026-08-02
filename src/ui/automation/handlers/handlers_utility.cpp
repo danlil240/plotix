@@ -60,10 +60,9 @@ std::vector<AutomationHandlerEntry> make_utility_handlers()
             const bool menu     = ui_ctx->imgui_ui && ui_ctx->imgui_ui->is_menu_open();
             automation::dismiss_ui_capture(ui_ctx);
             std::ostringstream oss;
-            oss << "{\"cleared\":{"
-                << "\"tab_drag\":" << (tab_drag ? "true" : "false") << ",\"pane_tab\":"
-                << (pane_tab ? "true" : "false") << ",\"menu\":" << (menu ? "true" : "false")
-                << "}}";
+            oss << "{\"cleared\":{" << "\"tab_drag\":" << (tab_drag ? "true" : "false")
+                << ",\"pane_tab\":" << (pane_tab ? "true" : "false")
+                << ",\"menu\":" << (menu ? "true" : "false") << "}}";
             req.response_json = json_ok(req.id, oss.str());
 #else
             (void)ui_ctx;

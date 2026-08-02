@@ -106,8 +106,7 @@ bool copy_image_to_clipboard(const uint8_t* png_bytes, size_t size)
     const char* cursor        = reinterpret_cast<const char*>(png_bytes);
     while (total_written < size)
     {
-        const ssize_t n =
-            ::write(pipefd[1], cursor + total_written, size - total_written);
+        const ssize_t n = ::write(pipefd[1], cursor + total_written, size - total_written);
         if (n > 0)
         {
             total_written += static_cast<size_t>(n);
@@ -119,15 +118,13 @@ bool copy_image_to_clipboard(const uint8_t* png_bytes, size_t size)
     }
     ::close(pipefd[1]);
 
-    int   status    = 0;
-    pid_t wait_pid  = ::waitpid(pid, &status, 0);
+    int        status   = 0;
+    pid_t      wait_pid = ::waitpid(pid, &status, 0);
     const bool child_ok = wait_pid == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 
     if (total_written != size)
     {
-        SPECTRA_LOG_WARN("clipboard",
-                         "copy_image_to_clipboard: incomplete write to {}",
-                         tool_name);
+        SPECTRA_LOG_WARN("clipboard", "copy_image_to_clipboard: incomplete write to {}", tool_name);
         return false;
     }
 

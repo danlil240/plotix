@@ -1396,17 +1396,17 @@ void NodeGraphPanel::draw_graph_canvas()
                 hsv_to_rgb(hue, 0.45f, 0.55f, cr, cg, cb);
 
                 ImU32 fill_col   = IM_COL32(static_cast<int>(cr * 255),
-                                            static_cast<int>(cg * 255),
-                                            static_cast<int>(cb * 255),
-                                            18);
+                                          static_cast<int>(cg * 255),
+                                          static_cast<int>(cb * 255),
+                                          18);
                 ImU32 border_col = IM_COL32(static_cast<int>(cr * 255),
                                             static_cast<int>(cg * 255),
                                             static_cast<int>(cb * 255),
                                             55);
                 ImU32 text_col   = IM_COL32(static_cast<int>(cr * 255),
-                                            static_cast<int>(cg * 255),
-                                            static_cast<int>(cb * 255),
-                                            140);
+                                          static_cast<int>(cg * 255),
+                                          static_cast<int>(cb * 255),
+                                          140);
 
                 ImVec2 tl(b.min_x - pad, b.min_y - pad - 16.0f * view_scale_);
                 ImVec2 br(b.max_x + pad, b.max_y + pad);

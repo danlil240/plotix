@@ -29,14 +29,10 @@ void unset_test_env(const char* name)
 #endif
 }
 
-
 class NativeDialogPolicyTest : public ::testing::Test
 {
    protected:
-    void SetUp() override
-    {
-        saved_enabled_ = spectra::native_dialogs_enabled();
-    }
+    void SetUp() override { saved_enabled_ = spectra::native_dialogs_enabled(); }
 
     void TearDown() override { spectra::set_native_dialogs_enabled(saved_enabled_); }
 
@@ -45,9 +41,9 @@ class NativeDialogPolicyTest : public ::testing::Test
 
 TEST_F(NativeDialogPolicyTest, StripsNoNativeDialogsFlag)
 {
-    char arg0[] = "spectra";
-    char arg1[] = "--no-native-dialogs";
-    char arg2[] = "--help";
+    char  arg0[] = "spectra";
+    char  arg1[] = "--no-native-dialogs";
+    char  arg2[] = "--help";
     char* argv[] = {arg0, arg1, arg2, nullptr};
     int   argc   = 3;
 
@@ -64,7 +60,7 @@ TEST_F(NativeDialogPolicyTest, EnvVarDisablesDialogs)
     spectra::set_native_dialogs_enabled(true);
     set_test_env("SPECTRA_NO_NATIVE_DIALOGS", "1");
 
-    char arg0[] = "spectra";
+    char  arg0[] = "spectra";
     char* argv[] = {arg0, nullptr};
     int   argc   = 1;
     spectra::init_native_dialog_policy(argc, argv);

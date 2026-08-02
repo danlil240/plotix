@@ -113,10 +113,10 @@ class SessionRuntime
 
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
     // Win32: render synchronously while the OS size/move modal loop blocks tick().
-    void pump_interactive_frame(FrameScheduler&  scheduler,
-                                Animator&        animator,
-                                WindowManager*   window_mgr,
-                                FrameState&      frame_state);
+    void pump_interactive_frame(FrameScheduler& scheduler,
+                                Animator&       animator,
+                                WindowManager*  window_mgr,
+                                FrameState&     frame_state);
 #endif
 
    private:

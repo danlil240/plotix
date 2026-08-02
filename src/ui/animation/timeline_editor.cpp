@@ -1326,8 +1326,8 @@ bool TimelineEditor::deserialize(const std::string& json)
     snap_interval_ = extract_float("snap_interval", 0.1f);
 
     has_loop_region_ = false;
-    float li = extract_float("loop_in", -1.0f);
-    float lo = extract_float("loop_out", -1.0f);
+    float li         = extract_float("loop_in", -1.0f);
+    float lo         = extract_float("loop_out", -1.0f);
     if (li >= 0.0f && lo > li)
     {
         loop_in_         = li;
@@ -1416,8 +1416,8 @@ void TimelineEditor::draw(float width, float height)
 {
     std::lock_guard lock(mutex_);
 
-    namespace tk        = spectra::ui::tokens;
-    const auto& colors  = spectra::ui::theme();
+    namespace tk       = spectra::ui::tokens;
+    const auto& colors = spectra::ui::theme();
 
     // Color → ImU32 helper (generic over spectra::Color and spectra::ui::Color).
     auto col = [](const auto& c, float a) -> ImU32
@@ -1468,10 +1468,10 @@ void TimelineEditor::draw(float width, float height)
     draw_list->AddRectFilled(ImVec2(origin.x + track_label_width, ruler_y),
                              ImVec2(right_x, ruler_y + ruler_height),
                              col(colors.bg_tertiary, 0.85f));
-    draw_list->AddText(
-        ImVec2(origin.x + label_pad_x, ruler_y + (ruler_height - ImGui::GetTextLineHeight()) * 0.5f),
-        col(colors.text_tertiary, 0.75f),
-        "TRACKS");
+    draw_list->AddText(ImVec2(origin.x + label_pad_x,
+                              ruler_y + (ruler_height - ImGui::GetTextLineHeight()) * 0.5f),
+                       col(colors.text_tertiary, 0.75f),
+                       "TRACKS");
     draw_list->AddLine(ImVec2(origin.x, ruler_y + ruler_height),
                        ImVec2(right_x, ruler_y + ruler_height),
                        col(colors.border_subtle, 0.6f),
@@ -1548,8 +1548,8 @@ void TimelineEditor::draw(float width, float height)
         auto& track = tracks_[i];
         float y     = tracks_origin.y + static_cast<float>(i) * track_height;
 
-        ImU32 lane_bg = (i % 2 == 0) ? col(colors.bg_secondary, 0.0f)
-                                     : col(colors.bg_tertiary, 0.25f);
+        ImU32 lane_bg =
+            (i % 2 == 0) ? col(colors.bg_secondary, 0.0f) : col(colors.bg_tertiary, 0.25f);
         tracks_dl->AddRectFilled(ImVec2(tracks_origin.x + track_label_width, y),
                                  ImVec2(tracks_origin.x + width, y + track_height),
                                  lane_bg);
@@ -1568,20 +1568,19 @@ void TimelineEditor::draw(float width, float height)
         tracks_dl->AddCircleFilled(ImVec2(dot_cx, dot_cy),
                                    4.0f,
                                    col(track.color, track.visible ? 1.0f : 0.4f));
-        ImU32 label_col = track.visible ? col(colors.text_primary, 0.95f)
-                                        : col(colors.text_tertiary, 0.5f);
-        tracks_dl->AddText(
-            ImVec2(tracks_origin.x + label_pad_x + 16.0f, dot_cy - ImGui::GetTextLineHeight() * 0.5f),
-            label_col,
-            track.name.c_str());
+        ImU32 label_col =
+            track.visible ? col(colors.text_primary, 0.95f) : col(colors.text_tertiary, 0.5f);
+        tracks_dl->AddText(ImVec2(tracks_origin.x + label_pad_x + 16.0f,
+                                  dot_cy - ImGui::GetTextLineHeight() * 0.5f),
+                           label_col,
+                           track.name.c_str());
 
         if (track.locked)
         {
-            tracks_dl->AddText(
-                ImVec2(tracks_origin.x + track_label_width - 16.0f,
-                       dot_cy - ImGui::GetTextLineHeight() * 0.5f),
-                col(colors.warning, 0.9f),
-                "L");
+            tracks_dl->AddText(ImVec2(tracks_origin.x + track_label_width - 16.0f,
+                                      dot_cy - ImGui::GetTextLineHeight() * 0.5f),
+                               col(colors.warning, 0.9f),
+                               "L");
         }
 
         ImU32 kf_color = col(track.color, track.color.a);
@@ -1635,10 +1634,12 @@ void TimelineEditor::draw(float width, float height)
     if (ph_px >= origin.x + track_label_width)
     {
         const float ph_bottom = ruler_y + height;
-        draw_list->AddLine(ImVec2(ph_px, ruler_y), ImVec2(ph_px, ph_bottom),
+        draw_list->AddLine(ImVec2(ph_px, ruler_y),
+                           ImVec2(ph_px, ph_bottom),
                            col(colors.accent, 0.20f),
                            4.0f);
-        draw_list->AddLine(ImVec2(ph_px, ruler_y), ImVec2(ph_px, ph_bottom),
+        draw_list->AddLine(ImVec2(ph_px, ruler_y),
+                           ImVec2(ph_px, ph_bottom),
                            col(colors.accent, 0.95f),
                            1.5f);
         draw_list->AddTriangleFilled(ImVec2(ph_px - 6.0f, ruler_y),

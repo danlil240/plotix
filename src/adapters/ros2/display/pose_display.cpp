@@ -176,7 +176,7 @@ void PoseDisplay::set_topic(const std::string& topic)
     topic_ = topic;
     topic_.copy(topic_input_.data(), topic_input_.size() - 1);
     topic_input_[std::min(topic_.size(), topic_input_.size() - 1)] = '\0';
-    resubscribe_requested_ = true;
+    resubscribe_requested_                                         = true;
 }
 
 std::string PoseDisplay::serialize_config_blob() const

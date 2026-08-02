@@ -103,7 +103,7 @@ void WindowManager::glfw_window_refresh_callback(GLFWwindow* window)
     // Win32 fires this during WM_ENTERSIZEMOVE (title-bar move / edge resize).
     // Sync framebuffer size and keep the render loop alive while the OS modal
     // loop would otherwise stall glfwWaitEvents.
-    int width = 0;
+    int width  = 0;
     int height = 0;
     glfwGetFramebufferSize(window, &width, &height);
     if (width > 0 && height > 0)

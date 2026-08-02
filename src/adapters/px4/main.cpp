@@ -71,7 +71,7 @@ int main(int argc, char** argv)
     }
 
     spectra::setup_dual_logging(spectra::default_console_log_level(),
-                                  spectra::default_file_log_level());
+                                spectra::default_file_log_level());
 
     SPECTRA_LOG_INFO("px4", "spectra-px4 {}", adapter_version());
 

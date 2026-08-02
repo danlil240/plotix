@@ -389,17 +389,15 @@ void App::init_runtime()
         rt.window_mgr->set_interactive_frame_handler(
             [&rt]()
             {
-                rt.app_services->session().pump_interactive_frame(
-                    rt.app_services->scheduler(),
-                    rt.app_services->animator(),
-                    rt.window_mgr.get(),
-                    rt.frame_state);
+                rt.app_services->session().pump_interactive_frame(rt.app_services->scheduler(),
+                                                                  rt.app_services->animator(),
+                                                                  rt.window_mgr.get(),
+                                                                  rt.frame_state);
             });
 
         std::vector<FigureId> first_group =
             window_groups.empty() ? std::vector<FigureId>{} : window_groups[0];
-        auto* initial_wctx =
-            rt.window_mgr->create_first_window_with_ui(native_window, first_group);
+        auto* initial_wctx = rt.window_mgr->create_first_window_with_ui(native_window, first_group);
 
         if (initial_wctx && initial_wctx->ui_ctx)
         {
@@ -420,8 +418,7 @@ void App::init_runtime()
             uint32_t w    = fig0 ? fig0->width() : 800;
             uint32_t h    = fig0 ? fig0->height() : 600;
 
-            auto* new_wctx =
-                rt.window_mgr->create_window_with_ui(w, h, "Spectra", group[0]);
+            auto* new_wctx = rt.window_mgr->create_window_with_ui(w, h, "Spectra", group[0]);
 
             if (new_wctx && new_wctx->ui_ctx && new_wctx->ui_ctx->fig_mgr)
             {
@@ -492,10 +489,8 @@ void App::init_runtime()
     {
         rt.dialog_service_impl    = std::make_unique<ImGuiDialogService>();
         rt.clipboard_service_impl = std::make_unique<ImGuiClipboardService>();
-        rt.redraw_request_impl    =
-            std::make_unique<ImGuiRedrawRequest>(rt.app_services->session());
-        rt.window_service_impl    =
-            std::make_unique<ImGuiWindowService>(*rt.window_mgr);
+        rt.redraw_request_impl = std::make_unique<ImGuiRedrawRequest>(rt.app_services->session());
+        rt.window_service_impl = std::make_unique<ImGuiWindowService>(*rt.window_mgr);
 
         rt.app_services->set_dialog_service(rt.dialog_service_impl.get());
         rt.app_services->set_clipboard_service(rt.clipboard_service_impl.get());
@@ -660,13 +655,14 @@ void App::init_runtime()
 
             // Use ApplicationServices::start_automation which handles port probing.
             // We need to pass the pinned port or 0 for auto-probe.
-            if (rt.app_services->start_automation(
-                    auto_sock, mcp_bind,
-                    mcp_port_pinned ? mcp_port : 0))
+            if (rt.app_services->start_automation(auto_sock,
+                                                  mcp_bind,
+                                                  mcp_port_pinned ? mcp_port : 0))
             {
                 SPECTRA_LOG_INFO("app", "Automation server started: " + auto_sock);
                 if (rt.app_services->mcp())
-                    SPECTRA_LOG_INFO("app", "MCP server started: " + rt.app_services->mcp()->endpoint());
+                    SPECTRA_LOG_INFO("app",
+                                     "MCP server started: " + rt.app_services->mcp()->endpoint());
             }
             else
             {
@@ -683,10 +679,11 @@ void App::init_runtime()
     if (!config_.headless)
     {
         rt.app_services->start_topic_server(registry_);
-#ifdef SPECTRA_USE_IMGUI
+    #ifdef SPECTRA_USE_IMGUI
         if (rt.ui_ctx_ptr && rt.app_services->topic_server())
-            rt.app_services->topic_server()->wire_topics_panel(rt.ui_ctx_ptr->topics_panel, &registry_);
-#endif
+            rt.app_services->topic_server()->wire_topics_panel(rt.ui_ctx_ptr->topics_panel,
+                                                               &registry_);
+    #endif
     }
 #endif
 
@@ -720,14 +717,14 @@ App::StepResult App::step()
     }
 
     rt.app_services->session().tick(rt.app_services->scheduler(),
-                    rt.app_services->animator(),
-                    rt.app_services->command_queue(),
-                    config_.headless,
-                    rt.ui_ctx_ptr,
+                                    rt.app_services->animator(),
+                                    rt.app_services->command_queue(),
+                                    config_.headless,
+                                    rt.ui_ctx_ptr,
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
-                    rt.window_mgr.get(),
+                                    rt.window_mgr.get(),
 #endif
-                    rt.frame_state);
+                                    rt.frame_state);
     rt.active_figure = rt.frame_state.active_figure;
     if (rt.active_figure && !registry_.get(rt.frame_state.active_figure_id))
     {

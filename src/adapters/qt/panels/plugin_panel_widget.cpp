@@ -43,11 +43,14 @@ QtPluginPanelWidget::QtPluginPanelWidget(PluginUIRegistry* registry, QWidget* pa
     // Set up change listener so we refresh when schemas change
     if (registry_)
     {
-        registry_->set_change_listener([this]() {
-            // Use QMetaObject to invoke on the GUI thread
-            QMetaObject::invokeMethod(this, &QtPluginPanelWidget::refresh,
-                                      Qt::QueuedConnection);
-        });
+        registry_->set_change_listener(
+            [this]()
+            {
+                // Use QMetaObject to invoke on the GUI thread
+                QMetaObject::invokeMethod(this,
+                                          &QtPluginPanelWidget::refresh,
+                                          Qt::QueuedConnection);
+            });
     }
 
     refresh();
@@ -131,328 +134,335 @@ void QtPluginPanelWidget::build_element_widget(const std::string&    schema_id,
     {
         switch (elem.type)
         {
-        case PluginUIElementType::Property:
-        {
-            const auto& prop = elem.property;
-
-            switch (prop.type)
+            case PluginUIElementType::Property:
             {
-            case PluginUIPropertyType::Boolean:
-            {
-                auto* cb = new QCheckBox(parent);
-                cb->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
-                cb->setChecked(prop.value == "true");
-                cb->setToolTip(QString::fromStdString(prop.tooltip));
-                if (prop.read_only)
-                    cb->setEnabled(false);
+                const auto& prop = elem.property;
 
-                if (!prop.id.empty())
+                switch (prop.type)
                 {
-                    QString prop_id = QString::fromStdString(prop.id);
-                    QString sid     = QString::fromStdString(schema_id);
-                    QObject::connect(cb,
-                                     &QCheckBox::toggled,
-                                     parent,
-                                     [this, cb, sid, prop_id](bool checked)
-                                     {
-                                         if (registry_)
-                                         {
-                                             const auto actual = registry_->set_property_value(
-                                                 sid.toStdString(),
-                                                 prop_id.toStdString(),
-                                                 checked ? "true" : "false");
-                                             const bool actual_checked = actual == "true";
-                                             if (actual_checked != cb->isChecked())
+                    case PluginUIPropertyType::Boolean:
+                    {
+                        auto* cb = new QCheckBox(parent);
+                        cb->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
+                        cb->setChecked(prop.value == "true");
+                        cb->setToolTip(QString::fromStdString(prop.tooltip));
+                        if (prop.read_only)
+                            cb->setEnabled(false);
+
+                        if (!prop.id.empty())
+                        {
+                            QString prop_id = QString::fromStdString(prop.id);
+                            QString sid     = QString::fromStdString(schema_id);
+                            QObject::connect(cb,
+                                             &QCheckBox::toggled,
+                                             parent,
+                                             [this, cb, sid, prop_id](bool checked)
                                              {
-                                                 QSignalBlocker blocker(cb);
-                                                 cb->setChecked(actual_checked);
-                                             }
-                                         }
-                                     });
+                                                 if (registry_)
+                                                 {
+                                                     const auto actual =
+                                                         registry_->set_property_value(
+                                                             sid.toStdString(),
+                                                             prop_id.toStdString(),
+                                                             checked ? "true" : "false");
+                                                     const bool actual_checked = actual == "true";
+                                                     if (actual_checked != cb->isChecked())
+                                                     {
+                                                         QSignalBlocker blocker(cb);
+                                                         cb->setChecked(actual_checked);
+                                                     }
+                                                 }
+                                             });
+                        }
+                        form->addRow(QString::fromStdString(prop.label), cb);
+                        break;
+                    }
+
+                    case PluginUIPropertyType::Integer:
+                    {
+                        auto* sb = new QSpinBox(parent);
+                        sb->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
+                        sb->setValue(std::atoi(prop.value.c_str()));
+                        if (!prop.min_value.empty())
+                            sb->setMinimum(std::atoi(prop.min_value.c_str()));
+                        else
+                            sb->setMinimum(-2147483647);
+                        if (!prop.max_value.empty())
+                            sb->setMaximum(std::atoi(prop.max_value.c_str()));
+                        else
+                            sb->setMaximum(2147483647);
+                        if (prop.read_only)
+                            sb->setReadOnly(true);
+                        sb->setToolTip(QString::fromStdString(prop.tooltip));
+
+                        if (!prop.id.empty())
+                        {
+                            QString prop_id = QString::fromStdString(prop.id);
+                            QString sid     = QString::fromStdString(schema_id);
+                            QObject::connect(
+                                sb,
+                                QOverload<int>::of(&QSpinBox::valueChanged),
+                                parent,
+                                [this, sb, sid, prop_id](int val)
+                                {
+                                    if (registry_)
+                                    {
+                                        const auto actual =
+                                            registry_->set_property_value(sid.toStdString(),
+                                                                          prop_id.toStdString(),
+                                                                          std::to_string(val));
+                                        const int actual_value = std::atoi(actual.c_str());
+                                        if (actual_value != sb->value())
+                                        {
+                                            QSignalBlocker blocker(sb);
+                                            sb->setValue(actual_value);
+                                        }
+                                    }
+                                });
+                        }
+                        form->addRow(QString::fromStdString(prop.label), sb);
+                        break;
+                    }
+
+                    case PluginUIPropertyType::Float:
+                    {
+                        auto* sb = new QDoubleSpinBox(parent);
+                        sb->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
+                        sb->setDecimals(6);
+                        sb->setValue(std::atof(prop.value.c_str()));
+                        if (!prop.min_value.empty())
+                            sb->setMinimum(std::atof(prop.min_value.c_str()));
+                        else
+                            sb->setMinimum(-1e18);
+                        if (!prop.max_value.empty())
+                            sb->setMaximum(std::atof(prop.max_value.c_str()));
+                        else
+                            sb->setMaximum(1e18);
+                        if (prop.read_only)
+                            sb->setReadOnly(true);
+                        sb->setToolTip(QString::fromStdString(prop.tooltip));
+
+                        if (!prop.id.empty())
+                        {
+                            QString prop_id = QString::fromStdString(prop.id);
+                            QString sid     = QString::fromStdString(schema_id);
+                            QObject::connect(
+                                sb,
+                                QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+                                parent,
+                                [this, sb, sid, prop_id](double val)
+                                {
+                                    if (registry_)
+                                    {
+                                        const auto actual =
+                                            registry_->set_property_value(sid.toStdString(),
+                                                                          prop_id.toStdString(),
+                                                                          std::to_string(val));
+                                        const double actual_value = std::atof(actual.c_str());
+                                        if (actual_value != sb->value())
+                                        {
+                                            QSignalBlocker blocker(sb);
+                                            sb->setValue(actual_value);
+                                        }
+                                    }
+                                });
+                        }
+                        form->addRow(QString::fromStdString(prop.label), sb);
+                        break;
+                    }
+
+                    case PluginUIPropertyType::String:
+                    {
+                        auto* le = new QLineEdit(parent);
+                        le->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
+                        le->setText(QString::fromStdString(prop.value));
+                        if (prop.read_only)
+                            le->setReadOnly(true);
+                        le->setToolTip(QString::fromStdString(prop.tooltip));
+
+                        if (!prop.id.empty())
+                        {
+                            QString prop_id = QString::fromStdString(prop.id);
+                            QString sid     = QString::fromStdString(schema_id);
+                            QObject::connect(
+                                le,
+                                &QLineEdit::textChanged,
+                                parent,
+                                [this, le, sid, prop_id](const QString& text)
+                                {
+                                    if (registry_)
+                                    {
+                                        const auto actual =
+                                            registry_->set_property_value(sid.toStdString(),
+                                                                          prop_id.toStdString(),
+                                                                          text.toStdString());
+                                        if (actual != le->text().toStdString())
+                                        {
+                                            QSignalBlocker blocker(le);
+                                            le->setText(QString::fromStdString(actual));
+                                        }
+                                    }
+                                });
+                        }
+                        form->addRow(QString::fromStdString(prop.label), le);
+                        break;
+                    }
+
+                    case PluginUIPropertyType::Enum:
+                    {
+                        auto* combo = new QComboBox(parent);
+                        combo->setObjectName("plugin_ui_property_"
+                                             + QString::fromStdString(prop.id));
+                        for (const auto& opt : prop.enum_options)
+                            combo->addItem(QString::fromStdString(opt));
+
+                        int idx = std::atoi(prop.value.c_str());
+                        if (idx >= 0 && idx < static_cast<int>(prop.enum_options.size()))
+                            combo->setCurrentIndex(idx);
+                        if (prop.read_only)
+                            combo->setEnabled(false);
+                        combo->setToolTip(QString::fromStdString(prop.tooltip));
+
+                        if (!prop.id.empty())
+                        {
+                            QString prop_id = QString::fromStdString(prop.id);
+                            QString sid     = QString::fromStdString(schema_id);
+                            QObject::connect(
+                                combo,
+                                QOverload<int>::of(&QComboBox::currentIndexChanged),
+                                parent,
+                                [this, combo, sid, prop_id](int idx)
+                                {
+                                    if (registry_)
+                                    {
+                                        const auto actual =
+                                            registry_->set_property_value(sid.toStdString(),
+                                                                          prop_id.toStdString(),
+                                                                          std::to_string(idx));
+                                        const int actual_index = std::atoi(actual.c_str());
+                                        if (actual_index != combo->currentIndex())
+                                        {
+                                            QSignalBlocker blocker(combo);
+                                            combo->setCurrentIndex(actual_index);
+                                        }
+                                    }
+                                });
+                        }
+                        form->addRow(QString::fromStdString(prop.label), combo);
+                        break;
+                    }
+
+                    case PluginUIPropertyType::Color:
+                    {
+                        auto* le = new QLineEdit(parent);
+                        le->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
+                        le->setText(QString::fromStdString(prop.value));
+                        if (prop.read_only)
+                            le->setReadOnly(true);
+                        le->setToolTip(QString::fromStdString(prop.tooltip));
+
+                        if (!prop.id.empty())
+                        {
+                            QString prop_id = QString::fromStdString(prop.id);
+                            QString sid     = QString::fromStdString(schema_id);
+                            QObject::connect(
+                                le,
+                                &QLineEdit::textChanged,
+                                parent,
+                                [this, le, sid, prop_id](const QString& text)
+                                {
+                                    if (registry_)
+                                    {
+                                        const auto actual =
+                                            registry_->set_property_value(sid.toStdString(),
+                                                                          prop_id.toStdString(),
+                                                                          text.toStdString());
+                                        if (actual != le->text().toStdString())
+                                        {
+                                            QSignalBlocker blocker(le);
+                                            le->setText(QString::fromStdString(actual));
+                                        }
+                                    }
+                                });
+                        }
+                        form->addRow(QString::fromStdString(prop.label), le);
+                        break;
+                    }
                 }
-                form->addRow(QString::fromStdString(prop.label), cb);
                 break;
             }
 
-            case PluginUIPropertyType::Integer:
+            case PluginUIElementType::Action:
             {
-                auto* sb = new QSpinBox(parent);
-                sb->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
-                sb->setValue(std::atoi(prop.value.c_str()));
-                if (!prop.min_value.empty())
-                    sb->setMinimum(std::atoi(prop.min_value.c_str()));
-                else
-                    sb->setMinimum(-2147483647);
-                if (!prop.max_value.empty())
-                    sb->setMaximum(std::atoi(prop.max_value.c_str()));
-                else
-                    sb->setMaximum(2147483647);
-                if (prop.read_only)
-                    sb->setReadOnly(true);
-                sb->setToolTip(QString::fromStdString(prop.tooltip));
+                const auto& act = elem.action;
+                auto*       btn = new QPushButton(QString::fromStdString(act.label), parent);
+                btn->setObjectName("plugin_ui_action_" + QString::fromStdString(act.id));
+                btn->setEnabled(act.enabled);
+                if (!act.tooltip.empty())
+                    btn->setToolTip(QString::fromStdString(act.tooltip));
 
-                if (!prop.id.empty())
+                if (!act.id.empty())
                 {
-                    QString prop_id = QString::fromStdString(prop.id);
-                    QString sid     = QString::fromStdString(schema_id);
-                    QObject::connect(sb,
-                                     QOverload<int>::of(&QSpinBox::valueChanged),
+                    QString action_id = QString::fromStdString(act.id);
+                    QString sid       = QString::fromStdString(schema_id);
+                    QObject::connect(btn,
+                                     &QPushButton::clicked,
                                      parent,
-                                     [this, sb, sid, prop_id](int val)
+                                     [this, sid, action_id]()
                                      {
                                          if (registry_)
-                                         {
-                                             const auto actual = registry_->set_property_value(
-                                                 sid.toStdString(),
-                                                 prop_id.toStdString(),
-                                                 std::to_string(val));
-                                             const int actual_value = std::atoi(actual.c_str());
-                                             if (actual_value != sb->value())
-                                             {
-                                                 QSignalBlocker blocker(sb);
-                                                 sb->setValue(actual_value);
-                                             }
-                                         }
+                                             registry_->trigger_action(sid.toStdString(),
+                                                                       action_id.toStdString());
                                      });
                 }
-                form->addRow(QString::fromStdString(prop.label), sb);
+                form->addRow("", btn);
                 break;
             }
 
-            case PluginUIPropertyType::Float:
+            case PluginUIElementType::Label:
             {
-                auto* sb = new QDoubleSpinBox(parent);
-                sb->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
-                sb->setDecimals(6);
-                sb->setValue(std::atof(prop.value.c_str()));
-                if (!prop.min_value.empty())
-                    sb->setMinimum(std::atof(prop.min_value.c_str()));
-                else
-                    sb->setMinimum(-1e18);
-                if (!prop.max_value.empty())
-                    sb->setMaximum(std::atof(prop.max_value.c_str()));
-                else
-                    sb->setMaximum(1e18);
-                if (prop.read_only)
-                    sb->setReadOnly(true);
-                sb->setToolTip(QString::fromStdString(prop.tooltip));
-
-                if (!prop.id.empty())
+                auto* label = new QLabel(QString::fromStdString(elem.label.text), parent);
+                if (elem.label.style_hint == "heading")
                 {
-                    QString prop_id = QString::fromStdString(prop.id);
-                    QString sid     = QString::fromStdString(schema_id);
-                    QObject::connect(sb,
-                                     QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-                                     parent,
-                                     [this, sb, sid, prop_id](double val)
-                                     {
-                                         if (registry_)
-                                         {
-                                             const auto actual = registry_->set_property_value(
-                                                 sid.toStdString(),
-                                                 prop_id.toStdString(),
-                                                 std::to_string(val));
-                                             const double actual_value = std::atof(actual.c_str());
-                                             if (actual_value != sb->value())
-                                             {
-                                                 QSignalBlocker blocker(sb);
-                                                 sb->setValue(actual_value);
-                                             }
-                                         }
-                                     });
+                    QFont f = label->font();
+                    f.setBold(true);
+                    label->setFont(f);
                 }
-                form->addRow(QString::fromStdString(prop.label), sb);
+                else if (elem.label.style_hint == "warning")
+                    label->setStyleSheet("color: orange;");
+                else if (elem.label.style_hint == "error")
+                    label->setStyleSheet("color: red;");
+                else if (elem.label.style_hint == "status")
+                    label->setStyleSheet("color: gray;");
+
+                form->addRow("", label);
                 break;
             }
 
-            case PluginUIPropertyType::String:
+            case PluginUIElementType::Separator:
             {
-                auto* le = new QLineEdit(parent);
-                le->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
-                le->setText(QString::fromStdString(prop.value));
-                if (prop.read_only)
-                    le->setReadOnly(true);
-                le->setToolTip(QString::fromStdString(prop.tooltip));
-
-                if (!prop.id.empty())
-                {
-                    QString prop_id = QString::fromStdString(prop.id);
-                    QString sid     = QString::fromStdString(schema_id);
-                    QObject::connect(le,
-                                     &QLineEdit::textChanged,
-                                     parent,
-                                     [this, le, sid, prop_id](const QString& text)
-                                     {
-                                         if (registry_)
-                                         {
-                                             const auto actual = registry_->set_property_value(
-                                                 sid.toStdString(),
-                                                 prop_id.toStdString(),
-                                                 text.toStdString());
-                                             if (actual != le->text().toStdString())
-                                             {
-                                                 QSignalBlocker blocker(le);
-                                                 le->setText(QString::fromStdString(actual));
-                                             }
-                                         }
-                                     });
-                }
-                form->addRow(QString::fromStdString(prop.label), le);
+                auto* separator = new QFrame(parent);
+                separator->setFrameShape(QFrame::HLine);
+                separator->setFrameShadow(QFrame::Sunken);
+                form->addRow("", separator);
                 break;
             }
 
-            case PluginUIPropertyType::Enum:
+            case PluginUIElementType::Group:
             {
-                auto* combo = new QComboBox(parent);
-                combo->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
-                for (const auto& opt : prop.enum_options)
-                    combo->addItem(QString::fromStdString(opt));
-
-                int idx = std::atoi(prop.value.c_str());
-                if (idx >= 0 && idx < static_cast<int>(prop.enum_options.size()))
-                    combo->setCurrentIndex(idx);
-                if (prop.read_only)
-                    combo->setEnabled(false);
-                combo->setToolTip(QString::fromStdString(prop.tooltip));
-
-                if (!prop.id.empty())
-                {
-                    QString prop_id = QString::fromStdString(prop.id);
-                    QString sid     = QString::fromStdString(schema_id);
-                    QObject::connect(combo,
-                                     QOverload<int>::of(&QComboBox::currentIndexChanged),
-                                     parent,
-                                     [this, combo, sid, prop_id](int idx)
-                                     {
-                                         if (registry_)
-                                         {
-                                             const auto actual = registry_->set_property_value(
-                                                 sid.toStdString(),
-                                                 prop_id.toStdString(),
-                                                 std::to_string(idx));
-                                             const int actual_index = std::atoi(actual.c_str());
-                                             if (actual_index != combo->currentIndex())
-                                             {
-                                                 QSignalBlocker blocker(combo);
-                                                 combo->setCurrentIndex(actual_index);
-                                             }
-                                         }
-                                     });
-                }
-                form->addRow(QString::fromStdString(prop.label), combo);
+                auto* sub_group = new QGroupBox(QString::fromStdString(elem.group.title), parent);
+                sub_group->setObjectName("plugin_ui_group_"
+                                         + QString::number(static_cast<qulonglong>(element_index)));
+                sub_group->setCheckable(true);
+                sub_group->setChecked(!elem.group.collapsed);
+                auto* sub_form = new QFormLayout(sub_group);
+                sub_form->setContentsMargins(8, 12, 8, 8);
+                sub_form->setSpacing(6);
+                for (const size_t child : elem.children)
+                    build_element_widget(schema_id, schema, child, sub_form, sub_group, ancestry);
+                form->addRow("", sub_group);
                 break;
             }
-
-            case PluginUIPropertyType::Color:
-            {
-                auto* le = new QLineEdit(parent);
-                le->setObjectName("plugin_ui_property_" + QString::fromStdString(prop.id));
-                le->setText(QString::fromStdString(prop.value));
-                if (prop.read_only)
-                    le->setReadOnly(true);
-                le->setToolTip(QString::fromStdString(prop.tooltip));
-
-                if (!prop.id.empty())
-                {
-                    QString prop_id = QString::fromStdString(prop.id);
-                    QString sid     = QString::fromStdString(schema_id);
-                    QObject::connect(le,
-                                     &QLineEdit::textChanged,
-                                     parent,
-                                     [this, le, sid, prop_id](const QString& text)
-                                     {
-                                         if (registry_)
-                                         {
-                                             const auto actual = registry_->set_property_value(
-                                                 sid.toStdString(),
-                                                 prop_id.toStdString(),
-                                                 text.toStdString());
-                                             if (actual != le->text().toStdString())
-                                             {
-                                                 QSignalBlocker blocker(le);
-                                                 le->setText(QString::fromStdString(actual));
-                                             }
-                                         }
-                                     });
-                }
-                form->addRow(QString::fromStdString(prop.label), le);
-                break;
-            }
-            }
-            break;
-        }
-
-        case PluginUIElementType::Action:
-        {
-            const auto& act = elem.action;
-            auto*       btn = new QPushButton(QString::fromStdString(act.label), parent);
-            btn->setObjectName("plugin_ui_action_" + QString::fromStdString(act.id));
-            btn->setEnabled(act.enabled);
-            if (!act.tooltip.empty())
-                btn->setToolTip(QString::fromStdString(act.tooltip));
-
-            if (!act.id.empty())
-            {
-                QString action_id = QString::fromStdString(act.id);
-                QString sid       = QString::fromStdString(schema_id);
-                QObject::connect(btn,
-                                 &QPushButton::clicked,
-                                 parent,
-                                 [this, sid, action_id]()
-                                 {
-                                     if (registry_)
-                                         registry_->trigger_action(sid.toStdString(),
-                                                                   action_id.toStdString());
-                                 });
-            }
-            form->addRow("", btn);
-            break;
-        }
-
-        case PluginUIElementType::Label:
-        {
-            auto* label = new QLabel(QString::fromStdString(elem.label.text), parent);
-            if (elem.label.style_hint == "heading")
-            {
-                QFont f = label->font();
-                f.setBold(true);
-                label->setFont(f);
-            }
-            else if (elem.label.style_hint == "warning")
-                label->setStyleSheet("color: orange;");
-            else if (elem.label.style_hint == "error")
-                label->setStyleSheet("color: red;");
-            else if (elem.label.style_hint == "status")
-                label->setStyleSheet("color: gray;");
-
-            form->addRow("", label);
-            break;
-        }
-
-        case PluginUIElementType::Separator:
-        {
-            auto* separator = new QFrame(parent);
-            separator->setFrameShape(QFrame::HLine);
-            separator->setFrameShadow(QFrame::Sunken);
-            form->addRow("", separator);
-            break;
-        }
-
-        case PluginUIElementType::Group:
-        {
-            auto* sub_group = new QGroupBox(QString::fromStdString(elem.group.title), parent);
-            sub_group->setObjectName("plugin_ui_group_"
-                                     + QString::number(static_cast<qulonglong>(element_index)));
-            sub_group->setCheckable(true);
-            sub_group->setChecked(!elem.group.collapsed);
-            auto* sub_form = new QFormLayout(sub_group);
-            sub_form->setContentsMargins(8, 12, 8, 8);
-            sub_form->setSpacing(6);
-            for (const size_t child : elem.children)
-                build_element_widget(schema_id, schema, child, sub_form, sub_group, ancestry);
-            form->addRow("", sub_group);
-            break;
-        }
         }
     }
     ancestry.pop_back();

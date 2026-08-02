@@ -104,7 +104,7 @@ void OccupancyGridDisplay::submit_renderables(SceneManager& scene)
     if (!frame.has_value() || frame->rgba.empty() || frame->width == 0 || frame->height == 0)
         return;
 
-    bool                 tf_ok = true;
+    bool                     tf_ok = true;
     const spectra::Transform tf =
         resolve_frame_transform(tf_buffer_, fixed_frame_, frame->frame_id, frame->stamp_ns, tf_ok);
     if (!tf_ok)
@@ -198,7 +198,7 @@ void OccupancyGridDisplay::ensure_subscription()
         {
             if (!msg)
                 return;
-            auto frame = decode_occupancy_grid(*msg, topic_, alpha_);
+            auto                        frame = decode_occupancy_grid(*msg, topic_, alpha_);
             std::lock_guard<std::mutex> lock(frame_mutex_);
             frame_ = std::move(frame);
         });

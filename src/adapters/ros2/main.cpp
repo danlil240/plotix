@@ -242,7 +242,7 @@ int main(int argc, char** argv)
     }
 
     spectra::setup_dual_logging(spectra::default_console_log_level(),
-                                  spectra::default_file_log_level());
+                                spectra::default_file_log_level());
 
 #ifndef NDEBUG
     maybe_reexec_for_fast_vulkan_startup(argc, argv);
@@ -393,7 +393,8 @@ int main(int argc, char** argv)
                 {
                     // Keep layout-manager rail width in sync when toggled from View menu.
                     ui_ctx->imgui_ui->set_nav_rail_visible(shell.nav_rail_visible());
-                    ui_ctx->imgui_ui->set_render_figure_enabled(shell.panel_visible("ros.plot_area"));
+                    ui_ctx->imgui_ui->set_render_figure_enabled(
+                        shell.panel_visible("ros.plot_area"));
                 }
                 shell.draw();
             });

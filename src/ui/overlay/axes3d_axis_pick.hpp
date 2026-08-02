@@ -21,12 +21,7 @@ enum class Axis3DArrowPick
 namespace detail
 {
 
-inline float dist2_point_to_segment(float px,
-                                    float py,
-                                    float ax,
-                                    float ay,
-                                    float bx,
-                                    float by)
+inline float dist2_point_to_segment(float px, float py, float ax, float ay, float bx, float by)
 {
     const float abx  = bx - ax;
     const float aby  = by - ay;
@@ -37,7 +32,7 @@ inline float dist2_point_to_segment(float px,
         const float dy = py - ay;
         return dx * dx + dy * dy;
     }
-    const float t = std::clamp(((px - ax) * abx + (py - ay) * aby) / len2, 0.0f, 1.0f);
+    const float t  = std::clamp(((px - ax) * abx + (py - ay) * aby) / len2, 0.0f, 1.0f);
     const float cx = ax + t * abx;
     const float cy = ay + t * aby;
     const float dx = px - cx;
@@ -83,9 +78,9 @@ inline Axis3DArrowPick pick_axes3d_axis_arrow(const Axes3D& axes,
         {Axis3DArrowPick::Z, {x0, y0, z1}, {x0, y0, z1 + arrow_len_z}},
     };
 
-    const float              hit_radius2 = hit_radius_px * hit_radius_px;
-    Axis3DArrowPick          best        = Axis3DArrowPick::None;
-    float                    best_dist2  = std::numeric_limits<float>::max();
+    const float     hit_radius2 = hit_radius_px * hit_radius_px;
+    Axis3DArrowPick best        = Axis3DArrowPick::None;
+    float           best_dist2  = std::numeric_limits<float>::max();
 
     for (const ArrowSeg& seg : segments)
     {

@@ -126,7 +126,7 @@ void CustomTransformDialog::draw()
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
     bool             still_open = open_;
-    ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar
+    ImGuiWindowFlags flags      = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar
                              | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
     if (ImGui::Begin("##custom_xform", nullptr, flags))
     {

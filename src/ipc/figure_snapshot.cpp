@@ -12,10 +12,9 @@
 namespace spectra::ipc
 {
 
-std::unique_ptr<spectra::Figure> build_figure_from_snapshot(
-    const SnapshotFigureState& snap,
-    uint32_t                   override_width,
-    uint32_t                   override_height)
+std::unique_ptr<spectra::Figure> build_figure_from_snapshot(const SnapshotFigureState& snap,
+                                                            uint32_t override_width,
+                                                            uint32_t override_height)
 {
     spectra::FigureConfig cfg;
     cfg.width  = (override_width > 0) ? override_width : snap.width;
@@ -75,25 +74,29 @@ std::unique_ptr<spectra::Figure> build_figure_from_snapshot(
                     std::vector<float> ux(xs.begin(), xs.end());
                     std::vector<float> uy(ys.begin(), ys.end());
                     std::sort(ux.begin(), ux.end());
-                    ux.erase(std::unique(ux.begin(), ux.end(),
+                    ux.erase(std::unique(ux.begin(),
+                                         ux.end(),
                                          [](float a, float b) { return std::abs(a - b) < 1e-6f; }),
                              ux.end());
                     std::sort(uy.begin(), uy.end());
-                    uy.erase(std::unique(uy.begin(), uy.end(),
+                    uy.erase(std::unique(uy.begin(),
+                                         uy.end(),
                                          [](float a, float b) { return std::abs(a - b) < 1e-6f; }),
                              uy.end());
 
-                    size_t ncols = ux.size();
-                    size_t nrows = uy.size();
+                    size_t             ncols = ux.size();
+                    size_t             nrows = uy.size();
                     std::vector<float> z_grid(nrows * ncols, 0.0f);
                     for (size_t k = 0; k < xs.size(); ++k)
                     {
                         auto cit = std::lower_bound(ux.begin(), ux.end(), xs[k] - 1e-6f);
                         auto ci  = static_cast<size_t>(std::distance(ux.begin(), cit));
-                        if (ci >= ncols) ci = ncols - 1;
+                        if (ci >= ncols)
+                            ci = ncols - 1;
                         auto rit = std::lower_bound(uy.begin(), uy.end(), ys[k] - 1e-6f);
                         auto ri  = static_cast<size_t>(std::distance(uy.begin(), rit));
-                        if (ri >= nrows) ri = nrows - 1;
+                        if (ri >= nrows)
+                            ri = nrows - 1;
                         z_grid[ri * ncols + ci] = zs[k];
                     }
 
@@ -297,7 +300,8 @@ void apply_diff_op_to_figure(spectra::Figure& fig, const DiffOp& op)
             if (op.axes_index < fig.axes().size() && fig.axes()[op.axes_index])
             {
                 auto* ax3d = dynamic_cast<spectra::Axes3D*>(fig.axes_mut()[op.axes_index].get());
-                if (ax3d) ax3d->zlim(op.f1, op.f2);
+                if (ax3d)
+                    ax3d->zlim(op.f1, op.f2);
             }
             break;
         case DiffOp::Type::ADD_SERIES:
@@ -332,7 +336,7 @@ void apply_diff_op_to_figure(spectra::Figure& fig, const DiffOp& op)
                     auto* s = series_vec[op.series_index].get();
                     if (auto* line3d = dynamic_cast<spectra::LineSeries3D*>(s))
                     {
-                        size_t n = op.data.size() / 3;
+                        size_t             n = op.data.size() / 3;
                         std::vector<float> xv(n), yv(n), zv(n);
                         for (size_t i = 0; i < n; ++i)
                         {
@@ -346,7 +350,7 @@ void apply_diff_op_to_figure(spectra::Figure& fig, const DiffOp& op)
                     }
                     else if (auto* scatter3d = dynamic_cast<spectra::ScatterSeries3D*>(s))
                     {
-                        size_t n = op.data.size() / 3;
+                        size_t             n = op.data.size() / 3;
                         std::vector<float> xv(n), yv(n), zv(n);
                         for (size_t i = 0; i < n; ++i)
                         {
@@ -360,7 +364,7 @@ void apply_diff_op_to_figure(spectra::Figure& fig, const DiffOp& op)
                     }
                     else if (auto* line = dynamic_cast<spectra::LineSeries*>(s))
                     {
-                        size_t n = op.data.size() / 2;
+                        size_t             n = op.data.size() / 2;
                         std::vector<float> xv(n), yv(n);
                         for (size_t i = 0; i < n; ++i)
                         {
@@ -372,7 +376,7 @@ void apply_diff_op_to_figure(spectra::Figure& fig, const DiffOp& op)
                     }
                     else if (auto* scatter = dynamic_cast<spectra::ScatterSeries*>(s))
                     {
-                        size_t n = op.data.size() / 2;
+                        size_t             n = op.data.size() / 2;
                         std::vector<float> xv(n), yv(n);
                         for (size_t i = 0; i < n; ++i)
                         {

@@ -292,8 +292,7 @@ std::string TopicStatsOverlay::format_bw(double bps)
 std::string TopicStatsOverlay::format_bytes(uint64_t bytes)
 {
     if (bytes >= 1024ULL * 1024ULL * 1024ULL)
-        return std::format("{:.2f} GB",
-                           static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0));
+        return std::format("{:.2f} GB", static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0));
     if (bytes >= 1024ULL * 1024ULL)
         return std::format("{:.2f} MB", static_cast<double>(bytes) / (1024.0 * 1024.0));
     if (bytes >= 1024ULL)
@@ -384,8 +383,7 @@ void TopicStatsOverlay::draw_inline()
     }
     if (echo_cb_)
     {
-        if (spectra::ui::widgets::toolbar_button(spectra::ui::Icon::Command,
-                                                 "Echo topic"))
+        if (spectra::ui::widgets::toolbar_button(spectra::ui::Icon::Command, "Echo topic"))
             echo_cb_(snap.topic);
         ImGui::SameLine();
     }
@@ -394,8 +392,7 @@ void TopicStatsOverlay::draw_inline()
     if (favorite_cb_)
     {
         ImGui::SameLine();
-        if (spectra::ui::widgets::toolbar_button(spectra::ui::Icon::Star,
-                                                 "Toggle favorite"))
+        if (spectra::ui::widgets::toolbar_button(spectra::ui::Icon::Star, "Toggle favorite"))
             favorite_cb_(snap.topic);
     }
     ImGui::Spacing();
@@ -408,10 +405,10 @@ void TopicStatsOverlay::draw_inline()
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered())
         {
-            const std::string tip = std::format(
-                "Last inter-message gap: {:.1f} ms  (> {:.0f}× expected)",
-                static_cast<double>(snap.last_gap_ns) * 1e-6,
-                drop_factor_);
+            const std::string tip =
+                std::format("Last inter-message gap: {:.1f} ms  (> {:.0f}× expected)",
+                            static_cast<double>(snap.last_gap_ns) * 1e-6,
+                            drop_factor_);
             ImGui::SetTooltip("%s", tip.c_str());
         }
         ImGui::Separator();
@@ -451,13 +448,14 @@ void TopicStatsOverlay::draw_inline()
                                         std::format("{}", snap.total_messages).c_str(),
                                         nullptr);
         ImGui::TableNextColumn();
-        spectra::ui::widgets::stat_card("Total bytes", format_bytes(snap.total_bytes).c_str(), nullptr);
+        spectra::ui::widgets::stat_card("Total bytes",
+                                        format_bytes(snap.total_bytes).c_str(),
+                                        nullptr);
         ImGui::TableNextColumn();
-        spectra::ui::widgets::stat_card("Latency",
-                                        snap.latency_avg_us >= 0.0
-                                            ? format_latency(snap.latency_avg_us).c_str()
-                                            : "-",
-                                        snap.latency_avg_us >= 0.0 ? "avg" : "no header");
+        spectra::ui::widgets::stat_card(
+            "Latency",
+            snap.latency_avg_us >= 0.0 ? format_latency(snap.latency_avg_us).c_str() : "-",
+            snap.latency_avg_us >= 0.0 ? "avg" : "no header");
         ImGui::TableNextColumn();
         spectra::ui::widgets::stat_card("Last message", age_text().c_str(), age_unit());
         ImGui::EndTable();
@@ -468,15 +466,14 @@ void TopicStatsOverlay::draw_inline()
     {
         ImGui::TextUnformatted("Message structure");
         ImGui::Separator();
-        ImGui::TextWrapped("Use inline echo in Topic Monitor to inspect fields and drag numeric paths onto plots.");
-        const std::string hz_range = std::format("Hz range: {} - {}",
-                                                 format_hz(snap.hz_min),
-                                                 format_hz(snap.hz_max));
+        ImGui::TextWrapped("Use inline echo in Topic Monitor to inspect fields and drag numeric "
+                           "paths onto plots.");
+        const std::string hz_range =
+            std::format("Hz range: {} - {}", format_hz(snap.hz_min), format_hz(snap.hz_max));
         ImGui::TextDisabled("%s", hz_range.c_str());
         const std::string gap_str =
             snap.last_gap_ns > 0
-                ? std::format("Last gap: {:.1f} ms",
-                              static_cast<double>(snap.last_gap_ns) * 1e-6)
+                ? std::format("Last gap: {:.1f} ms", static_cast<double>(snap.last_gap_ns) * 1e-6)
                 : "Last gap: -";
         ImGui::TextDisabled("%s", gap_str.c_str());
     }
@@ -532,9 +529,9 @@ void TopicStatsOverlay::draw_series_controls(SubplotManager* subplot_mgr, int ac
             continue;
 
         ImGui::PushID(i);
-        auto&                series = *entry->series;
-        const spectra::Color c      = series.color();
-        float                rgba[4]  = {c.r, c.g, c.b, c.a};
+        auto&                series  = *entry->series;
+        const spectra::Color c       = series.color();
+        float                rgba[4] = {c.r, c.g, c.b, c.a};
         if (ImGui::ColorEdit4("##color", rgba, ImGuiColorEditFlags_NoInputs))
             series.set_color({rgba[0], rgba[1], rgba[2], rgba[3]});
 

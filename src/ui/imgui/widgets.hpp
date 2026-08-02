@@ -2,9 +2,9 @@
 
 #ifdef SPECTRA_USE_IMGUI
 
-#include <span>
-#include <spectra/color.hpp>
-#include <string>
+    #include <span>
+    #include <spectra/color.hpp>
+    #include <string>
 
     #include "ui/theme/design_tokens.hpp"
     #include "ui/theme/icons.hpp"
@@ -24,8 +24,8 @@ struct SectionAnimState
     float content_height      = 0.0f;   // Measured intrinsic height when content is laid out
     float clip_height         = 0.0f;   // Height baseline frozen when a fold animation starts
     bool  target_open         = true;
-    bool  was_open            = true;   // Previous frame's open state
-    bool  remeasure_on_expand = false;  // One invisible layout pass before height animation
+    bool  was_open            = true;    // Previous frame's open state
+    bool  remeasure_on_expand = false;   // One invisible layout pass before height animation
 };
 
 // Global section animation registry (keyed by section label pointer or ID).
@@ -141,15 +141,15 @@ struct PanelHeaderAction
 
 // Centered empty state with an icon, title, subtitle, and optional actions.
 // Returns the clicked action index, or -1 when no action was activated.
-int empty_state(ui::Icon icon,
-                const char* title,
-                const char* subtitle = nullptr,
-                std::span<const EmptyStateAction> actions = {});
+int empty_state(ui::Icon                          icon,
+                const char*                       title,
+                const char*                       subtitle = nullptr,
+                std::span<const EmptyStateAction> actions  = {});
 
 // Compact panel header with optional right-aligned icon actions.
 // Returns the clicked action index, or -1 when no action was activated.
-int panel_header(const char* title,
-                 const char* subtitle = nullptr,
+int panel_header(const char*                        title,
+                 const char*                        subtitle      = nullptr,
                  std::span<const PanelHeaderAction> right_actions = {});
 
 // Square toolbar control used by ROS and plot tooling.

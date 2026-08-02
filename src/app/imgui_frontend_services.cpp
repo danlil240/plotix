@@ -35,11 +35,10 @@ namespace spectra
 
 // ─── ImGuiDialogService ──────────────────────────────────────────────────────
 
-std::optional<std::string>
-ImGuiDialogService::file_dialog(FileType                       type,
-                                const std::string&             title,
-                                const std::string&             default_path,
-                                const std::vector<FileFilter>& filters)
+std::optional<std::string> ImGuiDialogService::file_dialog(FileType           type,
+                                                           const std::string& title,
+                                                           const std::string& default_path,
+                                                           const std::vector<FileFilter>& filters)
 {
     if (!native_dialogs_enabled())
     {
@@ -48,9 +47,9 @@ ImGuiDialogService::file_dialog(FileType                       type,
     }
 
     // Convert filters to tinyfiledialogs format.
-    std::vector<std::string>  patterns;
-    std::vector<const char*>  pattern_ptrs;
-    std::string               description;
+    std::vector<std::string> patterns;
+    std::vector<const char*> pattern_ptrs;
+    std::string              description;
 
     for (const auto& f : filters)
     {
@@ -65,22 +64,20 @@ ImGuiDialogService::file_dialog(FileType                       type,
     const char* result = nullptr;
     if (type == FileType::Open)
     {
-        result = tinyfd_openFileDialog(
-            title.c_str(),
-            default_path.c_str(),
-            static_cast<int>(pattern_ptrs.size()),
-            pattern_ptrs.data(),
-            description.empty() ? nullptr : description.c_str(),
-            0);   // single file
+        result = tinyfd_openFileDialog(title.c_str(),
+                                       default_path.c_str(),
+                                       static_cast<int>(pattern_ptrs.size()),
+                                       pattern_ptrs.data(),
+                                       description.empty() ? nullptr : description.c_str(),
+                                       0);   // single file
     }
     else
     {
-        result = tinyfd_saveFileDialog(
-            title.c_str(),
-            default_path.c_str(),
-            static_cast<int>(pattern_ptrs.size()),
-            pattern_ptrs.data(),
-            description.empty() ? nullptr : description.c_str());
+        result = tinyfd_saveFileDialog(title.c_str(),
+                                       default_path.c_str(),
+                                       static_cast<int>(pattern_ptrs.size()),
+                                       pattern_ptrs.data(),
+                                       description.empty() ? nullptr : description.c_str());
     }
 
     if (result)
@@ -100,8 +97,8 @@ bool ImGuiDialogService::message_box(const std::string& title,
     return rc == 1;
 }
 
-std::optional<Color>
-ImGuiDialogService::color_picker(const std::string& title, const Color& initial)
+std::optional<Color> ImGuiDialogService::color_picker(const std::string& title,
+                                                      const Color&       initial)
 {
     if (!native_dialogs_enabled())
         return std::nullopt;
@@ -129,11 +126,11 @@ ImGuiDialogService::color_picker(const std::string& title, const Color& initial)
 
 void ImGuiClipboardService::copy_text(const std::string& text)
 {
-#ifdef SPECTRA_USE_GLFW
+    #ifdef SPECTRA_USE_GLFW
     glfwSetClipboardString(nullptr, text.c_str());
-#elif defined(SPECTRA_USE_SDL3)
+    #elif defined(SPECTRA_USE_SDL3)
     SDL_SetClipboardText(text.c_str());
-#endif
+    #endif
 }
 
 void ImGuiClipboardService::copy_image(const std::vector<uint8_t>& png_data)
@@ -143,19 +140,19 @@ void ImGuiClipboardService::copy_image(const std::vector<uint8_t>& png_data)
 
 std::string ImGuiClipboardService::paste_text()
 {
-#ifdef SPECTRA_USE_GLFW
+    #ifdef SPECTRA_USE_GLFW
     const char* text = glfwGetClipboardString(nullptr);
     return text ? std::string(text) : std::string{};
-#elif defined(SPECTRA_USE_SDL3)
+    #elif defined(SPECTRA_USE_SDL3)
     char* text = SDL_GetClipboardText();
     if (!text)
         return {};
     std::string result(text);
     SDL_free(text);
     return result;
-#else
+    #else
     return {};
-#endif
+    #endif
 }
 
 // ─── ImGuiRedrawRequest ──────────────────────────────────────────────────────
@@ -223,4 +220,4 @@ size_t ImGuiWindowService::window_count() const
 
 }   // namespace spectra
 
-#endif // SPECTRA_USE_GLFW || SPECTRA_USE_SDL3
+#endif   // SPECTRA_USE_GLFW || SPECTRA_USE_SDL3

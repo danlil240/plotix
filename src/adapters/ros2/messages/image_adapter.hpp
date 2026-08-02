@@ -138,10 +138,10 @@ inline bool decode_image_pixel(const sensor_msgs::msg::Image& message,
 }   // namespace image_detail
 
 std::optional<ImageFrame> adapt_image_message_with_encoding(const sensor_msgs::msg::Image& message,
-                                                            const std::string& topic,
-                                                            uint32_t           preview_max_dim,
-                                                            bool               retain_full_image,
-                                                            std::string        encoding_override);
+                                                            const std::string&             topic,
+                                                            uint32_t    preview_max_dim,
+                                                            bool        retain_full_image,
+                                                            std::string encoding_override);
 
 inline std::optional<ImageFrame> adapt_image_message(const sensor_msgs::msg::Image& message,
                                                      const std::string&             topic,
@@ -153,8 +153,11 @@ inline std::optional<ImageFrame> adapt_image_message(const sensor_msgs::msg::Ima
 
     if (message.encoding == "jpeg" || message.encoding == "png")
     {
-        return adapt_image_message_with_encoding(
-            message, topic, preview_max_dim, retain_full_image, message.encoding);
+        return adapt_image_message_with_encoding(message,
+                                                 topic,
+                                                 preview_max_dim,
+                                                 retain_full_image,
+                                                 message.encoding);
     }
 
     if (message.step == 0)
@@ -170,10 +173,10 @@ inline std::optional<ImageFrame> adapt_image_message(const sensor_msgs::msg::Ima
     frame.is_color =
         message.encoding == "rgb8" || message.encoding == "bgr8" || message.encoding == "rgba8";
 
-    const bool supported     = message.encoding == "rgb8" || message.encoding == "bgr8"
-                               || message.encoding == "rgba8" || message.encoding == "mono8"
-                               || message.encoding == "16UC1" || message.encoding == "jpeg"
-                               || message.encoding == "png";
+    const bool supported = message.encoding == "rgb8" || message.encoding == "bgr8"
+                           || message.encoding == "rgba8" || message.encoding == "mono8"
+                           || message.encoding == "16UC1" || message.encoding == "jpeg"
+                           || message.encoding == "png";
     frame.supported_encoding = supported;
     if (!supported)
     {

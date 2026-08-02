@@ -15,10 +15,10 @@ namespace spectra::adapters::qt
 class SpectraDockHeader : public QWidget
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraDockHeader(const QString& title, QWidget* parent = nullptr);
-    ~SpectraDockHeader() override = default;
-    SpectraDockHeader(const SpectraDockHeader&) = delete;
+    ~SpectraDockHeader() override                          = default;
+    SpectraDockHeader(const SpectraDockHeader&)            = delete;
     SpectraDockHeader& operator=(const SpectraDockHeader&) = delete;
 
     void set_title(const QString& title);
@@ -26,19 +26,19 @@ public:
     void set_collapsible(bool collapsible);
     void set_collapsed(bool collapsed);
 
-signals:
+   signals:
     void close_requested();
     void toggle_collapsed();
 
-protected:
+   protected:
     void paintEvent(QPaintEvent* event) override;
 
-private:
-    QString     title_;
-    bool        closable_    = true;
-    bool        collapsible_ = false;
-    bool        collapsed_   = false;
-    QPushButton* btn_close_  = nullptr;
+   private:
+    QString      title_;
+    bool         closable_    = true;
+    bool         collapsible_ = false;
+    bool         collapsed_   = false;
+    QPushButton* btn_close_   = nullptr;
     QPushButton* btn_chevron_ = nullptr;
 };
 

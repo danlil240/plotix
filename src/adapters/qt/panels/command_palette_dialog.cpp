@@ -47,12 +47,18 @@ QtCommandPaletteDialog::QtCommandPaletteDialog(CommandRegistry& registry, QWidge
     results_list_->setMaximumHeight(420);
     layout->addWidget(results_list_);
 
-    connect(search_edit_, &QLineEdit::textChanged,
-            this, &QtCommandPaletteDialog::on_search_changed);
-    connect(results_list_, &QListWidget::itemActivated,
-            this, &QtCommandPaletteDialog::on_item_activated);
-    connect(results_list_, &QListWidget::currentItemChanged,
-            this, &QtCommandPaletteDialog::on_item_selection_changed);
+    connect(search_edit_,
+            &QLineEdit::textChanged,
+            this,
+            &QtCommandPaletteDialog::on_search_changed);
+    connect(results_list_,
+            &QListWidget::itemActivated,
+            this,
+            &QtCommandPaletteDialog::on_item_activated);
+    connect(results_list_,
+            &QListWidget::currentItemChanged,
+            this,
+            &QtCommandPaletteDialog::on_item_selection_changed);
 }
 
 void QtCommandPaletteDialog::open_palette()
@@ -100,7 +106,7 @@ void QtCommandPaletteDialog::keyPressEvent(QKeyEvent* event)
             if (results_list_->count() > 0)
             {
                 int row = results_list_->currentRow();
-                row = std::min(row + 1, results_list_->count() - 1);
+                row     = std::min(row + 1, results_list_->count() - 1);
                 results_list_->setCurrentRow(row);
             }
             return;
@@ -109,7 +115,7 @@ void QtCommandPaletteDialog::keyPressEvent(QKeyEvent* event)
             if (results_list_->count() > 0)
             {
                 int row = results_list_->currentRow();
-                row = std::max(row - 1, 0);
+                row     = std::max(row - 1, 0);
                 results_list_->setCurrentRow(row);
             }
             return;
@@ -180,7 +186,7 @@ void QtCommandPaletteDialog::update_results(const std::string& query)
         if (result.command->category != current_category)
         {
             current_category = result.command->category;
-            auto* sep = new QListWidgetItem(results_list_);
+            auto* sep        = new QListWidgetItem(results_list_);
             sep->setText(QString::fromStdString("── " + current_category + " ──"));
             sep->setFlags(sep->flags() & ~Qt::ItemIsSelectable & ~Qt::ItemIsEnabled);
             QFont f = sep->font();

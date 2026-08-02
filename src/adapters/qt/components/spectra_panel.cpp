@@ -10,8 +10,7 @@
 namespace spectra::adapters::qt
 {
 
-SpectraPanel::SpectraPanel(QWidget* parent)
-    : QWidget(parent)
+SpectraPanel::SpectraPanel(QWidget* parent) : QWidget(parent)
 {
     setAttribute(Qt::WA_StyledBackground, true);
 

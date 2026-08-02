@@ -53,9 +53,7 @@ bool deserialize_cdr(const BagMessage& msg, MsgT& out)
     }
 }
 
-void inject_tf_message(const tf2_msgs::msg::TFMessage& tf_msg,
-                       bool                              is_static,
-                       TfBuffer&                         tf_buffer)
+void inject_tf_message(const tf2_msgs::msg::TFMessage& tf_msg, bool is_static, TfBuffer& tf_buffer)
 {
     for (const auto& transform : tf_msg.transforms)
         tf_buffer.inject_transform(adapt_tf_transform(transform, is_static));
@@ -166,13 +164,13 @@ bool BagDisplaySync::open(const std::string& bag_path)
 void BagDisplaySync::close()
 {
     reader_.close();
-    open_              = false;
+    open_ = false;
     bag_path_.clear();
     static_tf_cache_.clear();
     last_playhead_sec_ = -1.0;
 }
 
-void BagDisplaySync::reset_playback_state(TfBuffer&                     tf_buffer,
+void BagDisplaySync::reset_playback_state(TfBuffer&                    tf_buffer,
                                           std::vector<DisplayPlugin*>& displays)
 {
     clear_display_buffers(displays);
@@ -182,9 +180,9 @@ void BagDisplaySync::reset_playback_state(TfBuffer&                     tf_buffe
     reader_.seek_begin();
 }
 
-void BagDisplaySync::sync_to_playhead(double                       playhead_sec,
-                                      int64_t                        bag_start_time_ns,
-                                      TfBuffer&                      tf_buffer,
+void BagDisplaySync::sync_to_playhead(double                      playhead_sec,
+                                      int64_t                     bag_start_time_ns,
+                                      TfBuffer&                   tf_buffer,
                                       std::vector<DisplayPlugin*> displays)
 {
     if (!open_)
@@ -196,8 +194,7 @@ void BagDisplaySync::sync_to_playhead(double                       playhead_sec,
 
     reset_playback_state(tf_buffer, displays);
 
-    const int64_t end_ns =
-        bag_start_time_ns + static_cast<int64_t>(playhead_clamped * 1e9);
+    const int64_t end_ns = bag_start_time_ns + static_cast<int64_t>(playhead_clamped * 1e9);
 
     BagMessage msg;
     while (reader_.has_next())
@@ -222,8 +219,7 @@ void BagDisplaySync::process_message(const BagMessage&            msg,
                                      TfBuffer&                    tf_buffer,
                                      std::vector<DisplayPlugin*>& displays)
 {
-    const double bag_time_sec =
-        (static_cast<double>(msg.timestamp_ns) - bag_start_ns) * 1e-9;
+    const double bag_time_sec = (static_cast<double>(msg.timestamp_ns) - bag_start_ns) * 1e-9;
     if (bag_time_sec > playhead_sec + 1e-9)
         return;
 
@@ -301,14 +297,19 @@ void BagDisplaySync::process_message(const BagMessage&            msg,
 namespace spectra::adapters::ros2
 {
 
-bool BagDisplaySync::open(const std::string&) { return false; }
+bool BagDisplaySync::open(const std::string&)
+{
+    return false;
+}
 void BagDisplaySync::close() {}
 void BagDisplaySync::reset_playback_state(TfBuffer&, std::vector<DisplayPlugin*>&) {}
 void BagDisplaySync::process_message(const BagMessage&,
                                      double,
                                      double,
                                      TfBuffer&,
-                                     std::vector<DisplayPlugin*>&) {}
+                                     std::vector<DisplayPlugin*>&)
+{
+}
 void BagDisplaySync::sync_to_playhead(double, int64_t, TfBuffer&, std::vector<DisplayPlugin*>) {}
 
 }   // namespace spectra::adapters::ros2

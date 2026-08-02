@@ -19,25 +19,25 @@ namespace spectra::adapters::qt
 class SpectraNavButton : public QPushButton
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraNavButton(const QString& icon_codepoint,
                               const QString& label,
                               const QString& shortcut_hint,
                               QWidget*       parent = nullptr);
-    ~SpectraNavButton() override = default;
-    SpectraNavButton(const SpectraNavButton&) = delete;
+    ~SpectraNavButton() override                         = default;
+    SpectraNavButton(const SpectraNavButton&)            = delete;
     SpectraNavButton& operator=(const SpectraNavButton&) = delete;
 
     void set_active(bool active);
     bool is_active() const { return active_; }
 
-    void set_compact_mode(bool compact);
+    void  set_compact_mode(bool compact);
     QSize sizeHint() const override;
 
-protected:
+   protected:
     void paintEvent(QPaintEvent* event) override;
 
-private:
+   private:
     QString icon_codepoint_;
     QString label_;
     QString shortcut_hint_;

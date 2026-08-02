@@ -31,11 +31,11 @@ namespace spectra
 
 enum class PluginUIElementType : uint8_t
 {
-    Property,   // editable value (bool, int, float, string, enum, color)
-    Action,     // button that triggers a callback
-    Label,      // read-only text
-    Separator,  // visual separator line
-    Group,      // grouping header with optional collapsible children
+    Property,    // editable value (bool, int, float, string, enum, color)
+    Action,      // button that triggers a callback
+    Label,       // read-only text
+    Separator,   // visual separator line
+    Group,       // grouping header with optional collapsible children
 };
 
 enum class PluginUIPropertyType : uint8_t
@@ -44,15 +44,15 @@ enum class PluginUIPropertyType : uint8_t
     Integer,
     Float,
     String,
-    Enum,       // value is an index into enum_options
-    Color,      // value is "#RRGGBB" or "#RRGGBBAA"
+    Enum,    // value is an index into enum_options
+    Color,   // value is "#RRGGBB" or "#RRGGBBAA"
 };
 
 // A single property descriptor within a plugin UI schema.
 struct PluginUIProperty
 {
-    std::string id;                    // unique within the schema
-    std::string label;                 // display label
+    std::string          id;      // unique within the schema
+    std::string          label;   // display label
     PluginUIPropertyType type = PluginUIPropertyType::String;
 
     // Current value serialized as a string:
@@ -81,10 +81,10 @@ struct PluginUIProperty
 // A single action descriptor within a plugin UI schema.
 struct PluginUIAction
 {
-    std::string id;           // unique within the schema
-    std::string label;        // button text
-    std::string tooltip;      // optional
-    bool enabled = true;
+    std::string id;        // unique within the schema
+    std::string label;     // button text
+    std::string tooltip;   // optional
+    bool        enabled = true;
 };
 
 // A label element (read-only text, e.g. status or description).
@@ -98,7 +98,7 @@ struct PluginUILabel
 struct PluginUIGroup
 {
     std::string title;
-    bool collapsed = false;
+    bool        collapsed = false;
 };
 
 // A single ordered element in the schema.
@@ -120,8 +120,8 @@ struct PluginUIElement
 // A complete UI schema for a plugin panel.
 struct PluginUISchema
 {
-    std::string plugin_name;     // plugin that registered this schema
-    std::string panel_title;     // title shown in the dock/panel
+    std::string                  plugin_name;   // plugin that registered this schema
+    std::string                  panel_title;   // title shown in the dock/panel
     std::vector<PluginUIElement> elements;
 
     // Schema version (for future evolution)
@@ -145,11 +145,12 @@ struct PluginUICallbacks
     // the requested value if the plugin clamps or rejects it).
     std::function<std::string(const std::string& schema_id,
                               const std::string& property_id,
-                              const std::string& new_value)> on_property_changed;
+                              const std::string& new_value)>
+        on_property_changed;
 
     // Called when an action is triggered.
-    std::function<void(const std::string& schema_id,
-                       const std::string& action_id)> on_action_triggered;
+    std::function<void(const std::string& schema_id, const std::string& action_id)>
+        on_action_triggered;
 };
 
 // Manages plugin UI schemas.  Thread-safe.
@@ -159,7 +160,7 @@ struct PluginUICallbacks
 class PluginUIRegistry
 {
    public:
-    PluginUIRegistry() = default;
+    PluginUIRegistry()  = default;
     ~PluginUIRegistry() = default;
 
     PluginUIRegistry(const PluginUIRegistry&)            = delete;
@@ -167,8 +168,7 @@ class PluginUIRegistry
 
     // Register a UI schema.  Returns a schema ID (unique within the registry).
     // If a schema with the same plugin_name already exists, it is replaced.
-    std::string register_schema(const PluginUISchema& schema,
-                                PluginUICallbacks     callbacks = {});
+    std::string register_schema(const PluginUISchema& schema, PluginUICallbacks callbacks = {});
 
     // Unregister a schema by ID.
     void unregister_schema(const std::string& schema_id);
@@ -192,8 +192,7 @@ class PluginUIRegistry
                                    const std::string& new_value);
 
     // Trigger an action (called by the frontend when the user clicks a button).
-    void trigger_action(const std::string& schema_id,
-                        const std::string& action_id);
+    void trigger_action(const std::string& schema_id, const std::string& action_id);
 
     // Set a listener that is called when schemas are added/removed/updated.
     // The listener is called from the registry's mutex, so it should not
@@ -211,9 +210,9 @@ class PluginUIRegistry
         PluginUICallbacks callbacks;
     };
 
-    mutable std::mutex              mutex_;
-    std::vector<Entry>              entries_;
-    std::function<void()>           change_listener_;
+    mutable std::mutex    mutex_;
+    std::vector<Entry>    entries_;
+    std::function<void()> change_listener_;
 };
 
 }   // namespace spectra

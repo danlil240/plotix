@@ -35,8 +35,8 @@ class DisplayRegistry
         return register_factory(info, []() { return std::make_unique<T>(); });
     }
 
-    bool register_factory(const DisplayTypeInfo&                          info,
-                          std::function<std::unique_ptr<DisplayPlugin>()> factory);
+    bool                           register_factory(const DisplayTypeInfo&                          info,
+                                                    std::function<std::unique_ptr<DisplayPlugin>()> factory);
     std::unique_ptr<DisplayPlugin> create(const std::string& type_id) const;
     std::vector<DisplayTypeInfo>   list_types() const;
 

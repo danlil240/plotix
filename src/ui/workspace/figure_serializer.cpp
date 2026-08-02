@@ -939,8 +939,8 @@ bool FigureSerializer::load_stream(std::istream& f, Figure& figure, OverlaySnaps
                 bool        isref = (version >= 4) ? (r.read_u8() != 0) : (excl && !inleg);
                 float       width = r.read_f32();
 
-                x_data = r.read_floats();
-                y_data = r.read_floats();
+                x_data                = r.read_floats();
+                y_data                = r.read_floats();
                 const double x_offset = version >= 6 ? r.read_f64() : 0.0;
 
                 auto& s = axes->line(x_data, y_data);
@@ -1304,9 +1304,9 @@ bool FigureSerializer::load_stream(std::istream& f, Figure& figure, OverlaySnaps
                 float       wid   = r.read_f32();
                 auto        bm    = static_cast<BlendMode>(r.read_u8());
 
-                auto x = r.read_floats();
-                auto y = r.read_floats();
-                auto z = r.read_floats();
+                auto         x        = r.read_floats();
+                auto         y        = r.read_floats();
+                auto         z        = r.read_floats();
                 const double x_offset = version >= 6 ? r.read_f64() : 0.0;
 
                 auto& s = axes->line3d(x, y, z);
@@ -1353,9 +1353,9 @@ bool FigureSerializer::load_stream(std::istream& f, Figure& figure, OverlaySnaps
                 float       sz    = r.read_f32();
                 auto        bm    = static_cast<BlendMode>(r.read_u8());
 
-                auto x = r.read_floats();
-                auto y = r.read_floats();
-                auto z = r.read_floats();
+                auto         x        = r.read_floats();
+                auto         y        = r.read_floats();
+                auto         z        = r.read_floats();
                 const double x_offset = version >= 6 ? r.read_f64() : 0.0;
 
                 auto& s = axes->scatter3d(x, y, z);

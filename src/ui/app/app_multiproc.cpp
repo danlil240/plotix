@@ -363,7 +363,9 @@ void App::run_multiproc()
         while (std::chrono::steady_clock::now() < deadline)
         {
 #ifndef _WIN32
-            struct pollfd pfd{};
+            struct pollfd pfd
+            {
+            };
             pfd.fd      = conn->fd();
             pfd.events  = POLLIN;
             pfd.revents = 0;
@@ -508,7 +510,9 @@ void App::run_multiproc()
             scheduler->begin_frame();
 
 #ifndef _WIN32
-        struct pollfd pfd{};
+        struct pollfd pfd
+        {
+        };
         pfd.fd     = conn->fd();
         pfd.events = POLLIN;
 

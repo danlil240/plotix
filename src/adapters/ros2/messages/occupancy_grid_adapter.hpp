@@ -37,21 +37,21 @@ inline uint64_t occupancy_stamp_ns(const builtin_interfaces::msg::Time& stamp)
 }
 
 inline OccupancyGridFrame decode_occupancy_grid(const nav_msgs::msg::OccupancyGrid& msg,
-                                              const std::string&                  topic,
-                                              float                               alpha = 0.85f)
+                                                const std::string&                  topic,
+                                                float                               alpha = 0.85f)
 {
     OccupancyGridFrame frame;
-    frame.topic       = topic;
-    frame.frame_id    = msg.header.frame_id;
-    frame.stamp_ns    = occupancy_stamp_ns(msg.header.stamp);
-    frame.width       = msg.info.width;
-    frame.height      = msg.info.height;
-    frame.resolution  = msg.info.resolution;
-    frame.origin_x    = msg.info.origin.position.x;
-    frame.origin_y    = msg.info.origin.position.y;
-    frame.origin_yaw  = 0.0;
-    frame.alpha       = alpha;
-    frame.data        = msg.data;
+    frame.topic      = topic;
+    frame.frame_id   = msg.header.frame_id;
+    frame.stamp_ns   = occupancy_stamp_ns(msg.header.stamp);
+    frame.width      = msg.info.width;
+    frame.height     = msg.info.height;
+    frame.resolution = msg.info.resolution;
+    frame.origin_x   = msg.info.origin.position.x;
+    frame.origin_y   = msg.info.origin.position.y;
+    frame.origin_yaw = 0.0;
+    frame.alpha      = alpha;
+    frame.data       = msg.data;
 
     if (frame.width == 0 || frame.height == 0 || frame.data.empty())
         return frame;
@@ -84,11 +84,11 @@ inline OccupancyGridFrame decode_occupancy_grid(const nav_msgs::msg::OccupancyGr
             g             = static_cast<uint8_t>(240.0f * (1.0f - t));
             b             = static_cast<uint8_t>(240.0f * (1.0f - t) + 255.0f * t);
         }
-        const size_t o     = i * 4u;
-        frame.rgba[o + 0]  = r;
-        frame.rgba[o + 1]  = g;
-        frame.rgba[o + 2]  = b;
-        frame.rgba[o + 3]  = a;
+        const size_t o    = i * 4u;
+        frame.rgba[o + 0] = r;
+        frame.rgba[o + 1] = g;
+        frame.rgba[o + 2] = b;
+        frame.rgba[o + 3] = a;
     }
     return frame;
 }

@@ -219,10 +219,10 @@ TEST(Material, SurfaceSeriesChaining)
 {
     SurfaceSeries s;
     auto&         ref = s.ambient(0.3f)
-                            .specular(0.4f)
-                            .shininess(32.0f)
-                            .color(Color{1.0f, 0.0f, 0.0f, 1.0f})
-                            .opacity(0.8f);
+                    .specular(0.4f)
+                    .shininess(32.0f)
+                    .color(Color{1.0f, 0.0f, 0.0f, 1.0f})
+                    .opacity(0.8f);
     EXPECT_FLOAT_EQ(ref.ambient(), 0.3f);
     EXPECT_FLOAT_EQ(ref.opacity(), 0.8f);
 }

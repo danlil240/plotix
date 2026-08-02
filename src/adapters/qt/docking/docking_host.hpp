@@ -23,20 +23,20 @@ namespace spectra::adapters::qt
 {
 
 // Opaque handle types for docking entities.
-using PanelId   = uint64_t;
+using PanelId    = uint64_t;
 using DocumentId = uint64_t;   // Same as FigureId for figure documents
-using HostId    = uint64_t;
+using HostId     = uint64_t;
 
-inline constexpr PanelId   INVALID_PANEL_ID   = ~PanelId{0};
+inline constexpr PanelId    INVALID_PANEL_ID    = ~PanelId{0};
 inline constexpr DocumentId INVALID_DOCUMENT_ID = ~DocumentId{0};
-inline constexpr HostId    INVALID_HOST_ID    = ~HostId{0};
+inline constexpr HostId     INVALID_HOST_ID     = ~HostId{0};
 
 // Descriptor for a dockable panel.
 struct PanelDescriptor
 {
-    std::string id;           // unique panel id (e.g. "inspector", "topics")
-    std::string title;        // display title
-    std::string area;         // "left", "right", "bottom", "top"
+    std::string id;      // unique panel id (e.g. "inspector", "topics")
+    std::string title;   // display title
+    std::string area;    // "left", "right", "bottom", "top"
     bool        default_visible = true;
 };
 
@@ -50,7 +50,7 @@ struct DocumentDescriptor
 // Serialized layout state for save/restore.
 struct DockLayoutState
 {
-    std::string provider;                  // "native", "kddockwidgets", etc.
+    std::string provider;   // "native", "kddockwidgets", etc.
     std::string provider_version;
     // Per-window state (base64-encoded Qt saveState/saveGeometry).
     struct DockWindowState
@@ -71,10 +71,10 @@ struct DockLayoutState
 class DockingHost
 {
    public:
-    DockingHost()                          = default;
+    DockingHost()                              = default;
     DockingHost(const DockingHost&)            = delete;
     DockingHost& operator=(const DockingHost&) = delete;
-    virtual ~DockingHost()                 = default;
+    virtual ~DockingHost()                     = default;
 
     // ── Panel management ───────────────────────────────────────────────────
 
@@ -86,7 +86,7 @@ class DockingHost
 
     // Show or hide a panel.
     virtual void set_panel_visible(PanelId id, bool visible) = 0;
-    virtual bool is_panel_visible(PanelId id) const = 0;
+    virtual bool is_panel_visible(PanelId id) const          = 0;
 
     // ── Document (figure) management ───────────────────────────────────────
 
@@ -113,14 +113,14 @@ class DockingHost
 
     // ── Layout persistence ─────────────────────────────────────────────────
 
-    virtual DockLayoutState save_layout() const = 0;
-    virtual bool restore_layout(const DockLayoutState& state) = 0;
+    virtual DockLayoutState save_layout() const                          = 0;
+    virtual bool            restore_layout(const DockLayoutState& state) = 0;
 
     // ── Host identity ──────────────────────────────────────────────────────
 
-    virtual HostId host_id() const = 0;
-    virtual std::string title() const = 0;
-    virtual void set_title(const std::string& title) = 0;
+    virtual HostId      host_id() const                     = 0;
+    virtual std::string title() const                       = 0;
+    virtual void        set_title(const std::string& title) = 0;
 };
 
 }   // namespace spectra::adapters::qt

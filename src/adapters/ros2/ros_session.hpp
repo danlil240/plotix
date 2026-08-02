@@ -293,9 +293,9 @@ struct SessionMergeOptions
 
 // Merge `incoming` into `base`.  Layout, panels, imgui, and camera come from
 // `base`.  Duplicate subscriptions (topic + field + slot) are skipped.
-RosSession merge_sessions(const RosSession&        base,
-                          const RosSession&        incoming,
-                          SessionMergeOptions      options = {});
+RosSession merge_sessions(const RosSession&   base,
+                          const RosSession&   incoming,
+                          SessionMergeOptions options = {});
 
 // ---------------------------------------------------------------------------
 // RosSessionManager — save / load / recent-list management
@@ -382,7 +382,7 @@ class RosSessionManager
 
     // Load/save favorite topic names from ~/.config/spectra/ros_favorites.json.
     std::vector<std::string> load_favorites();
-    bool save_favorites(const std::vector<std::string>& topics);
+    bool                     save_favorites(const std::vector<std::string>& topics);
 
     // Toggle/query a favorite topic in the persisted favorites list.
     bool toggle_favorite(const std::string& topic);

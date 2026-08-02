@@ -95,9 +95,9 @@ void ImGuiIntegration::draw_timeline_panel()
     // Draw top-border accent line via background draw list
     ImDrawList* bg_dl      = ImGui::GetBackgroundDrawList();
     ImU32       accent_col = IM_COL32(static_cast<int>(colors.accent.r * 255),
-                                      static_cast<int>(colors.accent.g * 255),
-                                      static_cast<int>(colors.accent.b * 255),
-                                      180);
+                                static_cast<int>(colors.accent.g * 255),
+                                static_cast<int>(colors.accent.b * 255),
+                                180);
     bg_dl->AddRectFilled(ImVec2(panel_x, panel_y - 1.0f),
                          ImVec2(panel_x + panel_w, panel_y + 1.0f),
                          accent_col);
@@ -127,11 +127,9 @@ void ImGuiIntegration::draw_timeline_panel()
 
         // ── Panel eyebrow ──
         ImGui::PushFont(font_heading_);
-        ImGui::PushStyleColor(ImGuiCol_Text,
-                              ImVec4(colors.text_tertiary.r,
-                                     colors.text_tertiary.g,
-                                     colors.text_tertiary.b,
-                                     0.75f));
+        ImGui::PushStyleColor(
+            ImGuiCol_Text,
+            ImVec4(colors.text_tertiary.r, colors.text_tertiary.g, colors.text_tertiary.b, 0.75f));
         ImGui::TextUnformatted("TIMELINE");
         ImGui::PopStyleColor();
         ImGui::PopFont();
@@ -148,7 +146,7 @@ void ImGuiIntegration::draw_timeline_panel()
             float         pad          = 5.0f;
             float         cluster_w =
                 static_cast<float>(cluster_btns) * btn_sz + (cluster_btns - 1) * btn_gap;
-            ImVec2 cp = ImGui::GetCursorScreenPos();
+            ImVec2      cp  = ImGui::GetCursorScreenPos();
             ImDrawList* tdl = ImGui::GetWindowDrawList();
             tdl->AddRectFilled(ImVec2(cp.x - pad, cp.y - pad),
                                ImVec2(cp.x + cluster_w + pad, cp.y + btn_sz + pad),
@@ -218,7 +216,7 @@ void ImGuiIntegration::draw_timeline_panel()
             const std::string time_buf = std::format("{:.2f} / {:.2f}",
                                                      timeline_editor_->playhead(),
                                                      timeline_editor_->duration());
-            float time_w = ImGui::CalcTextSize(time_buf.c_str()).x;
+            float             time_w   = ImGui::CalcTextSize(time_buf.c_str()).x;
             ImGui::SameLine(0.0f, ImGui::GetContentRegionAvail().x - time_w - 8.0f);
 
             ImGui::PushStyleColor(ImGuiCol_Text,

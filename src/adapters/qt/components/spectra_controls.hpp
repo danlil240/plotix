@@ -14,28 +14,28 @@ namespace spectra::adapters::qt
 class SpectraLineEdit : public QLineEdit
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraLineEdit(QWidget* parent = nullptr);
 };
 
 class SpectraComboBox : public QComboBox
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraComboBox(QWidget* parent = nullptr);
 };
 
 class SpectraCheckBox : public QCheckBox
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraCheckBox(const QString& text, QWidget* parent = nullptr);
 };
 
 class SpectraSpinBox : public QSpinBox
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraSpinBox(QWidget* parent = nullptr);
 };
 

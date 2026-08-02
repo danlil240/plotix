@@ -41,22 +41,18 @@ class DialogService
     };
 
     // Show a file open/save dialog.  Returns selected path or nullopt if cancelled.
-    virtual std::optional<std::string> file_dialog(
-        FileType                     type,
-        const std::string&           title,
-        const std::string&           default_path,
-        const std::vector<FileFilter>& filters) = 0;
+    virtual std::optional<std::string> file_dialog(FileType                       type,
+                                                   const std::string&             title,
+                                                   const std::string&             default_path,
+                                                   const std::vector<FileFilter>& filters) = 0;
 
     // Show a message box with OK/Cancel buttons.  Returns true for OK.
-    virtual bool message_box(
-        const std::string& title,
-        const std::string& message,
-        bool               cancel_button = false) = 0;
+    virtual bool message_box(const std::string& title,
+                             const std::string& message,
+                             bool               cancel_button = false) = 0;
 
     // Show a color picker.  Returns selected color or nullopt if cancelled.
-    virtual std::optional<Color> color_picker(
-        const std::string& title,
-        const Color&       initial) = 0;
+    virtual std::optional<Color> color_picker(const std::string& title, const Color& initial) = 0;
 
     // Prompt for a floating-point value. Frontends that do not provide a
     // numeric dialog may keep the default cancellation result.
@@ -123,10 +119,9 @@ class WindowService
     // Create a new window with the given title and size.
     // Returns the FigureId of the figure placed in the new window,
     // or INVALID_FIGURE_ID on failure.
-    virtual FigureId create_window(
-        const std::string& title,
-        uint32_t           width  = 800,
-        uint32_t           height = 600) = 0;
+    virtual FigureId create_window(const std::string& title,
+                                   uint32_t           width  = 800,
+                                   uint32_t           height = 600) = 0;
 
     // Close the window containing the given figure.
     virtual void close_window(FigureId figure_id) = 0;
@@ -144,17 +139,15 @@ class WindowService
 class NullDialogService final : public DialogService
 {
    public:
-    std::optional<std::string> file_dialog(
-        FileType, const std::string&, const std::string&,
-        const std::vector<FileFilter>&) override
+    std::optional<std::string> file_dialog(FileType,
+                                           const std::string&,
+                                           const std::string&,
+                                           const std::vector<FileFilter>&) override
     {
         return std::nullopt;
     }
 
-    bool message_box(const std::string&, const std::string&, bool) override
-    {
-        return true;
-    }
+    bool message_box(const std::string&, const std::string&, bool) override { return true; }
 
     std::optional<Color> color_picker(const std::string&, const Color&) override
     {
@@ -165,8 +158,8 @@ class NullDialogService final : public DialogService
 class NullClipboardService final : public ClipboardService
 {
    public:
-    void copy_text(const std::string&) override {}
-    void copy_image(const std::vector<uint8_t>&) override {}
+    void        copy_text(const std::string&) override {}
+    void        copy_image(const std::vector<uint8_t>&) override {}
     std::string paste_text() override { return {}; }
 };
 
@@ -184,8 +177,8 @@ class NullWindowService final : public WindowService
     {
         return INVALID_FIGURE_ID;
     }
-    void close_window(FigureId) override {}
-    void focus_window(FigureId) override {}
+    void   close_window(FigureId) override {}
+    void   focus_window(FigureId) override {}
     size_t window_count() const override { return 0; }
 };
 

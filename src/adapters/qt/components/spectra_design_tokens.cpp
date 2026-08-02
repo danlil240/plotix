@@ -45,6 +45,7 @@ SpectraColors spectra_colors_from_theme(const ui::ThemeColors& colors)
     result.header_surface    = to_qcolor(colors.bg_primary);
     result.workspace_surface = to_qcolor(colors.bg_primary);
     result.panel_surface     = to_qcolor(colors.bg_secondary);
+    result.bg_tertiary       = to_qcolor(colors.bg_tertiary);
     result.input_surface     = to_qcolor(colors.input_bg);
     result.elevated_surface  = to_qcolor(colors.bg_elevated);
 
@@ -61,11 +62,12 @@ SpectraColors spectra_colors_from_theme(const ui::ThemeColors& colors)
     result.purple_ambient  = to_qcolor(colors.accent_glow);
     result.purple_dim      = to_qcolor(colors.accent_subtle);
 
-    result.success_green = to_qcolor(colors.success);
-    result.warning_amber = to_qcolor(colors.warning);
-    result.error_red     = to_qcolor(colors.error);
-    result.cyan_glow     = to_qcolor(colors.accent_glow);
-    result.purple_glow   = to_qcolor(colors.accent_subtle);
+    result.success_green     = to_qcolor(colors.success);
+    result.warning_amber     = to_qcolor(colors.warning);
+    result.error_red         = to_qcolor(colors.error);
+    result.cyan_glow         = to_qcolor(colors.accent_glow);
+    result.purple_glow       = to_qcolor(colors.accent_subtle);
+    result.section_header_bg = to_qcolor(colors.section_header_bg);
     return result;
 }
 

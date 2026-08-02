@@ -537,6 +537,86 @@ TEST(QtPanels, MenuStripHoverSwitchesOpenMenu)
     EXPECT_TRUE(edit_menu->isVisible());
 }
 
+TEST(QtPanels, MenuStripHoverRapidSwitching)
+{
+    if (QGuiApplication::platformName() == "offscreen")
+        GTEST_SKIP();
+
+    spectra::FigureRegistry  registry;
+    spectra::CommandRegistry commands;
+    commands.register_command("file.test", "Test File Action", []() {}, "", "File");
+    commands.register_command("edit.test", "Test Edit Action", []() {}, "", "Edit");
+    commands.register_command("view.test", "Test View Action", []() {}, "", "View");
+    commands.register_command("tools.test", "Test Tools Action", []() {}, "", "Tools");
+    spectra::adapters::qt::QtActionBridge action_bridge(commands);
+    action_bridge.rebuild();
+
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr, &registry, &action_bridge, nullptr);
+    auto* header = mw.findChild<spectra::adapters::qt::SpectraAppHeader*>("spectra_app_header");
+    ASSERT_NE(header, nullptr);
+    auto* strip = header->findChild<spectra::adapters::qt::SpectraMenuStrip*>();
+    ASSERT_NE(strip, nullptr);
+
+    auto* file_btn =
+        strip->findChild<spectra::adapters::qt::SpectraMenuButton*>("spectra_menu_file");
+    auto* edit_btn =
+        strip->findChild<spectra::adapters::qt::SpectraMenuButton*>("spectra_menu_edit");
+    auto* view_btn =
+        strip->findChild<spectra::adapters::qt::SpectraMenuButton*>("spectra_menu_view");
+    auto* tools_btn =
+        strip->findChild<spectra::adapters::qt::SpectraMenuButton*>("spectra_menu_tools");
+    ASSERT_NE(file_btn, nullptr);
+    ASSERT_NE(edit_btn, nullptr);
+    ASSERT_NE(view_btn, nullptr);
+    ASSERT_NE(tools_btn, nullptr);
+
+    mw.show();
+    mw.raise();
+    mw.activateWindow();
+    QApplication::setActiveWindow(&mw);
+    QTest::qWait(300);
+
+    QCursor::setPos(file_btn->mapToGlobal(file_btn->rect().center()));
+    QTest::qWait(50);
+
+    file_btn->popup_menu();
+    QTest::qWait(300);
+
+    QMenu* file_menu  = file_btn->menu();
+    QMenu* edit_menu  = edit_btn->menu();
+    QMenu* view_menu  = view_btn->menu();
+    QMenu* tools_menu = tools_btn->menu();
+    ASSERT_NE(file_menu, nullptr);
+    ASSERT_NE(edit_menu, nullptr);
+    ASSERT_NE(view_menu, nullptr);
+    ASSERT_NE(tools_menu, nullptr);
+    EXPECT_TRUE(file_menu->isVisible());
+    EXPECT_FALSE(edit_menu->isVisible());
+    EXPECT_FALSE(view_menu->isVisible());
+    EXPECT_FALSE(tools_menu->isVisible());
+
+    // Sweep across the menu bar quickly. The strip must keep the last
+    // hovered menu open and not dismiss everything during the motion.
+    QCursor::setPos(edit_btn->mapToGlobal(edit_btn->rect().center()));
+    QTest::qWait(40);
+    QCursor::setPos(view_btn->mapToGlobal(view_btn->rect().center()));
+    QTest::qWait(40);
+    QCursor::setPos(tools_btn->mapToGlobal(tools_btn->rect().center()));
+    QTest::qWait(200);
+
+    EXPECT_FALSE(file_menu->isVisible());
+    EXPECT_FALSE(edit_menu->isVisible());
+    EXPECT_FALSE(view_menu->isVisible());
+    EXPECT_TRUE(tools_menu->isVisible());
+
+    // Only the button that is actually under the cursor should be highlighted;
+    // previously-opened buttons must not retain a stale hover state.
+    EXPECT_FALSE(file_btn->underMouse());
+    EXPECT_FALSE(edit_btn->underMouse());
+    EXPECT_FALSE(view_btn->underMouse());
+    EXPECT_TRUE(tools_btn->underMouse());
+}
+
 TEST(QtPanels, MainWindowHasStatusBar)
 {
     auto& e = env();
@@ -2017,9 +2097,9 @@ TEST(QtPanels, InspectorSummarySynchronizesLiveSizeAndUnifiedAxes)
     ASSERT_NE(tabs, nullptr);
     EXPECT_EQ(size->text(), QString::fromUtf8("640 × 480"));
     EXPECT_EQ(count->text(), "2");
-    ASSERT_EQ(tabs->count(), 3);
-    EXPECT_EQ(tabs->tabText(1), "Axes 1");
-    EXPECT_EQ(tabs->tabText(2), "Axes 2 (3D)");
+    ASSERT_EQ(tabs->count(), 2);
+    EXPECT_EQ(tabs->tabText(0), "Axes 1");
+    EXPECT_EQ(tabs->tabText(1), "Axes 2 (3D)");
 
     auto* live_figure = registry.get(figure_id);
     ASSERT_NE(live_figure, nullptr);
@@ -2049,7 +2129,7 @@ TEST(QtPanels, InspectorSummarySynchronizesLiveSizeAndUnifiedAxes)
     ASSERT_NE(tabs, nullptr);
     EXPECT_EQ(size->text(), QString::fromUtf8("1208 × 612"));
     EXPECT_EQ(count->text(), "3");
-    EXPECT_EQ(tabs->count(), 4);
+    EXPECT_EQ(tabs->count(), 3);
 
     auto* sparse_xmin = inspector.findChild<QDoubleSpinBox*>("axes_1_x_min");
     ASSERT_NE(sparse_xmin, nullptr);
@@ -3315,4 +3395,181 @@ TEST(QtPanels, TransformPipelineWorkspaceStateRestoresTargetAndAllParameters)
     EXPECT_EQ(restored.findChild<QListWidget*>("pipeline_list")->count(), 3);
     EXPECT_EQ(restored.findChild<QListWidget*>("pipeline_list")->item(2)->checkState(),
               Qt::Unchecked);
+}
+
+TEST(QtPanels, InspectorAxesStatistics)
+{
+    spectra::FigureRegistry registry;
+    auto                    figure = std::make_unique<spectra::Figure>();
+    auto&                   axes   = figure->subplot(1, 1, 1);
+
+    const std::array<float, 3> x1{1.0f, 2.0f, 3.0f};
+    const std::array<float, 3> y1{4.0f, 5.0f, 6.0f};
+    auto&                      s1 = axes.plot(x1, y1, "b-");
+    s1.label("visible");
+
+    const std::array<float, 3> x2{10.0f, 20.0f, 30.0f};
+    const std::array<float, 3> y2{40.0f, 50.0f, 60.0f};
+    auto&                      s2 = axes.plot(x2, y2, "r--");
+    s2.label("hidden");
+    s2.visible(false);
+
+    const auto figure_id = registry.register_figure(std::move(figure));
+
+    spectra::adapters::qt::QtInspectorWidget inspector(&registry);
+    inspector.set_active_figure(figure_id);
+
+    auto* visible = inspector.findChild<QLabel*>("axes_0_stats_visible");
+    auto* points  = inspector.findChild<QLabel*>("axes_0_stats_total_points");
+    auto* x_min   = inspector.findChild<QLabel*>("axes_0_stats_x_min");
+    auto* x_max   = inspector.findChild<QLabel*>("axes_0_stats_x_max");
+    auto* x_mean  = inspector.findChild<QLabel*>("axes_0_stats_x_mean");
+    auto* y_min   = inspector.findChild<QLabel*>("axes_0_stats_y_min");
+    auto* y_max   = inspector.findChild<QLabel*>("axes_0_stats_y_max");
+    auto* y_mean  = inspector.findChild<QLabel*>("axes_0_stats_y_mean");
+
+    ASSERT_NE(visible, nullptr);
+    ASSERT_NE(points, nullptr);
+    ASSERT_NE(x_min, nullptr);
+    ASSERT_NE(x_max, nullptr);
+    ASSERT_NE(x_mean, nullptr);
+    ASSERT_NE(y_min, nullptr);
+    ASSERT_NE(y_max, nullptr);
+    ASSERT_NE(y_mean, nullptr);
+
+    EXPECT_EQ(visible->text(), "1 / 2");
+    EXPECT_EQ(points->text(), "3");
+    EXPECT_EQ(x_min->text(), "1");
+    EXPECT_EQ(x_max->text(), "3");
+    EXPECT_EQ(x_mean->text(), "2");
+    EXPECT_EQ(y_min->text(), "4");
+    EXPECT_EQ(y_max->text(), "6");
+    EXPECT_EQ(y_mean->text(), "5");
+
+    // Toggle the second series visible and confirm the aggregate updates.
+    s2.visible(true);
+    inspector.sync_from_model();
+
+    EXPECT_EQ(visible->text(), "2 / 2");
+    EXPECT_EQ(points->text(), "6");
+    EXPECT_EQ(x_min->text(), "1");
+    EXPECT_EQ(x_max->text(), "30");
+    EXPECT_EQ(x_mean->text(), "11");
+    EXPECT_EQ(y_min->text(), "4");
+    EXPECT_EQ(y_max->text(), "60");
+    EXPECT_EQ(y_mean->text(), "27.5");
+}
+
+TEST(QtPanels, InspectorReferenceLines)
+{
+    spectra::FigureRegistry registry;
+    auto                    figure    = std::make_unique<spectra::Figure>();
+    auto&                   axes      = figure->subplot(1, 1, 1);
+    const auto              figure_id = registry.register_figure(std::move(figure));
+
+    spectra::adapters::qt::QtInspectorWidget inspector(&registry);
+    inspector.set_active_figure(figure_id);
+
+    auto* value     = inspector.findChild<QDoubleSpinBox*>("axes_0_ref_value");
+    auto* fmt       = inspector.findChild<QLineEdit*>("axes_0_ref_fmt");
+    auto* add_h     = inspector.findChild<QPushButton*>("axes_0_add_hline");
+    auto* add_v     = inspector.findChild<QPushButton*>("axes_0_add_vline");
+    auto* ref_empty = inspector.findChild<QLabel*>("axes_0_ref_empty");
+
+    ASSERT_NE(value, nullptr);
+    ASSERT_NE(fmt, nullptr);
+    ASSERT_NE(add_h, nullptr);
+    ASSERT_NE(add_v, nullptr);
+    ASSERT_NE(ref_empty, nullptr);
+
+    value->setValue(1.5);
+    fmt->setText("r--");
+    add_h->click();
+    ASSERT_EQ(axes.series().size(), 1u);
+    auto* hline = dynamic_cast<spectra::LineSeries*>(axes.series().back().get());
+    ASSERT_NE(hline, nullptr);
+    EXPECT_TRUE(hline->is_reference_line());
+    EXPECT_FLOAT_EQ(hline->y_data()[0], 1.5f);
+    EXPECT_FLOAT_EQ(hline->y_data()[1], 1.5f);
+
+    value->setValue(-2.0);
+    fmt->setText("g:");
+    add_v->click();
+    ASSERT_EQ(axes.series().size(), 2u);
+    auto* vline = dynamic_cast<spectra::LineSeries*>(axes.series().back().get());
+    ASSERT_NE(vline, nullptr);
+    EXPECT_TRUE(vline->is_reference_line());
+    EXPECT_FLOAT_EQ(vline->x_data()[0], -2.0f);
+    EXPECT_FLOAT_EQ(vline->x_data()[1], -2.0f);
+
+    auto* del_first = inspector.findChild<QPushButton*>("axes_0_ref_0_delete");
+    ASSERT_NE(del_first, nullptr);
+    del_first->click();
+    EXPECT_EQ(axes.series().size(), 1u);
+
+    auto* del_second = inspector.findChild<QPushButton*>("axes_0_ref_0_delete");
+    ASSERT_NE(del_second, nullptr);
+    del_second->click();
+    EXPECT_EQ(axes.series().size(), 0u);
+
+    EXPECT_NE(inspector.findChild<QLabel*>("axes_0_ref_empty"), nullptr);
+}
+
+TEST(QtPanels, InspectorSeriesStatisticsAndSparkline)
+{
+    spectra::FigureRegistry registry;
+    auto                    figure = std::make_unique<spectra::Figure>();
+    auto&                   axes   = figure->subplot(1, 1, 1);
+
+    const std::array<float, 3> x{1.0f, 2.0f, 3.0f};
+    const std::array<float, 3> y{4.0f, 5.0f, 6.0f};
+    axes.plot(x, y).label("demo");
+
+    const auto figure_id = registry.register_figure(std::move(figure));
+
+    spectra::adapters::qt::QtInspectorWidget inspector(&registry);
+    inspector.set_active_figure(figure_id);
+
+    auto* list = inspector.findChild<QListWidget*>("series_list");
+    ASSERT_NE(list, nullptr);
+    ASSERT_EQ(list->count(), 1);
+    list->setCurrentRow(0);
+
+    auto* spark = inspector.findChild<QWidget*>("series_sparkline");
+    ASSERT_NE(spark, nullptr);
+    EXPECT_GT(spark->width(), 0);
+    EXPECT_GT(spark->height(), 0);
+
+    auto* x_count = inspector.findChild<QLabel*>("series_stats_x_count");
+    auto* x_min   = inspector.findChild<QLabel*>("series_stats_x_min");
+    auto* x_max   = inspector.findChild<QLabel*>("series_stats_x_max");
+    auto* x_mean  = inspector.findChild<QLabel*>("series_stats_x_mean");
+    auto* x_sum   = inspector.findChild<QLabel*>("series_stats_x_sum");
+    auto* y_count = inspector.findChild<QLabel*>("series_stats_y_count");
+    auto* y_min   = inspector.findChild<QLabel*>("series_stats_y_min");
+    auto* y_max   = inspector.findChild<QLabel*>("series_stats_y_max");
+    auto* y_mean  = inspector.findChild<QLabel*>("series_stats_y_mean");
+    auto* y_sum   = inspector.findChild<QLabel*>("series_stats_y_sum");
+
+    ASSERT_NE(x_count, nullptr);
+    ASSERT_NE(x_min, nullptr);
+    ASSERT_NE(x_max, nullptr);
+    ASSERT_NE(x_mean, nullptr);
+    ASSERT_NE(x_sum, nullptr);
+    ASSERT_NE(y_count, nullptr);
+    ASSERT_NE(y_min, nullptr);
+    ASSERT_NE(y_max, nullptr);
+    ASSERT_NE(y_mean, nullptr);
+    ASSERT_NE(y_sum, nullptr);
+
+    EXPECT_EQ(x_count->text(), "3");
+    EXPECT_EQ(x_min->text(), "1");
+    EXPECT_EQ(x_max->text(), "3");
+    EXPECT_EQ(x_mean->text(), "2");
+    EXPECT_EQ(x_sum->text(), "6");
+    EXPECT_EQ(y_count->text(), "3");
+    EXPECT_EQ(y_min->text(), "4");
+    EXPECT_EQ(y_max->text(), "6");
+    EXPECT_EQ(y_mean->text(), "5");
+    EXPECT_EQ(y_sum->text(), "15");
 }

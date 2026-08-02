@@ -12,14 +12,18 @@ namespace spectra::adapters::ros2
 namespace
 {
 
-bool decode_stb_rgba(const uint8_t* data, int size, std::vector<uint8_t>& rgba, uint32_t& width, uint32_t& height)
+bool decode_stb_rgba(const uint8_t*        data,
+                     int                   size,
+                     std::vector<uint8_t>& rgba,
+                     uint32_t&             width,
+                     uint32_t&             height)
 {
     if (!data || size <= 0)
         return false;
 
-    int w = 0;
-    int h = 0;
-    int channels_in_file = 0;
+    int            w                = 0;
+    int            h                = 0;
+    int            channels_in_file = 0;
     unsigned char* pixels =
         stbi_load_from_memory(data, size, &w, &h, &channels_in_file, STBI_rgb_alpha);
     if (!pixels || w <= 0 || h <= 0)
@@ -29,8 +33,8 @@ bool decode_stb_rgba(const uint8_t* data, int size, std::vector<uint8_t>& rgba, 
         return false;
     }
 
-    width  = static_cast<uint32_t>(w);
-    height = static_cast<uint32_t>(h);
+    width                   = static_cast<uint32_t>(w);
+    height                  = static_cast<uint32_t>(h);
     const size_t byte_count = static_cast<size_t>(w) * static_cast<size_t>(h) * 4u;
     rgba.assign(pixels, pixels + byte_count);
     stbi_image_free(pixels);
@@ -60,10 +64,10 @@ void fill_preview(ImageFrame& frame, uint32_t preview_max_dim)
     frame.preview_rgba.resize(static_cast<size_t>(frame.preview_width)
                               * static_cast<size_t>(frame.preview_height) * 4u);
 
-    double min_intensity = std::numeric_limits<double>::infinity();
-    double max_intensity = 0.0;
-    double sum_intensity   = 0.0;
-    size_t sampled_pixels  = 0;
+    double min_intensity  = std::numeric_limits<double>::infinity();
+    double max_intensity  = 0.0;
+    double sum_intensity  = 0.0;
+    size_t sampled_pixels = 0;
 
     for (uint32_t py = 0; py < frame.preview_height; ++py)
     {
@@ -77,18 +81,17 @@ void fill_preview(ImageFrame& frame, uint32_t preview_max_dim)
                 std::min(frame.width - 1,
                          static_cast<uint32_t>((static_cast<uint64_t>(px) * frame.width)
                                                / std::max<uint32_t>(1u, frame.preview_width)));
-            const size_t src = (static_cast<size_t>(sy) * frame.width + sx) * 4u;
-            const size_t dst = (static_cast<size_t>(py) * frame.preview_width + px) * 4u;
+            const size_t src            = (static_cast<size_t>(sy) * frame.width + sx) * 4u;
+            const size_t dst            = (static_cast<size_t>(py) * frame.preview_width + px) * 4u;
             frame.preview_rgba[dst + 0] = frame.full_rgba[src + 0];
             frame.preview_rgba[dst + 1] = frame.full_rgba[src + 1];
             frame.preview_rgba[dst + 2] = frame.full_rgba[src + 2];
             frame.preview_rgba[dst + 3] = frame.full_rgba[src + 3];
 
-            const double intensity =
-                (static_cast<double>(frame.full_rgba[src + 0])
-                 + static_cast<double>(frame.full_rgba[src + 1])
-                 + static_cast<double>(frame.full_rgba[src + 2]))
-                / 3.0;
+            const double intensity = (static_cast<double>(frame.full_rgba[src + 0])
+                                      + static_cast<double>(frame.full_rgba[src + 1])
+                                      + static_cast<double>(frame.full_rgba[src + 2]))
+                                     / 3.0;
             min_intensity = std::min(min_intensity, intensity);
             max_intensity = std::max(max_intensity, intensity);
             sum_intensity += intensity;
@@ -107,10 +110,10 @@ void fill_preview(ImageFrame& frame, uint32_t preview_max_dim)
 }   // namespace
 
 std::optional<ImageFrame> adapt_image_message_with_encoding(const sensor_msgs::msg::Image& message,
-                                                            const std::string& topic,
-                                                            uint32_t           preview_max_dim,
-                                                            bool               retain_full_image,
-                                                            std::string        encoding_override)
+                                                            const std::string&             topic,
+                                                            uint32_t    preview_max_dim,
+                                                            bool        retain_full_image,
+                                                            std::string encoding_override)
 {
     if (message.width == 0 || message.height == 0 || message.data.empty())
         return std::nullopt;

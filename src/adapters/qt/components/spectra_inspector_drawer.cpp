@@ -13,12 +13,11 @@ namespace spectra::adapters::qt
 
 SpectraInspectorDrawer::~SpectraInspectorDrawer() = default;
 
-SpectraInspectorDrawer::SpectraInspectorDrawer(QWidget* parent)
-    : QWidget(parent)
+SpectraInspectorDrawer::SpectraInspectorDrawer(QWidget* parent) : QWidget(parent)
 {
     setAttribute(Qt::WA_StyledBackground, true);
     setFixedWidth(spectra_geometry().inspector_width);
-    setVisible(false);  // Hidden by default
+    setVisible(false);   // Hidden by default
 
     build_ui();
 }
@@ -33,10 +32,8 @@ void SpectraInspectorDrawer::build_ui()
     header_ = new SpectraDockHeader("Inspector", this);
     header_->set_closable(true);
     header_->set_collapsible(false);
-    connect(header_, &SpectraDockHeader::close_requested,
-            this, &SpectraInspectorDrawer::close);
+    connect(header_, &SpectraDockHeader::close_requested, this, &SpectraInspectorDrawer::close);
     layout_->addWidget(header_);
-
 }
 
 void SpectraInspectorDrawer::set_content_widget(QWidget* widget)

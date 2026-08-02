@@ -26,8 +26,8 @@ inline TransformStamp adapt_tf_transform(const geometry_msgs::msg::TransformStam
     stamp.qz           = transform.transform.rotation.z;
     stamp.qw           = transform.transform.rotation.w;
     stamp.recv_ns      = static_cast<uint64_t>(transform.header.stamp.sec) * 1'000'000'000ULL
-                         + static_cast<uint64_t>(transform.header.stamp.nanosec);
-    stamp.is_static    = is_static;
+                    + static_cast<uint64_t>(transform.header.stamp.nanosec);
+    stamp.is_static = is_static;
     return stamp;
 }
 #endif

@@ -32,10 +32,7 @@ RosPanelManager::RosPanelManager(QMainWindow*           main_window,
                                  ros2::DisplayRegistry* registry,
                                  ros2::SceneManager*    scene_manager,
                                  QObject*               parent)
-    : QObject(parent)
-    , main_window_(main_window)
-    , registry_(registry)
-    , scene_manager_(scene_manager)
+    : QObject(parent), main_window_(main_window), registry_(registry), scene_manager_(scene_manager)
 {
     create_displays_list_panel();
     create_inspector_panel();
@@ -64,11 +61,11 @@ std::string RosPanelManager::add_display(const std::string& type_id)
     std::string id = generate_id();
 
     RosDisplayEntry entry;
-    entry.id       = id;
-    entry.type_id  = type_id;
-    entry.plugin   = std::move(plugin);
-    entry.enabled  = true;
-    entry.dock     = create_display_dock(entry.plugin.get(), id);
+    entry.id      = id;
+    entry.type_id = type_id;
+    entry.plugin  = std::move(plugin);
+    entry.enabled = true;
+    entry.dock    = create_display_dock(entry.plugin.get(), id);
 
     if (main_window_ && entry.dock)
         main_window_->addDockWidget(Qt::RightDockWidgetArea, entry.dock);
@@ -234,7 +231,7 @@ bool RosPanelManager::deserialize_layout(const std::string& json)
                 if (topic_end != std::string::npos)
                 {
                     std::string topic = json.substr(topic_pos, topic_end - topic_pos);
-                    auto* entry = find_display(id);
+                    auto*       entry = find_display(id);
                     if (entry && entry->plugin)
                         entry->plugin->set_topic(topic);
                 }
@@ -265,14 +262,22 @@ void RosPanelManager::refresh_display_list()
         if (entry.plugin)
         {
             item->setText(3, QString::fromStdString(entry.plugin->topic()));
-            auto status = entry.plugin->status();
+            auto    status = entry.plugin->status();
             QString status_str;
             switch (status)
             {
-                case ros2::DisplayStatus::Ok:      status_str = "OK"; break;
-                case ros2::DisplayStatus::Warn:    status_str = "Warn"; break;
-                case ros2::DisplayStatus::Error:   status_str = "Error"; break;
-                default:                           status_str = "Disabled"; break;
+                case ros2::DisplayStatus::Ok:
+                    status_str = "OK";
+                    break;
+                case ros2::DisplayStatus::Warn:
+                    status_str = "Warn";
+                    break;
+                case ros2::DisplayStatus::Error:
+                    status_str = "Error";
+                    break;
+                default:
+                    status_str = "Disabled";
+                    break;
             }
             item->setText(4, status_str);
         }
@@ -280,8 +285,7 @@ void RosPanelManager::refresh_display_list()
     }
 }
 
-void RosPanelManager::on_display_selected(QTreeWidgetItem* current,
-                                          QTreeWidgetItem* /*previous*/)
+void RosPanelManager::on_display_selected(QTreeWidgetItem* current, QTreeWidgetItem* /*previous*/)
 {
     if (!current)
     {
@@ -334,15 +338,15 @@ void RosPanelManager::create_displays_list_panel()
     auto* layout  = new QVBoxLayout(content);
 
     // Display type combo + add button
-    auto* add_layout = new QHBoxLayout();
+    auto* add_layout    = new QHBoxLayout();
     display_type_combo_ = new QComboBox();
     if (registry_)
     {
         auto types = registry_->list_types();
         for (const auto& info : types)
         {
-            QString label = QString::fromStdString(info.display_name)
-                            + " (" + QString::fromStdString(info.type_id) + ")";
+            QString label = QString::fromStdString(info.display_name) + " ("
+                            + QString::fromStdString(info.type_id) + ")";
             display_type_combo_->addItem(label);
         }
     }
@@ -370,8 +374,10 @@ void RosPanelManager::create_displays_list_panel()
     // Connections
     connect(add_button_, &QPushButton::clicked, this, &RosPanelManager::on_add_display);
     connect(remove_button_, &QPushButton::clicked, this, &RosPanelManager::on_remove_display);
-    connect(displays_tree_, &QTreeWidget::currentItemChanged,
-            this, &RosPanelManager::on_display_selected);
+    connect(displays_tree_,
+            &QTreeWidget::currentItemChanged,
+            this,
+            &RosPanelManager::on_display_selected);
 }
 
 void RosPanelManager::create_inspector_panel()
@@ -393,7 +399,7 @@ void RosPanelManager::create_inspector_panel()
 }
 
 QDockWidget* RosPanelManager::create_display_dock(ros2::DisplayPlugin* plugin,
-                                                   const std::string&   id)
+                                                  const std::string&   id)
 {
     if (!plugin)
         return nullptr;
@@ -405,10 +411,9 @@ QDockWidget* RosPanelManager::create_display_dock(ros2::DisplayPlugin* plugin,
     auto* layout  = new QVBoxLayout(content);
 
     // Display info
-    auto* info_label = new QLabel(
-        QString("Type: %1\nTopic: %2")
-            .arg(QString::fromStdString(plugin->type_id()))
-            .arg(QString::fromStdString(plugin->topic())));
+    auto* info_label = new QLabel(QString("Type: %1\nTopic: %2")
+                                      .arg(QString::fromStdString(plugin->type_id()))
+                                      .arg(QString::fromStdString(plugin->topic())));
     layout->addWidget(info_label);
 
     // Placeholder for plugin's auxiliary UI
@@ -453,22 +458,31 @@ void RosPanelManager::update_inspector()
 
     layout->addWidget(new QLabel(QString("ID: %1").arg(QString::fromStdString(entry->id))));
     layout->addWidget(new QLabel(QString("Type: %1").arg(QString::fromStdString(entry->type_id))));
-    layout->addWidget(new QLabel(QString("Topic: %1").arg(QString::fromStdString(entry->plugin->topic()))));
+    layout->addWidget(
+        new QLabel(QString("Topic: %1").arg(QString::fromStdString(entry->plugin->topic()))));
     layout->addWidget(new QLabel(QString("Enabled: %1").arg(entry->enabled ? "Yes" : "No")));
 
-    auto status = entry->plugin->status();
+    auto    status = entry->plugin->status();
     QString status_str;
     switch (status)
     {
-        case ros2::DisplayStatus::Ok:      status_str = "OK"; break;
-        case ros2::DisplayStatus::Warn:    status_str = "Warning"; break;
-        case ros2::DisplayStatus::Error:   status_str = "Error"; break;
-        default:                           status_str = "Disabled"; break;
+        case ros2::DisplayStatus::Ok:
+            status_str = "OK";
+            break;
+        case ros2::DisplayStatus::Warn:
+            status_str = "Warning";
+            break;
+        case ros2::DisplayStatus::Error:
+            status_str = "Error";
+            break;
+        default:
+            status_str = "Disabled";
+            break;
     }
     layout->addWidget(new QLabel(QString("Status: %1").arg(status_str)));
     if (!entry->plugin->status_text().empty())
-        layout->addWidget(new QLabel(QString("Status Text: %1")
-            .arg(QString::fromStdString(entry->plugin->status_text()))));
+        layout->addWidget(new QLabel(
+            QString("Status Text: %1").arg(QString::fromStdString(entry->plugin->status_text()))));
 
     layout->addStretch();
 

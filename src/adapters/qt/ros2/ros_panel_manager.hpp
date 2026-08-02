@@ -59,12 +59,12 @@ namespace spectra::adapters::qt
 // A single display entry: plugin instance + Qt panel wrapper.
 struct RosDisplayEntry
 {
-    std::string                                  id;     // Unique instance id
-    std::string                                  type_id;   // Display type
-    std::unique_ptr<ros2::DisplayPlugin>         plugin;
-    QDockWidget*                                 dock = nullptr;
-    QWidget*                                     inspector_widget = nullptr;
-    bool                                         enabled = true;
+    std::string                          id;        // Unique instance id
+    std::string                          type_id;   // Display type
+    std::unique_ptr<ros2::DisplayPlugin> plugin;
+    QDockWidget*                         dock             = nullptr;
+    QWidget*                             inspector_widget = nullptr;
+    bool                                 enabled          = true;
 };
 
 // Manages ROS2 display plugins as Qt dockable panels.
@@ -73,10 +73,10 @@ class RosPanelManager : public QObject
     Q_OBJECT
 
    public:
-    explicit RosPanelManager(QMainWindow*                  main_window,
-                             ros2::DisplayRegistry*        registry,
-                             ros2::SceneManager*           scene_manager,
-                             QObject*                      parent = nullptr);
+    explicit RosPanelManager(QMainWindow*           main_window,
+                             ros2::DisplayRegistry* registry,
+                             ros2::SceneManager*    scene_manager,
+                             QObject*               parent = nullptr);
     ~RosPanelManager() override;
 
     RosPanelManager(const RosPanelManager&)            = delete;
@@ -152,18 +152,18 @@ class RosPanelManager : public QObject
     // Update the inspector panel for the currently selected display.
     void update_inspector();
 
-    QMainWindow*            main_window_  = nullptr;
-    ros2::DisplayRegistry*  registry_     = nullptr;
-    ros2::SceneManager*     scene_manager_ = nullptr;
-    ros2::DisplayContext*   context_      = nullptr;
+    QMainWindow*           main_window_   = nullptr;
+    ros2::DisplayRegistry* registry_      = nullptr;
+    ros2::SceneManager*    scene_manager_ = nullptr;
+    ros2::DisplayContext*  context_       = nullptr;
 
     // Panels
-    QDockWidget*   displays_list_dock_  = nullptr;
-    QDockWidget*   inspector_dock_      = nullptr;
-    QTreeWidget*   displays_tree_       = nullptr;
-    QComboBox*     display_type_combo_  = nullptr;
-    QPushButton*   add_button_          = nullptr;
-    QPushButton*   remove_button_       = nullptr;
+    QDockWidget*    displays_list_dock_ = nullptr;
+    QDockWidget*    inspector_dock_     = nullptr;
+    QTreeWidget*    displays_tree_      = nullptr;
+    QComboBox*      display_type_combo_ = nullptr;
+    QPushButton*    add_button_         = nullptr;
+    QPushButton*    remove_button_      = nullptr;
     QStackedWidget* inspector_stack_    = nullptr;
 
     // Display entries

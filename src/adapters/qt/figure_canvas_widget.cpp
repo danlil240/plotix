@@ -13,10 +13,10 @@
 namespace spectra::adapters::qt
 {
 
-FigureCanvasWidget::FigureCanvasWidget(QtRuntime*     runtime,
-                                       Figure*        figure,
-                                       InputHandler*  input,
-                                       QWidget*       parent)
+FigureCanvasWidget::FigureCanvasWidget(QtRuntime*    runtime,
+                                       Figure*       figure,
+                                       InputHandler* input,
+                                       QWidget*      parent)
     : QWidget(parent)
 {
     window_ = new SpectraVulkanWindow;

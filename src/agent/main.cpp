@@ -714,7 +714,9 @@ int main(int argc, char* argv[])
         while (!got_snapshot && std::chrono::steady_clock::now() < deadline)
         {
 #ifndef _WIN32
-            struct pollfd pfd{};
+            struct pollfd pfd
+            {
+            };
             pfd.fd      = conn->fd();
             pfd.events  = POLLIN;
             pfd.revents = 0;
@@ -845,8 +847,8 @@ int main(int argc, char* argv[])
 
     frame_state.has_animation = active_figure ? active_figure->has_animation() : false;
 
-    spectra::WindowUIContext* ui_ctx_ptr = nullptr;
-    spectra::WindowContext* initial_wctx = nullptr;
+    spectra::WindowUIContext* ui_ctx_ptr          = nullptr;
+    spectra::WindowContext*   initial_wctx        = nullptr;
     bool                      ui_built_by_builder = false;
 
 #ifdef SPECTRA_USE_GLFW
@@ -878,9 +880,7 @@ int main(int argc, char* argv[])
 
     window_mgr->set_interactive_frame_handler(
         [&session, &scheduler, &animator, &window_mgr, &frame_state]()
-        {
-            session.pump_interactive_frame(scheduler, animator, window_mgr.get(), frame_state);
-        });
+        { session.pump_interactive_frame(scheduler, animator, window_mgr.get(), frame_state); });
 
     initial_wctx = window_mgr->create_first_window_with_ui(glfw->native_window(), all_ids);
 #elif defined(SPECTRA_USE_SDL3)
@@ -1068,7 +1068,9 @@ int main(int argc, char* argv[])
 #ifndef _WIN32
         for (;;)
         {
-            struct pollfd pfd{};
+            struct pollfd pfd
+            {
+            };
             pfd.fd       = conn->fd();
             pfd.events   = POLLIN;
             pfd.revents  = 0;

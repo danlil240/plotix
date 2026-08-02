@@ -21,7 +21,7 @@ namespace spectra
 class PluginUIRegistry;
 struct PluginUISchema;
 struct PluginUIElement;
-}
+}   // namespace spectra
 
 namespace spectra::adapters::qt
 {
@@ -46,7 +46,7 @@ class QtPluginPanelWidget : public QDockWidget
                               QWidget*                       parent,
                               std::vector<size_t>&           ancestry);
 
-    PluginUIRegistry* registry_ = nullptr;
+    PluginUIRegistry* registry_       = nullptr;
     QWidget*          scroll_content_ = nullptr;
 };
 

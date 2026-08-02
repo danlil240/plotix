@@ -163,15 +163,14 @@ class TextRenderer
     // overwrite draws still in the same submission.  Slots are NOT reused until
     // the matching flight frame completes (see begin_frame_recording).
     static constexpr uint32_t MAX_TEXT_FLUSHES_PER_FRAME = 20;   // 10 panes × 2 flushes
-    static constexpr uint32_t TEXT_FLIGHT_FRAMES           = 2;
-    static constexpr uint32_t TEXT_BUFFER_SLOTS =
-        MAX_TEXT_FLUSHES_PER_FRAME * TEXT_FLIGHT_FRAMES;
+    static constexpr uint32_t TEXT_FLIGHT_FRAMES         = 2;
+    static constexpr uint32_t TEXT_BUFFER_SLOTS = MAX_TEXT_FLUSHES_PER_FRAME * TEXT_FLIGHT_FRAMES;
     BufferHandle              vertex_buffer_[TEXT_BUFFER_SLOTS];
     size_t                    vertex_buffer_capacity_[TEXT_BUFFER_SLOTS] = {};
     BufferHandle              depth_vertex_buffer_[TEXT_BUFFER_SLOTS];
     size_t                    depth_vertex_buffer_capacity_[TEXT_BUFFER_SLOTS] = {};
-    uint32_t                  flush_slot_base_    = 0;   // flight_index * MAX_TEXT_FLUSHES_PER_FRAME
-    uint32_t                  flush_cursor_       = 0;   // per-frame flush count (2D text)
+    uint32_t                  flush_slot_base_ = 0;   // flight_index * MAX_TEXT_FLUSHES_PER_FRAME
+    uint32_t                  flush_cursor_    = 0;   // per-frame flush count (2D text)
     uint32_t                  depth_flush_cursor_ = 0;   // per-frame flush count (3D text)
 
     // UBO for screen-space ortho projection

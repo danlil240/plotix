@@ -26,13 +26,12 @@ mat4 Camera::projection_matrix(float aspect_ratio) const
 
 void Camera::orbit(float d_azimuth, float d_elevation)
 {
-    vec3 offset = position - target;
-    float dist  = vec3_length(offset);
+    vec3  offset = position - target;
+    float dist   = vec3_length(offset);
     if (dist < 1e-6f)
         return;
 
-    const vec3 world_up =
-        (up_axis == UpAxis::Z) ? vec3{0.0f, 0.0f, 1.0f} : vec3{0.0f, 1.0f, 0.0f};
+    const vec3 world_up = (up_axis == UpAxis::Z) ? vec3{0.0f, 0.0f, 1.0f} : vec3{0.0f, 1.0f, 0.0f};
 
     if (std::abs(d_azimuth) > 1e-6f)
     {
@@ -278,19 +277,14 @@ std::string Camera::serialize() const
 {
     std::ostringstream oss;
     oss << std::fixed << std::setprecision(6);
-    oss << "{"
-        << "\"position\":[" << position.x << "," << position.y << "," << position.z << "],"
-        << "\"target\":[" << target.x << "," << target.y << "," << target.z << "],"
-        << "\"up\":[" << up.x << "," << up.y << "," << up.z << "],"
+    oss << "{" << "\"position\":[" << position.x << "," << position.y << "," << position.z << "],"
+        << "\"target\":[" << target.x << "," << target.y << "," << target.z << "]," << "\"up\":["
+        << up.x << "," << up.y << "," << up.z << "],"
         << "\"projection_mode\":" << (projection_mode == ProjectionMode::Perspective ? 0 : 1) << ","
-        << "\"up_axis\":" << (up_axis == UpAxis::Z ? 1 : 0) << ","
-        << "\"fov\":" << fov << ","
-        << "\"near_clip\":" << near_clip << ","
-        << "\"far_clip\":" << far_clip << ","
-        << "\"ortho_size\":" << ortho_size << ","
-        << "\"azimuth\":" << azimuth << ","
-        << "\"elevation\":" << elevation << ","
-        << "\"distance\":" << distance << "}";
+        << "\"up_axis\":" << (up_axis == UpAxis::Z ? 1 : 0) << "," << "\"fov\":" << fov << ","
+        << "\"near_clip\":" << near_clip << "," << "\"far_clip\":" << far_clip << ","
+        << "\"ortho_size\":" << ortho_size << "," << "\"azimuth\":" << azimuth << ","
+        << "\"elevation\":" << elevation << "," << "\"distance\":" << distance << "}";
     return oss.str();
 }
 

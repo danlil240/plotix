@@ -68,13 +68,10 @@ inline bool ensure_ffmpeg_output_parent(const std::string& output_path, std::str
 inline std::string build_ffmpeg_command(const FfmpegCommandConfig& config)
 {
     std::ostringstream cmd;
-    cmd << "ffmpeg -y -hide_banner -loglevel error -nostats"
-        << " -f rawvideo"
-        << " -vcodec rawvideo"
-        << " -pix_fmt rgba"
-        << " -s " << config.width << "x" << config.height << " -r " << std::fixed
-        << std::setprecision(6) << config.fps << " -i -"
-        << " -c:v " << shell_quote(config.codec) << " -pix_fmt " << shell_quote(config.pix_fmt);
+    cmd << "ffmpeg -y -hide_banner -loglevel error -nostats" << " -f rawvideo"
+        << " -vcodec rawvideo" << " -pix_fmt rgba" << " -s " << config.width << "x" << config.height
+        << " -r " << std::fixed << std::setprecision(6) << config.fps << " -i -" << " -c:v "
+        << shell_quote(config.codec) << " -pix_fmt " << shell_quote(config.pix_fmt);
 
     if (config.crf >= 0)
     {

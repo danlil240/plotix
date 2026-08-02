@@ -284,7 +284,7 @@ void QtDataEditorWidget::set_active_figure(FigureId id)
     import_rows_  = 0;
     paged_series_ = nullptr;
     page_start_   = 0;
-    active_id_ = id;
+    active_id_    = id;
     refresh();
 }
 

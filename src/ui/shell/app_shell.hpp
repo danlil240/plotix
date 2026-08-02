@@ -13,7 +13,7 @@ namespace spectra
 {
 class LayoutManager;
 class ImGuiIntegration;
-}
+}   // namespace spectra
 
 namespace spectra::ui::shell
 {
@@ -41,7 +41,7 @@ class AppShell
     spectra::LayoutManager* layout_manager() const;
 
     // Bind Vision chrome helpers (command bar, nav rail styling). Optional.
-    void set_chrome_integration(spectra::ImGuiIntegration* imgui);
+    void                       set_chrome_integration(spectra::ImGuiIntegration* imgui);
     spectra::ImGuiIntegration* chrome_integration() const { return imgui_chrome_; }
 
     void initialize();
@@ -53,9 +53,9 @@ class AppShell
     const PanelRegistry& panels() const;
     NavRail&             nav_rail();
     const NavRail&       nav_rail() const;
-    MenuBar&       menu_bar();
-    StatusBar&     status_bar();
-    CanvasHost&    canvas_host();
+    MenuBar&             menu_bar();
+    StatusBar&           status_bar();
+    CanvasHost&          canvas_host();
 
    protected:
     virtual void on_register_panels() {}

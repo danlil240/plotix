@@ -48,8 +48,8 @@ void init_native_dialog_policy(int& argc, char** argv)
         }
         argv[write_idx++] = argv[read_idx];
     }
-    argc               = write_idx;
-    argv[write_idx]    = nullptr;
+    argc            = write_idx;
+    argv[write_idx] = nullptr;
 
     if (!native_dialogs_enabled())
     {

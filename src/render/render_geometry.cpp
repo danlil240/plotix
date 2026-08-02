@@ -991,9 +991,9 @@ void Renderer::render_grid(AxesBase& axes, const Rect& /*viewport*/)
         // Check if limits/planes changed — skip regeneration if cached
         auto& gc             = gpu.grid_cache[slot];
         bool  limits_changed = !gc.valid || gc.xmin != xlim.min || gc.xmax != xlim.max
-                               || gc.ymin != ylim.min || gc.ymax != ylim.max || gc.zmin != zlim.min
-                               || gc.zmax != zlim.max
-                               || gpu.cached_grid_planes[slot] != static_cast<int>(gp);
+                              || gc.ymin != ylim.min || gc.ymax != ylim.max || gc.zmin != zlim.min
+                              || gc.zmax != zlim.max
+                              || gpu.cached_grid_planes[slot] != static_cast<int>(gp);
 
         if (limits_changed)
         {
@@ -1083,8 +1083,8 @@ void Renderer::render_grid(AxesBase& axes, const Rect& /*viewport*/)
         const auto&         theme_colors = theme_mgr_.colors();
         float               blend        = 0.3f;
         ui::Color           blended(theme_colors.grid_major.r * (1.0f - blend) + blend,
-                                    theme_colors.grid_major.g * (1.0f - blend) + blend,
-                                    theme_colors.grid_major.b * (1.0f - blend) + blend);
+                          theme_colors.grid_major.g * (1.0f - blend) + blend,
+                          theme_colors.grid_major.b * (1.0f - blend) + blend);
         set_pc_color_geom(pc.color, blended, 0.35f, theme_mgr_);
         pc.line_width    = 1.0f;
         pc.data_offset_x = 0.0f;

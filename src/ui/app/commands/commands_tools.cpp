@@ -23,12 +23,10 @@ std::vector<CommandDescriptor> make_tools_commands(CommandContext& ctx)
 #ifdef SPECTRA_USE_IMGUI
     auto& input_handler = ctx.ui_ctx.input_handler;
 
-    cmds.push_back({"tool.pan",
-                    "Pan Tool",
-                    "",
-                    "Tools",
-                    static_cast<uint16_t>(ui::Icon::Hand),
-                    [&]() { input_handler.set_tool_mode(ToolMode::Pan); }});
+    cmds.push_back(
+        {"tool.pan", "Pan Tool", "", "Tools", static_cast<uint16_t>(ui::Icon::Hand), [&]() {
+             input_handler.set_tool_mode(ToolMode::Pan);
+         }});
 
     cmds.push_back({"tool.box_zoom",
                     "Box Zoom Tool",
@@ -58,12 +56,10 @@ std::vector<CommandDescriptor> make_tools_commands(CommandContext& ctx)
                     static_cast<uint16_t>(ui::Icon::Comment),
                     [&]() { input_handler.set_tool_mode(ToolMode::Annotate); }});
 
-    cmds.push_back({"tool.roi",
-                    "ROI Tool",
-                    "",
-                    "Tools",
-                    static_cast<uint16_t>(ui::Icon::VectorSquare),
-                    [&]() { input_handler.set_tool_mode(ToolMode::ROI); }});
+    cmds.push_back(
+        {"tool.roi", "ROI Tool", "", "Tools", static_cast<uint16_t>(ui::Icon::VectorSquare), [&]() {
+             input_handler.set_tool_mode(ToolMode::ROI);
+         }});
 #else
     (void)ctx;
 #endif

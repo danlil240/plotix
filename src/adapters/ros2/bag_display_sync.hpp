@@ -27,17 +27,17 @@ class BagDisplaySync
     std::string bag_path() const { return bag_path_; }
 
     // Replay messages with bag_time <= playhead_sec into tf_buffer and displays.
-    void sync_to_playhead(double                  playhead_sec,
-                          int64_t                   bag_start_time_ns,
-                          TfBuffer&                 tf_buffer,
+    void sync_to_playhead(double                      playhead_sec,
+                          int64_t                     bag_start_time_ns,
+                          TfBuffer&                   tf_buffer,
                           std::vector<DisplayPlugin*> displays);
 
    private:
     void reset_playback_state(TfBuffer& tf_buffer, std::vector<DisplayPlugin*>& displays);
-    void process_message(const BagMessage&         msg,
-                         double                    bag_start_ns,
-                         double                    playhead_sec,
-                         TfBuffer&                 tf_buffer,
+    void process_message(const BagMessage&            msg,
+                         double                       bag_start_ns,
+                         double                       playhead_sec,
+                         TfBuffer&                    tf_buffer,
                          std::vector<DisplayPlugin*>& displays);
 
     BagReader                   reader_;

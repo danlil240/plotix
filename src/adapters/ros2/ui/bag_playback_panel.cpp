@@ -345,9 +345,9 @@ void BagPlaybackPanel::draw_progress_bar()
             const ImVec2 tp0 = {tx, bmin.y};
             const ImVec2 tp1 = {tx, bmin.y + tick_h};
             const ImU32  col = IM_COL32(static_cast<int>(m.color[0] * 255),
-                                        static_cast<int>(m.color[1] * 255),
-                                        static_cast<int>(m.color[2] * 255),
-                                        static_cast<int>(m.color[3] * 255));
+                                       static_cast<int>(m.color[1] * 255),
+                                       static_cast<int>(m.color[2] * 255),
+                                       static_cast<int>(m.color[3] * 255));
             dl->AddLine(tp0, tp1, col, 1.5f);
 
             // Tooltip on hover near tick.

@@ -97,17 +97,17 @@ void SubplotManager::apply_plot_theme()
     if (!figure_)
         return;
 
-    auto& style = figure_->style();
-    style.margin_left         = 52.0f;
-    style.margin_right        = 14.0f;
-    style.margin_top          = 24.0f;
-    style.margin_bottom       = 40.0f;
-    style.subplot_hgap        = 20.0f;
-    style.subplot_vgap        = 24.0f;
-    style.min_subplot_height  = 100.0f;
+    auto& style              = figure_->style();
+    style.margin_left        = 52.0f;
+    style.margin_right       = 14.0f;
+    style.margin_top         = 24.0f;
+    style.margin_bottom      = 40.0f;
+    style.subplot_hgap       = 20.0f;
+    style.subplot_vgap       = 24.0f;
+    style.min_subplot_height = 100.0f;
 
 #ifdef SPECTRA_USE_IMGUI
-    const auto& th = ui::theme();
+    const auto& th   = ui::theme();
     style.background = spectra::Color(th.bg_canvas.r, th.bg_canvas.g, th.bg_canvas.b, 1.0f);
 
     const spectra::Color tick_color(th.tick_label.r, th.tick_label.g, th.tick_label.b, 1.0f);
@@ -117,7 +117,7 @@ void SubplotManager::apply_plot_theme()
             continue;
         ax_ptr->grid(true);
         ax_ptr->show_border(true);
-        auto& axis_style  = ax_ptr->axis_style();
+        auto& axis_style       = ax_ptr->axis_style();
         axis_style.tick_color  = tick_color;
         axis_style.label_color = tick_color;
         axis_style.grid_color  = {0.0f, 0.0f, 0.0f, 0.0f};
@@ -277,28 +277,28 @@ SubplotHandle SubplotManager::add_plot(int                slot,
                                                                resolved_type,
                                                                intr_,
                                                                buffer_depth);
-                eid = sub->add_field(field_path);
+                eid      = sub->add_field(field_path);
                 if (eid < 0)
                     return bad;
                 if (!sub->start())
                     return bad;
-                entry->subscriber       = std::move(sub);
-                entry->owns_subscriber  = true;
+                entry->subscriber      = std::move(sub);
+                entry->owns_subscriber = true;
                 entry->drain_buf.reserve(std::min(buffer_depth, MAX_DRAIN_PER_POLL));
             }
 
             // Enable thread-safe series + direct-write callback.
             entry->series->set_thread_safe(true);
-            entry->direct_ctx = std::make_unique<DirectWriteContext>();
+            entry->direct_ctx      = std::make_unique<DirectWriteContext>();
             entry->extractor_id    = eid;
             entry->owns_subscriber = (shared == nullptr);
 
-            auto* ctx     = entry->direct_ctx.get();
-            auto* origin  = &shared_time_origin_;
-            auto* has_o   = &has_shared_origin_;
-            auto* series  = entry->series;
-            auto* data_cb = &on_data_cb_;
-            int   slot_id = slot;
+            auto*      ctx     = entry->direct_ctx.get();
+            auto*      origin  = &shared_time_origin_;
+            auto*      has_o   = &has_shared_origin_;
+            auto*      series  = entry->series;
+            auto*      data_cb = &on_data_cb_;
+            int        slot_id = slot;
             const auto cb = [ctx, origin, has_o, series, data_cb, slot_id](double t_sec, double val)
             {
                 if (!ctx->active.load(std::memory_order_acquire))
@@ -520,11 +520,11 @@ bool SubplotManager::remove_series_from_slot(int                slot,
             }
         }
 
-        auto& first         = se.extra_series.front();
-        se.topic            = first->topic;
-        se.field_path       = first->field_path;
-        se.type_name        = first->type_name;
-        se.series           = first->series;
+        auto& first   = se.extra_series.front();
+        se.topic      = first->topic;
+        se.field_path = first->field_path;
+        se.type_name  = first->type_name;
+        se.series     = first->series;
         if (first->owns_subscriber)
             se.subscriber = std::move(first->subscriber);
         se.extractor_id     = first->extractor_id;
@@ -865,11 +865,11 @@ void SubplotManager::poll()
                         std::min(se.subscriber->pending(se.y_extractor_id), MAX_DRAIN_PER_POLL);
                     const size_t pair_count = std::min(pending_x, pending_y);
                     const size_t nx         = se.subscriber->pop_bulk(se.x_extractor_id,
-                                                                      se.x_drain_buf.data(),
-                                                                      pair_count);
+                                                              se.x_drain_buf.data(),
+                                                              pair_count);
                     const size_t ny         = se.subscriber->pop_bulk(se.y_extractor_id,
-                                                                      se.y_drain_buf.data(),
-                                                                      pair_count);
+                                                              se.y_drain_buf.data(),
+                                                              pair_count);
                     const size_t n          = std::min(nx, ny);
 
                     if (n > 0)
@@ -1241,8 +1241,8 @@ SubplotManager::SubplotAction SubplotManager::draw_slot_context_menu(int slot, c
         const double current_win = slot_time_window(slot);
         const bool   has_override =
             (slot < 1 || slot > capacity())
-                ? false
-                : (slots_[static_cast<size_t>(slot - 1)].time_window_override_s > 0.0);
+                  ? false
+                  : (slots_[static_cast<size_t>(slot - 1)].time_window_override_s > 0.0);
 
         static const double kPresets[] = {5.0, 10.0, 30.0, 60.0, 300.0, 600.0};
         static const char*  kLabels[]  = {"5 s", "10 s", "30 s", "1 min", "5 min", "10 min"};

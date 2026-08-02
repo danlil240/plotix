@@ -45,7 +45,7 @@ TEST(RobotModelDisplay, CollisionEntitiesExposeJointMetadataForPicking)
     display.submit_renderables(scene);
 
     ASSERT_EQ(scene.entity_count(), 1u);
-    const auto& entity = scene.entities().front();
+    const auto& entity        = scene.entities().front();
     auto        find_property = [&](const char* key) -> std::string
     {
         for (const auto& property : entity.properties)

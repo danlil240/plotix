@@ -53,19 +53,19 @@ constexpr float STATUS_BAR_HEIGHT       = 34.0f;   // Roomy status pills
 constexpr float FLOATING_TOOLBAR_HEIGHT = 48.0f;
 
 // Animation Durations (in seconds)
-constexpr float DURATION_INSTANT     = 0.0f;
-constexpr float DURATION_FAST        = 0.1f;
-constexpr float DURATION_NORMAL      = 0.15f;
-constexpr float DURATION_SLOW        = 0.2f;
-constexpr float DURATION_SLOWER      = 0.3f;
-constexpr float DURATION_HOVER       = 0.08f;   // Hover transitions
-constexpr float DURATION_TOOLTIP_IN  = 0.05f;   // Tooltip appear
-constexpr float DURATION_TOOLTIP_OUT = 0.10f;   // Tooltip disappear
-constexpr float DURATION_ZOOM            = 0.12f;   // Plot zoom animation
-constexpr float DURATION_INSPECTOR_OPEN  = 0.22f;   // Inspector slide-in (ease-out)
-constexpr float DURATION_INSPECTOR_CLOSE = 0.16f;   // Inspector slide-out (ease-in)
-constexpr float DURATION_SECTION_EXPAND  = 0.18f;   // Inspector section unfold
-constexpr float DURATION_SECTION_COLLAPSE = 0.14f;  // Inspector section fold
+constexpr float DURATION_INSTANT          = 0.0f;
+constexpr float DURATION_FAST             = 0.1f;
+constexpr float DURATION_NORMAL           = 0.15f;
+constexpr float DURATION_SLOW             = 0.2f;
+constexpr float DURATION_SLOWER           = 0.3f;
+constexpr float DURATION_HOVER            = 0.08f;   // Hover transitions
+constexpr float DURATION_TOOLTIP_IN       = 0.05f;   // Tooltip appear
+constexpr float DURATION_TOOLTIP_OUT      = 0.10f;   // Tooltip disappear
+constexpr float DURATION_ZOOM             = 0.12f;   // Plot zoom animation
+constexpr float DURATION_INSPECTOR_OPEN   = 0.22f;   // Inspector slide-in (ease-out)
+constexpr float DURATION_INSPECTOR_CLOSE  = 0.16f;   // Inspector slide-out (ease-in)
+constexpr float DURATION_SECTION_EXPAND   = 0.18f;   // Inspector section unfold
+constexpr float DURATION_SECTION_COLLAPSE = 0.14f;   // Inspector section fold
 
 // Glow / Accent Effect Tokens
 constexpr float GLOW_RADIUS_SM = 2.0f;   // Subtle inner glow
@@ -163,90 +163,90 @@ constexpr float TOOLTIP_TIME_TARGET_MS  = 0.1f;     // Tooltip query budget
 // status bar, command bar, and canvas frame stay visually consistent.
 
 // Nav rail (left toolbar)
-constexpr float NAV_RAIL_ICON_ALPHA_INACTIVE   = 0.86f;   // readable, not disabled
-constexpr float NAV_RAIL_ICON_ALPHA_HOVER      = 0.96f;
-constexpr float NAV_RAIL_ICON_ALPHA_ACTIVE     = 1.00f;
-constexpr float NAV_RAIL_LABEL_ALPHA_INACTIVE  = 0.78f;   // readable tiny labels
-constexpr float NAV_RAIL_LABEL_ALPHA_HOVER     = 0.95f;
-constexpr float NAV_RAIL_LABEL_ALPHA_ACTIVE    = 1.00f;
-constexpr float NAV_RAIL_ICON_SIZE_BASE        = 20.0f;   // matches ICON_MD
+constexpr float NAV_RAIL_ICON_ALPHA_INACTIVE  = 0.86f;   // readable, not disabled
+constexpr float NAV_RAIL_ICON_ALPHA_HOVER     = 0.96f;
+constexpr float NAV_RAIL_ICON_ALPHA_ACTIVE    = 1.00f;
+constexpr float NAV_RAIL_LABEL_ALPHA_INACTIVE = 0.78f;   // readable tiny labels
+constexpr float NAV_RAIL_LABEL_ALPHA_HOVER    = 0.95f;
+constexpr float NAV_RAIL_LABEL_ALPHA_ACTIVE   = 1.00f;
+constexpr float NAV_RAIL_ICON_SIZE_BASE       = 20.0f;   // matches ICON_MD
 // Drawn via font_heading_ (baked at 11.5px); keep the requested draw size close
 // to that baked size so ImGui's bitmap glyphs stay crisp (oversampled 4x/2x, but
 // still degrades if rescaled too far). 13px reads clearly while staying <15%
 // off the baked size.
-constexpr float NAV_RAIL_LABEL_SIZE_BASE       = 13.0f;
+constexpr float NAV_RAIL_LABEL_SIZE_BASE = 13.0f;
 // Floors applied after the rail's height-driven compression scale so labels/icons
 // never shrink into illegibility on short windows (see nav_rail_scale_for_height()).
-constexpr float NAV_RAIL_ICON_SIZE_MIN         = 14.0f;
-constexpr float NAV_RAIL_LABEL_SIZE_MIN        = 11.0f;
-constexpr float NAV_RAIL_GLOW_ALPHA_ACTIVE     = 0.14f;   // refined active glow
-constexpr float NAV_RAIL_GLOW_ALPHA_HOVER      = 0.06f;
-constexpr float NAV_RAIL_SURFACE_ALPHA_INACTIVE = 0.00f;  // no bg until interaction
-constexpr float NAV_RAIL_SURFACE_ALPHA_ACTIVE  = 0.90f;
-constexpr float NAV_RAIL_SURFACE_ALPHA_HOVER   = 0.72f;
-constexpr float NAV_RAIL_BORDER_ALPHA_ACTIVE   = 0.55f;
-constexpr float NAV_RAIL_BORDER_ALPHA_HOVER    = 0.36f;
+constexpr float NAV_RAIL_ICON_SIZE_MIN          = 14.0f;
+constexpr float NAV_RAIL_LABEL_SIZE_MIN         = 11.0f;
+constexpr float NAV_RAIL_GLOW_ALPHA_ACTIVE      = 0.14f;   // refined active glow
+constexpr float NAV_RAIL_GLOW_ALPHA_HOVER       = 0.06f;
+constexpr float NAV_RAIL_SURFACE_ALPHA_INACTIVE = 0.00f;   // no bg until interaction
+constexpr float NAV_RAIL_SURFACE_ALPHA_ACTIVE   = 0.90f;
+constexpr float NAV_RAIL_SURFACE_ALPHA_HOVER    = 0.72f;
+constexpr float NAV_RAIL_BORDER_ALPHA_ACTIVE    = 0.55f;
+constexpr float NAV_RAIL_BORDER_ALPHA_HOVER     = 0.36f;
 
 // Tab bar
-constexpr float TAB_BAR_SELECTED_HEIGHT_EXTRA  = 3.0f;    // selected tab grows upward
-constexpr float TAB_BAR_HORIZONTAL_PADDING     = 22.0f;   // title side padding
-constexpr float TAB_BAR_CLOSE_BTN_SIZE         = 14.0f;
-constexpr float TAB_BAR_CLOSE_BTN_PAD_RIGHT    = 10.0f;
-constexpr float TAB_BAR_PLUS_SIZE              = 6.0f;    // half-bar of plus sign
-constexpr float TAB_BAR_UNDERLINE_HEIGHT       = 2.5f;
-constexpr float TAB_BAR_RADIUS                 = 8.0f;    // r8
-constexpr float TAB_BAR_MIN_WIDTH              = 104.0f;
-constexpr float TAB_BAR_MAX_WIDTH              = 220.0f;
-constexpr float TAB_BAR_ADD_BTN_WIDTH          = 34.0f;
-constexpr float TAB_BAR_ICON_TITLE_GAP         = 4.0f;    // if icon+title
+constexpr float TAB_BAR_SELECTED_HEIGHT_EXTRA = 3.0f;    // selected tab grows upward
+constexpr float TAB_BAR_HORIZONTAL_PADDING    = 22.0f;   // title side padding
+constexpr float TAB_BAR_CLOSE_BTN_SIZE        = 14.0f;
+constexpr float TAB_BAR_CLOSE_BTN_PAD_RIGHT   = 10.0f;
+constexpr float TAB_BAR_PLUS_SIZE             = 6.0f;   // half-bar of plus sign
+constexpr float TAB_BAR_UNDERLINE_HEIGHT      = 2.5f;
+constexpr float TAB_BAR_RADIUS                = 8.0f;   // r8
+constexpr float TAB_BAR_MIN_WIDTH             = 104.0f;
+constexpr float TAB_BAR_MAX_WIDTH             = 220.0f;
+constexpr float TAB_BAR_ADD_BTN_WIDTH         = 34.0f;
+constexpr float TAB_BAR_ICON_TITLE_GAP        = 4.0f;   // if icon+title
 
 // Command bar / top navigation
-constexpr float COMMAND_BAR_ITEM_SPACING       = 14.0f;   // tighten menu gaps
-constexpr float COMMAND_BAR_HOME_ICON_SCALE    = 0.76f;   // make Home less dominant
-constexpr float COMMAND_BAR_HOME_ALPHA         = 0.80f;   // quieter home icon
-constexpr float COMMAND_BAR_MENU_TEXT_ALPHA    = 0.94f;   // readable menus
-constexpr float COMMAND_BAR_BRAND_TO_HOME_GAP  = 10.0f;   // cohesive group
-constexpr float COMMAND_BAR_HOME_TO_MENU_GAP   = 16.0f;
+constexpr float COMMAND_BAR_ITEM_SPACING      = 14.0f;   // tighten menu gaps
+constexpr float COMMAND_BAR_HOME_ICON_SCALE   = 0.76f;   // make Home less dominant
+constexpr float COMMAND_BAR_HOME_ALPHA        = 0.80f;   // quieter home icon
+constexpr float COMMAND_BAR_MENU_TEXT_ALPHA   = 0.94f;   // readable menus
+constexpr float COMMAND_BAR_BRAND_TO_HOME_GAP = 10.0f;   // cohesive group
+constexpr float COMMAND_BAR_HOME_TO_MENU_GAP  = 16.0f;
 
 // Status bar
-constexpr float STATUS_BAR_PADDING_H           = 16.0f;   // left/right room
-constexpr float STATUS_BAR_PILL_HEIGHT         = 22.0f;   // fixed pill height
-constexpr float STATUS_BAR_PILL_PAD_H          = 9.0f;    // horizontal inside pill
-constexpr float STATUS_BAR_PILL_PAD_V          = 3.0f;    // vertical inside pill
-constexpr float STATUS_BAR_PILL_RADIUS         = 11.0f;   // full pill
-constexpr float STATUS_BAR_GROUP_GAP           = 18.0f;   // breathing room between left items
-constexpr float STATUS_BAR_PERF_GAP            = 16.0f;   // gap between fps and gpu
-constexpr float STATUS_BAR_TEXT_ALPHA          = 0.92f;
-constexpr float STATUS_BAR_FPS_PILL_PAD_H      = 10.0f;   // Vision-scale lime badge
-constexpr float STATUS_BAR_FPS_PILL_PAD_V      = 4.0f;
+constexpr float STATUS_BAR_PADDING_H      = 16.0f;   // left/right room
+constexpr float STATUS_BAR_PILL_HEIGHT    = 22.0f;   // fixed pill height
+constexpr float STATUS_BAR_PILL_PAD_H     = 9.0f;    // horizontal inside pill
+constexpr float STATUS_BAR_PILL_PAD_V     = 3.0f;    // vertical inside pill
+constexpr float STATUS_BAR_PILL_RADIUS    = 11.0f;   // full pill
+constexpr float STATUS_BAR_GROUP_GAP      = 18.0f;   // breathing room between left items
+constexpr float STATUS_BAR_PERF_GAP       = 16.0f;   // gap between fps and gpu
+constexpr float STATUS_BAR_TEXT_ALPHA     = 0.92f;
+constexpr float STATUS_BAR_FPS_PILL_PAD_H = 10.0f;   // Vision-scale lime badge
+constexpr float STATUS_BAR_FPS_PILL_PAD_V = 4.0f;
 
 // Canvas / plot frame
-constexpr float CANVAS_FRAME_ROUNDING          = 14.0f;
-constexpr float CANVAS_FRAME_INSET             = 1.5f;    // inner rim inset
-constexpr float CANVAS_FRAME_BORDER_ALPHA      = 0.55f;
-constexpr float CANVAS_FRAME_INNER_ALPHA       = 0.35f;
-constexpr float CANVAS_FRAME_GLOW_ALPHA        = 0.10f;
-constexpr float CANVAS_VIGNETTE_ALPHA          = 0.16f;
+constexpr float CANVAS_FRAME_ROUNDING     = 14.0f;
+constexpr float CANVAS_FRAME_INSET        = 1.5f;   // inner rim inset
+constexpr float CANVAS_FRAME_BORDER_ALPHA = 0.55f;
+constexpr float CANVAS_FRAME_INNER_ALPHA  = 0.35f;
+constexpr float CANVAS_FRAME_GLOW_ALPHA   = 0.10f;
+constexpr float CANVAS_VIGNETTE_ALPHA     = 0.16f;
 
 // ROS / product panel component geometry
-constexpr float TOOLBAR_BUTTON_SIZE            = 28.0f;
-constexpr float TOOLBAR_BUTTON_GAP             = 4.0f;
-constexpr float TOOLBAR_HEIGHT                 = 36.0f;
-constexpr float STAT_CARD_MIN_WIDTH            = 120.0f;
-constexpr float STAT_CARD_HEIGHT               = 64.0f;
-constexpr float STAT_CARD_GAP                  = 8.0f;
-constexpr float EMPTY_STATE_ICON_SIZE          = 40.0f;
-constexpr float EMPTY_STATE_MAX_WIDTH          = 360.0f;
-constexpr float EMPTY_STATE_ACTION_GAP         = 8.0f;
-constexpr float DROP_ZONE_BORDER_WIDTH         = 2.0f;
-constexpr float DROP_ZONE_DASH_LEN             = 8.0f;
-constexpr float DROP_ZONE_ALPHA_VALID          = 0.22f;
-constexpr float DROP_ZONE_ALPHA_INVALID        = 0.14f;
-constexpr float PANEL_HEADER_HEIGHT            = 40.0f;
-constexpr float SEARCH_BOX_HEIGHT              = 28.0f;
-constexpr float SEARCH_CLEAR_BTN_SIZE          = 18.0f;
-constexpr float LEGEND_ROW_HEIGHT              = 22.0f;
-constexpr float LEGEND_SWATCH_SIZE             = 10.0f;
-constexpr float TIME_PRESET_BTN_WIDTH          = 36.0f;
+constexpr float TOOLBAR_BUTTON_SIZE     = 28.0f;
+constexpr float TOOLBAR_BUTTON_GAP      = 4.0f;
+constexpr float TOOLBAR_HEIGHT          = 36.0f;
+constexpr float STAT_CARD_MIN_WIDTH     = 120.0f;
+constexpr float STAT_CARD_HEIGHT        = 64.0f;
+constexpr float STAT_CARD_GAP           = 8.0f;
+constexpr float EMPTY_STATE_ICON_SIZE   = 40.0f;
+constexpr float EMPTY_STATE_MAX_WIDTH   = 360.0f;
+constexpr float EMPTY_STATE_ACTION_GAP  = 8.0f;
+constexpr float DROP_ZONE_BORDER_WIDTH  = 2.0f;
+constexpr float DROP_ZONE_DASH_LEN      = 8.0f;
+constexpr float DROP_ZONE_ALPHA_VALID   = 0.22f;
+constexpr float DROP_ZONE_ALPHA_INVALID = 0.14f;
+constexpr float PANEL_HEADER_HEIGHT     = 40.0f;
+constexpr float SEARCH_BOX_HEIGHT       = 28.0f;
+constexpr float SEARCH_CLEAR_BTN_SIZE   = 18.0f;
+constexpr float LEGEND_ROW_HEIGHT       = 22.0f;
+constexpr float LEGEND_SWATCH_SIZE      = 10.0f;
+constexpr float TIME_PRESET_BTN_WIDTH   = 36.0f;
 
 }   // namespace spectra::ui::tokens

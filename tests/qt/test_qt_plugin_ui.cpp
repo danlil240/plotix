@@ -25,7 +25,8 @@
 #include <memory>
 #include <string>
 
-namespace {
+namespace
+{
 
 #ifndef SPECTRA_MOCK_TRANSFORM_PLUGIN_PATH
     #define SPECTRA_MOCK_TRANSFORM_PLUGIN_PATH ""
@@ -35,10 +36,7 @@ struct QtPluginUIEnv
 {
     std::unique_ptr<spectra::PluginUIRegistry> registry;
 
-    QtPluginUIEnv()
-    {
-        registry = std::make_unique<spectra::PluginUIRegistry>();
-    }
+    QtPluginUIEnv() { registry = std::make_unique<spectra::PluginUIRegistry>(); }
 };
 
 QtPluginUIEnv& env()
@@ -47,7 +45,7 @@ QtPluginUIEnv& env()
     return e;
 }
 
-} // namespace
+}   // namespace
 
 TEST(QtPluginUI, RegisterAndFindSchema)
 {
@@ -58,11 +56,11 @@ TEST(QtPluginUI, RegisterAndFindSchema)
     schema.panel_title = "Test Plugin Panel";
 
     spectra::PluginUIElement prop;
-    prop.type = spectra::PluginUIElementType::Property;
-    prop.property.id = "threshold";
-    prop.property.label = "Threshold";
-    prop.property.type = spectra::PluginUIPropertyType::Float;
-    prop.property.value = "0.5";
+    prop.type               = spectra::PluginUIElementType::Property;
+    prop.property.id        = "threshold";
+    prop.property.label     = "Threshold";
+    prop.property.type      = spectra::PluginUIPropertyType::Float;
+    prop.property.value     = "0.5";
     prop.property.min_value = "0.0";
     prop.property.max_value = "1.0";
     schema.elements.push_back(prop);
@@ -84,14 +82,14 @@ TEST(QtPluginUI, RegisterMultipleSchemas)
     spectra::PluginUIRegistry registry;
 
     spectra::PluginUISchema s1;
-    s1.plugin_name = "plugin_a";
-    s1.panel_title = "Plugin A";
+    s1.plugin_name  = "plugin_a";
+    s1.panel_title  = "Plugin A";
     std::string id1 = registry.register_schema(s1);
     EXPECT_FALSE(id1.empty());
 
     spectra::PluginUISchema s2;
-    s2.plugin_name = "plugin_b";
-    s2.panel_title = "Plugin B";
+    s2.plugin_name  = "plugin_b";
+    s2.panel_title  = "Plugin B";
     std::string id2 = registry.register_schema(s2);
     EXPECT_FALSE(id2.empty());
 
@@ -263,22 +261,22 @@ TEST(QtPluginUI, ReplaceSchema)
     s1.plugin_name = "replace_test";
     s1.panel_title = "V1";
     s1.elements.push_back({});
-    s1.elements[0].type = spectra::PluginUIElementType::Label;
+    s1.elements[0].type       = spectra::PluginUIElementType::Label;
     s1.elements[0].label.text = "First version";
-    std::string id1 = e.registry->register_schema(s1);
+    std::string id1           = e.registry->register_schema(s1);
 
     // Re-register with same plugin_name
     spectra::PluginUISchema s2;
     s2.plugin_name = "replace_test";
     s2.panel_title = "V2";
     s2.elements.push_back({});
-    s2.elements[0].type = spectra::PluginUIElementType::Label;
+    s2.elements[0].type       = spectra::PluginUIElementType::Label;
     s2.elements[0].label.text = "Second version";
-    std::string id2 = e.registry->register_schema(s2);
+    std::string id2           = e.registry->register_schema(s2);
 
     // The registry should have only one schema for this plugin
-    auto all = e.registry->schemas();
-    int count = 0;
+    auto all   = e.registry->schemas();
+    int  count = 0;
     for (const auto& s : all)
     {
         if (s.plugin_name == "replace_test")
@@ -292,8 +290,8 @@ TEST(QtPluginUI, UnregisterSchema)
     auto& e = env();
 
     spectra::PluginUISchema s;
-    s.plugin_name = "unregister_test";
-    s.panel_title = "Test";
+    s.plugin_name  = "unregister_test";
+    s.panel_title  = "Test";
     std::string id = e.registry->register_schema(s);
 
     EXPECT_NE(e.registry->find_schema(id), nullptr);
@@ -306,8 +304,8 @@ TEST(QtPluginUI, UnregisterPlugin)
     auto& e = env();
 
     spectra::PluginUISchema s;
-    s.plugin_name = "plugin_to_remove";
-    s.panel_title = "Test";
+    s.plugin_name  = "plugin_to_remove";
+    s.panel_title  = "Test";
     std::string id = e.registry->register_schema(s);
 
     e.registry->unregister_plugin("plugin_to_remove");
@@ -323,10 +321,10 @@ TEST(QtPluginUI, PropertyChangedCallback)
     schema.panel_title = "Callback Test";
 
     spectra::PluginUIElement prop;
-    prop.type = spectra::PluginUIElementType::Property;
-    prop.property.id = "gain";
+    prop.type           = spectra::PluginUIElementType::Property;
+    prop.property.id    = "gain";
     prop.property.label = "Gain";
-    prop.property.type = spectra::PluginUIPropertyType::Float;
+    prop.property.type  = spectra::PluginUIPropertyType::Float;
     prop.property.value = "1.0";
     schema.elements.push_back(prop);
 
@@ -334,13 +332,13 @@ TEST(QtPluginUI, PropertyChangedCallback)
     std::string captured_value;
 
     spectra::PluginUICallbacks callbacks;
-    callbacks.on_property_changed =
-        [&captured_property, &captured_value](
-            const std::string& schema_id,
-            const std::string& property_id,
-            const std::string& new_value) -> std::string {
+    callbacks.on_property_changed = [&captured_property, &captured_value](
+                                        const std::string& schema_id,
+                                        const std::string& property_id,
+                                        const std::string& new_value) -> std::string
+    {
         captured_property = property_id;
-        captured_value = new_value;
+        captured_value    = new_value;
         return new_value;
     };
 
@@ -361,8 +359,8 @@ TEST(QtPluginUI, ActionTriggeredCallback)
     schema.panel_title = "Action Test";
 
     spectra::PluginUIElement action;
-    action.type = spectra::PluginUIElementType::Action;
-    action.action.id = "run";
+    action.type         = spectra::PluginUIElementType::Action;
+    action.action.id    = "run";
     action.action.label = "Run";
     schema.elements.push_back(action);
 
@@ -370,11 +368,8 @@ TEST(QtPluginUI, ActionTriggeredCallback)
 
     spectra::PluginUICallbacks callbacks;
     callbacks.on_action_triggered =
-        [&captured_action](
-            const std::string& schema_id,
-            const std::string& action_id) {
-        captured_action = action_id;
-    };
+        [&captured_action](const std::string& schema_id, const std::string& action_id)
+    { captured_action = action_id; };
 
     std::string id = e.registry->register_schema(schema, callbacks);
 
@@ -424,23 +419,23 @@ TEST(QtPluginUI, AllElementTypes)
 
     // Property
     spectra::PluginUIElement prop;
-    prop.type = spectra::PluginUIElementType::Property;
-    prop.property.id = "enabled";
-    prop.property.type = spectra::PluginUIPropertyType::Boolean;
+    prop.type           = spectra::PluginUIElementType::Property;
+    prop.property.id    = "enabled";
+    prop.property.type  = spectra::PluginUIPropertyType::Boolean;
     prop.property.value = "true";
     schema.elements.push_back(prop);
 
     // Action
     spectra::PluginUIElement action;
-    action.type = spectra::PluginUIElementType::Action;
-    action.action.id = "apply";
+    action.type         = spectra::PluginUIElementType::Action;
+    action.action.id    = "apply";
     action.action.label = "Apply";
     schema.elements.push_back(action);
 
     // Label
     spectra::PluginUIElement label;
-    label.type = spectra::PluginUIElementType::Label;
-    label.label.text = "Status: OK";
+    label.type             = spectra::PluginUIElementType::Label;
+    label.label.text       = "Status: OK";
     label.label.style_hint = "status";
     schema.elements.push_back(label);
 
@@ -451,13 +446,13 @@ TEST(QtPluginUI, AllElementTypes)
 
     // Group with children
     spectra::PluginUIElement group;
-    group.type = spectra::PluginUIElementType::Group;
-    group.group.title = "Advanced";
+    group.type            = spectra::PluginUIElementType::Group;
+    group.group.title     = "Advanced";
     group.group.collapsed = true;
-    group.children = {0, 1}; // indices of prop and action
+    group.children        = {0, 1};   // indices of prop and action
     schema.elements.push_back(group);
 
-    std::string id = e.registry->register_schema(schema);
+    std::string id    = e.registry->register_schema(schema);
     const auto* found = e.registry->find_schema(id);
     ASSERT_NE(found, nullptr);
     EXPECT_EQ(found->elements.size(), 5u);
@@ -478,14 +473,14 @@ TEST(QtPluginUI, EnumProperty)
     schema.panel_title = "Enum Test";
 
     spectra::PluginUIElement prop;
-    prop.type = spectra::PluginUIElementType::Property;
-    prop.property.id = "mode";
-    prop.property.type = spectra::PluginUIPropertyType::Enum;
-    prop.property.value = "0";
+    prop.type                  = spectra::PluginUIElementType::Property;
+    prop.property.id           = "mode";
+    prop.property.type         = spectra::PluginUIPropertyType::Enum;
+    prop.property.value        = "0";
     prop.property.enum_options = {"Auto", "Manual", "Disabled"};
     schema.elements.push_back(prop);
 
-    std::string id = e.registry->register_schema(schema);
+    std::string id    = e.registry->register_schema(schema);
     const auto* found = e.registry->find_schema(id);
     ASSERT_NE(found, nullptr);
     EXPECT_EQ(found->elements[0].property.enum_options.size(), 3u);
@@ -501,13 +496,13 @@ TEST(QtPluginUI, ColorProperty)
     schema.panel_title = "Color Test";
 
     spectra::PluginUIElement prop;
-    prop.type = spectra::PluginUIElementType::Property;
-    prop.property.id = "bg_color";
-    prop.property.type = spectra::PluginUIPropertyType::Color;
+    prop.type           = spectra::PluginUIElementType::Property;
+    prop.property.id    = "bg_color";
+    prop.property.type  = spectra::PluginUIPropertyType::Color;
     prop.property.value = "#FF5733";
     schema.elements.push_back(prop);
 
-    std::string id = e.registry->register_schema(schema);
+    std::string id    = e.registry->register_schema(schema);
     const auto* found = e.registry->find_schema(id);
     ASSERT_NE(found, nullptr);
     EXPECT_EQ(found->elements[0].property.value, "#FF5733");

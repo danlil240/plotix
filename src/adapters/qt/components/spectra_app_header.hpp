@@ -28,10 +28,10 @@ class SpectraAppHeader : public QWidget
 {
     Q_OBJECT
 
-public:
+   public:
     explicit SpectraAppHeader(QWidget* parent = nullptr);
     ~SpectraAppHeader() override;
-    SpectraAppHeader(const SpectraAppHeader&) = delete;
+    SpectraAppHeader(const SpectraAppHeader&)            = delete;
     SpectraAppHeader& operator=(const SpectraAppHeader&) = delete;
 
     // Register a QMenu under one of the header menu buttons
@@ -41,19 +41,19 @@ public:
 
     int height_hint() const;
 
-signals:
+   signals:
     void home_clicked();
 
-protected:
+   protected:
     void paintEvent(QPaintEvent* event) override;
 
-private:
+   private:
     void build_layout();
 
-    QWidget*      logo_widget_  = nullptr;
-    QWidget*      wordmark_widget_ = nullptr;
-    QPushButton*  home_btn_     = nullptr;
-    SpectraMenuStrip* menu_strip_ = nullptr;
+    QWidget*          logo_widget_     = nullptr;
+    QWidget*          wordmark_widget_ = nullptr;
+    QPushButton*      home_btn_        = nullptr;
+    SpectraMenuStrip* menu_strip_      = nullptr;
 };
 
 }   // namespace spectra::adapters::qt

@@ -15,7 +15,7 @@ namespace spectra
 {
 class TimelineEditor;
 class UndoManager;
-}
+}   // namespace spectra
 
 namespace spectra::adapters::qt
 {

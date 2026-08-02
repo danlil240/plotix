@@ -186,11 +186,11 @@ bool RecordingSession::begin_multi_pane(const RecordingConfig& config, PaneRende
         for (uint32_t i = 0; i < config_.pane_count; ++i)
         {
             RecordingConfig::PaneRect r;
-            r.x = static_cast<float>(i % cols) * pw;
+            r.x                = static_cast<float>(i % cols) * pw;
             const uint32_t row = i / cols;
             r.y                = static_cast<float>(row) * ph;
-            r.w = pw;
-            r.h = ph;
+            r.w                = pw;
+            r.h                = ph;
             resolved_pane_rects_.push_back(r);
         }
     }

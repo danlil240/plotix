@@ -23,12 +23,12 @@ namespace spectra::ui::widgets
 
 // ─── Section Animation State ─────────────────────────────────────────────────
 
-static const char* current_animated_section_id_ = nullptr;
+static const char* current_animated_section_id_       = nullptr;
 static bool        current_section_invisible_measure_ = false;
 
 static float measure_section_content_height()
 {
-    const float cursor_h = ImGui::GetCursorPosY();
+    const float  cursor_h    = ImGui::GetCursorPosY();
     const ImVec2 content_max = ImGui::GetWindowContentRegionMax();
     const ImVec2 content_min = ImGui::GetWindowContentRegionMin();
     const float  region_h    = content_max.y - content_min.y;
@@ -66,8 +66,8 @@ void update_section_animations(float dt)
             continue;
         }
 
-        const float duration =
-            (target > state.anim_t) ? tokens::DURATION_SECTION_EXPAND : tokens::DURATION_SECTION_COLLAPSE;
+        const float     duration         = (target > state.anim_t) ? tokens::DURATION_SECTION_EXPAND
+                                                                   : tokens::DURATION_SECTION_COLLAPSE;
         constexpr float kMaxProgressStep = 0.35f;
         const float     step             = std::min(dt / duration, kMaxProgressStep);
         if (target > state.anim_t)
@@ -96,7 +96,7 @@ bool section_header(const char* label, bool* open, ImFont* font)
 
     ImGui::PushID(label);
 
-    const float avail  = ImGui::GetContentRegionAvail().x;
+    const float  avail  = ImGui::GetContentRegionAvail().x;
     const ImVec2 cursor = ImGui::GetCursorScreenPos();
     const float  hdr_h  = tokens::INSPECTOR_HEADER_H;
 
@@ -107,7 +107,7 @@ bool section_header(const char* label, bool* open, ImFont* font)
     if (clicked && open)
     {
         log_ui_action("widget", label, "ok", "section_header");
-        *open = !*open;
+        *open            = !*open;
         auto& anim       = get_section_anim(label);
         anim.target_open = *open;
         if (*open)
@@ -129,7 +129,7 @@ bool section_header(const char* label, bool* open, ImFont* font)
 
         const ImVec2 hdr_min = cursor;
         const ImVec2 hdr_max(cursor.x + avail, cursor.y + hdr_h);
-        ImDrawList*  dl      = ImGui::GetWindowDrawList();
+        ImDrawList*  dl = ImGui::GetWindowDrawList();
         dl->AddRectFilled(hdr_min,
                           hdr_max,
                           IM_COL32(static_cast<uint8_t>(c.section_header_bg.r * 255),
@@ -168,9 +168,9 @@ bool section_header(const char* label, bool* open, ImFont* font)
     }
 
     // Chevron + label vertically centered in the header band.
-    const float text_h    = ImGui::GetTextLineHeight();
-    const float row_y     = cursor.y + std::max(0.0f, (hdr_h - text_h) * 0.5f);
-    const float row_x     = cursor.x + tokens::SPACE_2;
+    const float text_h = ImGui::GetTextLineHeight();
+    const float row_y  = cursor.y + std::max(0.0f, (hdr_h - text_h) * 0.5f);
+    const float row_x  = cursor.x + tokens::SPACE_2;
     ImGui::SetCursorScreenPos(ImVec2(row_x, row_y));
 
     float chevron_t = 1.0f;
@@ -224,9 +224,9 @@ bool section_header(const char* label, bool* open, ImFont* font)
 
 bool begin_animated_section(const char* id)
 {
-    auto&       anim = get_section_anim(id);
-    const float t    = anim.anim_t;
-    current_animated_section_id_     = id;
+    auto&       anim                   = get_section_anim(id);
+    const float t                      = anim.anim_t;
+    current_animated_section_id_       = id;
     current_section_invisible_measure_ = false;
 
     if (t <= 0.001f)
@@ -279,7 +279,7 @@ void end_animated_section()
     const char* id = current_animated_section_id_;
     if (id)
     {
-        auto& anim = get_section_anim(id);
+        auto&       anim     = get_section_anim(id);
         const float measured = measure_section_content_height();
         if (measured > 1.0f)
         {
@@ -557,7 +557,7 @@ bool slider_field(const char* label, float& value, float min, float max, const c
         // Floating value label above the thumb while dragging
         if (ImGui::IsItemActive())
         {
-            float thumb_x      = frame_min.x + fill_w;
+            float             thumb_x = frame_min.x + fill_w;
             const std::string val_buf = format_slider_value(fmt, value);
 
             ImVec2 val_sz = ImGui::CalcTextSize(val_buf.c_str());
@@ -1026,10 +1026,11 @@ bool begin_card(const char* id, float rounding, float padding)
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, tokens::BORDER_WIDTH_NORMAL);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(padding, padding));
 
-    bool visible = ImGui::BeginChild(id,
-                                     ImVec2(0, 0),
-                                     ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Borders,
-                                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    bool visible =
+        ImGui::BeginChild(id,
+                          ImVec2(0, 0),
+                          ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Borders,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     return visible;
 }
 
@@ -1062,8 +1063,8 @@ bool chip(const char* label, bool active)
     // Fill: accent tint when active, faint surface otherwise; lifts on hover.
     Color fill = active ? c.accent.with_alpha(hovered ? 0.30f : 0.22f)
                         : c.bg_elevated.with_alpha(hovered ? 0.85f : 0.55f);
-    Color border = active ? c.accent.with_alpha(0.65f)
-                          : c.border_subtle.with_alpha(hovered ? 0.7f : 0.45f);
+    Color border =
+        active ? c.accent.with_alpha(0.65f) : c.border_subtle.with_alpha(hovered ? 0.7f : 0.45f);
     Color text = active ? c.accent
                         : Color{c.text_secondary.r,
                                 c.text_secondary.g,
@@ -1116,9 +1117,9 @@ void panel_title(const char* title, const char* subtitle, ImFont* title_font)
 
 // ─── Phase ROS UX Primitives ────────────────────────────────────────────────
 
-int empty_state(ui::Icon icon,
-                const char* title,
-                const char* subtitle,
+int empty_state(ui::Icon                          icon,
+                const char*                       title,
+                const char*                       subtitle,
                 std::span<const EmptyStateAction> actions)
 {
     const auto& c = theme();
@@ -1134,9 +1135,8 @@ int empty_state(ui::Icon icon,
 
     if (ImFont* f = icon_font(tokens::EMPTY_STATE_ICON_SIZE))
         ImGui::PushFont(f);
-    ImGui::PushStyleColor(ImGuiCol_Text,
-                          ImVec4(c.accent.r, c.accent.g, c.accent.b, 0.85f));
-    const char* glyph = icon_str(icon);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(c.accent.r, c.accent.g, c.accent.b, 0.85f));
+    const char*  glyph   = icon_str(icon);
     const ImVec2 icon_sz = ImGui::CalcTextSize(glyph);
     ImGui::SetCursorPosX(start_x + (max_w - icon_sz.x) * 0.5f);
     ImGui::TextUnformatted(glyph);
@@ -1171,13 +1171,13 @@ int empty_state(ui::Icon icon,
     if (!actions.empty())
     {
         ImGui::Dummy(ImVec2(0.0f, tokens::SPACE_2));
-        float total_w = 0.0f;
+        float               total_w = 0.0f;
         std::vector<ImVec2> sizes;
         sizes.reserve(actions.size());
         for (const EmptyStateAction& action : actions)
         {
             const ImVec2 text_sz = ImGui::CalcTextSize(action.label ? action.label : "");
-            ImVec2 size(std::max(72.0f, text_sz.x + tokens::SPACE_4 * 2.0f),
+            ImVec2       size(std::max(72.0f, text_sz.x + tokens::SPACE_4 * 2.0f),
                         ImGui::GetFrameHeight());
             sizes.push_back(size);
             total_w += size.x;
@@ -1200,33 +1200,30 @@ int empty_state(ui::Icon icon,
             {
                 ImGui::PushStyleColor(ImGuiCol_Button,
                                       ImVec4(c.accent.r, c.accent.g, c.accent.b, 0.85f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                                      ImVec4(c.accent_hover.r,
-                                             c.accent_hover.g,
-                                             c.accent_hover.b,
-                                             0.95f));
+                ImGui::PushStyleColor(
+                    ImGuiCol_ButtonHovered,
+                    ImVec4(c.accent_hover.r, c.accent_hover.g, c.accent_hover.b, 0.95f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive,
                                       ImVec4(c.accent.r, c.accent.g, c.accent.b, 1.0f));
             }
             else
             {
-                ImGui::PushStyleColor(ImGuiCol_Button,
-                                      ImVec4(c.bg_tertiary.r,
-                                             c.bg_tertiary.g,
-                                             c.bg_tertiary.b,
-                                             0.75f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
-                                      ImVec4(c.bg_elevated.r,
-                                             c.bg_elevated.g,
-                                             c.bg_elevated.b,
-                                             0.95f));
+                ImGui::PushStyleColor(
+                    ImGuiCol_Button,
+                    ImVec4(c.bg_tertiary.r, c.bg_tertiary.g, c.bg_tertiary.b, 0.75f));
+                ImGui::PushStyleColor(
+                    ImGuiCol_ButtonHovered,
+                    ImVec4(c.bg_elevated.r, c.bg_elevated.g, c.bg_elevated.b, 0.95f));
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive,
                                       ImVec4(c.accent.r, c.accent.g, c.accent.b, 0.25f));
             }
             if (ImGui::Button(action.label ? action.label : "", sizes[i]))
             {
                 clicked = static_cast<int>(i);
-                log_ui_action("widget", action.label ? action.label : "empty_action", "ok", "empty_state");
+                log_ui_action("widget",
+                              action.label ? action.label : "empty_action",
+                              "ok",
+                              "empty_state");
             }
             ImGui::PopStyleColor(3);
             ImGui::PopStyleVar();
@@ -1241,8 +1238,8 @@ int empty_state(ui::Icon icon,
     return clicked;
 }
 
-int panel_header(const char* title,
-                 const char* subtitle,
+int panel_header(const char*                        title,
+                 const char*                        subtitle,
                  std::span<const PanelHeaderAction> right_actions)
 {
     const auto& c = theme();
@@ -1312,21 +1309,21 @@ bool toolbar_button(ui::Icon icon, const char* tooltip, bool active)
     {
         ImGui::PushStyleColor(ImGuiCol_Button,
                               ImVec4(c.bg_tertiary.r, c.bg_tertiary.g, c.bg_tertiary.b, 0.35f));
-        ImGui::PushStyleColor(ImGuiCol_Text,
-                              ImVec4(c.text_secondary.r, c.text_secondary.g, c.text_secondary.b, 0.95f));
+        ImGui::PushStyleColor(
+            ImGuiCol_Text,
+            ImVec4(c.text_secondary.r, c.text_secondary.g, c.text_secondary.b, 0.95f));
     }
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
                           ImVec4(c.bg_elevated.r, c.bg_elevated.g, c.bg_elevated.b, 0.85f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive,
-                          ImVec4(c.accent.r, c.accent.g, c.accent.b, 0.28f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(c.accent.r, c.accent.g, c.accent.b, 0.28f));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, tokens::RADIUS_MD);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
 
     if (ImFont* f = icon_font(tokens::ICON_SM))
         ImGui::PushFont(f);
-    const bool clicked = ImGui::Button(icon_str(icon),
-                                       ImVec2(tokens::TOOLBAR_BUTTON_SIZE,
-                                              tokens::TOOLBAR_BUTTON_SIZE));
+    const bool clicked =
+        ImGui::Button(icon_str(icon),
+                      ImVec2(tokens::TOOLBAR_BUTTON_SIZE, tokens::TOOLBAR_BUTTON_SIZE));
     if (ImFont* f = icon_font(tokens::ICON_SM); f)
         ImGui::PopFont();
 
@@ -1344,10 +1341,10 @@ bool toolbar_button(ui::Icon icon, const char* tooltip, bool active)
 
 void stat_card(const char* label, const char* value, const char* unit, const char* trend)
 {
-    const auto& c = theme();
-    const float w = std::max(tokens::STAT_CARD_MIN_WIDTH, ImGui::GetContentRegionAvail().x);
+    const auto&  c   = theme();
+    const float  w   = std::max(tokens::STAT_CARD_MIN_WIDTH, ImGui::GetContentRegionAvail().x);
     const ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImDrawList*  dl  = ImGui::GetWindowDrawList();
     dl->AddRectFilled(pos,
                       ImVec2(pos.x + w, pos.y + tokens::STAT_CARD_HEIGHT),
                       ImGui::ColorConvertFloat4ToU32(
@@ -1361,9 +1358,8 @@ void stat_card(const char* label, const char* value, const char* unit, const cha
 
     ImGui::BeginGroup();
     ImGui::SetCursorScreenPos(ImVec2(pos.x + tokens::SPACE_3, pos.y + tokens::SPACE_2));
-    ImGui::PushStyleColor(
-        ImGuiCol_Text,
-        ImVec4(c.text_tertiary.r, c.text_tertiary.g, c.text_tertiary.b, 0.9f));
+    ImGui::PushStyleColor(ImGuiCol_Text,
+                          ImVec4(c.text_tertiary.r, c.text_tertiary.g, c.text_tertiary.b, 0.9f));
     ImGui::TextUnformatted(label ? label : "");
     ImGui::PopStyleColor();
 
@@ -1385,20 +1381,20 @@ void stat_card(const char* label, const char* value, const char* unit, const cha
     {
         ImGui::SetCursorScreenPos(ImVec2(pos.x + w - ImGui::CalcTextSize(trend).x - tokens::SPACE_3,
                                          pos.y + tokens::SPACE_2));
-        ImGui::PushStyleColor(ImGuiCol_Text,
-                              ImVec4(c.accent.r, c.accent.g, c.accent.b, 0.9f));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(c.accent.r, c.accent.g, c.accent.b, 0.9f));
         ImGui::TextUnformatted(trend);
         ImGui::PopStyleColor();
     }
     ImGui::EndGroup();
-    ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + tokens::STAT_CARD_HEIGHT + tokens::STAT_CARD_GAP));
+    ImGui::SetCursorScreenPos(
+        ImVec2(pos.x, pos.y + tokens::STAT_CARD_HEIGHT + tokens::STAT_CARD_GAP));
     ImGui::Dummy(ImVec2(0.0f, 0.0f));
 }
 
 bool search_box(char* buf, size_t buf_size, const char* placeholder, bool* changed)
 {
-    const auto& c = theme();
-    bool local_changed = false;
+    const auto& c             = theme();
+    bool        local_changed = false;
     ImGui::PushID(placeholder ? placeholder : "search_box");
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, tokens::RADIUS_MD);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(28.0f, 5.0f));
@@ -1407,7 +1403,8 @@ bool search_box(char* buf, size_t buf_size, const char* placeholder, bool* chang
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered,
                           ImVec4(c.bg_elevated.r, c.bg_elevated.g, c.bg_elevated.b, 0.82f));
     ImGui::PushItemWidth(-1.0f);
-    local_changed = ImGui::InputTextWithHint("##search", placeholder ? placeholder : "", buf, buf_size);
+    local_changed =
+        ImGui::InputTextWithHint("##search", placeholder ? placeholder : "", buf, buf_size);
     ImVec2 min = ImGui::GetItemRectMin();
     ImVec2 max = ImGui::GetItemRectMax();
     ImGui::PopItemWidth();
@@ -1415,7 +1412,8 @@ bool search_box(char* buf, size_t buf_size, const char* placeholder, bool* chang
     ImGui::PopStyleVar(2);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddText(ImVec2(min.x + tokens::SPACE_2, min.y + (max.y - min.y - ImGui::GetTextLineHeight()) * 0.5f),
+    dl->AddText(ImVec2(min.x + tokens::SPACE_2,
+                       min.y + (max.y - min.y - ImGui::GetTextLineHeight()) * 0.5f),
                 ImGui::ColorConvertFloat4ToU32(
                     ImVec4(c.text_tertiary.r, c.text_tertiary.g, c.text_tertiary.b, 0.85f)),
                 icon_str(ui::Icon::Search));
@@ -1423,11 +1421,11 @@ bool search_box(char* buf, size_t buf_size, const char* placeholder, bool* chang
     if (buf && buf[0] != '\0')
     {
         const float btn = tokens::SEARCH_CLEAR_BTN_SIZE;
-        ImGui::SetCursorScreenPos(ImVec2(max.x - btn - tokens::SPACE_1,
-                                         min.y + (max.y - min.y - btn) * 0.5f));
+        ImGui::SetCursorScreenPos(
+            ImVec2(max.x - btn - tokens::SPACE_1, min.y + (max.y - min.y - btn) * 0.5f));
         if (toolbar_button(ui::Icon::Close, "Clear search", false))
         {
-            buf[0] = '\0';
+            buf[0]        = '\0';
             local_changed = true;
         }
     }
@@ -1445,17 +1443,14 @@ bool filter_chip(const char* label, bool active)
 
 void status_pill(const char* label, const Color& color, bool dot)
 {
-    const auto& c = theme();
-    const Color accent =
-        (color.r > 0.0f || color.g > 0.0f || color.b > 0.0f)
-            ? color
-            : c.accent;
-    const ImVec2 text = ImGui::CalcTextSize(label ? label : "");
-    const float dot_w = dot ? 8.0f + tokens::SPACE_1 : 0.0f;
-    const float w = text.x + dot_w + tokens::STATUS_BAR_PILL_PAD_H * 2.0f;
-    const float h = tokens::STATUS_BAR_PILL_HEIGHT;
-    const ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const auto&  c      = theme();
+    const Color  accent = (color.r > 0.0f || color.g > 0.0f || color.b > 0.0f) ? color : c.accent;
+    const ImVec2 text   = ImGui::CalcTextSize(label ? label : "");
+    const float  dot_w  = dot ? 8.0f + tokens::SPACE_1 : 0.0f;
+    const float  w      = text.x + dot_w + tokens::STATUS_BAR_PILL_PAD_H * 2.0f;
+    const float  h      = tokens::STATUS_BAR_PILL_HEIGHT;
+    const ImVec2 pos    = ImGui::GetCursorScreenPos();
+    ImDrawList*  dl     = ImGui::GetWindowDrawList();
     dl->AddRectFilled(pos,
                       ImVec2(pos.x + w, pos.y + h),
                       ImGui::ColorConvertFloat4ToU32(
@@ -1468,9 +1463,10 @@ void status_pill(const char* label, const Color& color, bool dot)
     float x = pos.x + tokens::STATUS_BAR_PILL_PAD_H;
     if (dot)
     {
-        dl->AddCircleFilled(ImVec2(x + 3.0f, pos.y + h * 0.5f),
-                            3.0f,
-                            ImGui::ColorConvertFloat4ToU32(ImVec4(accent.r, accent.g, accent.b, 1.0f)));
+        dl->AddCircleFilled(
+            ImVec2(x + 3.0f, pos.y + h * 0.5f),
+            3.0f,
+            ImGui::ColorConvertFloat4ToU32(ImVec4(accent.r, accent.g, accent.b, 1.0f)));
         x += 8.0f + tokens::SPACE_1;
     }
     dl->AddText(ImVec2(x, pos.y + (h - text.y) * 0.5f),
@@ -1482,7 +1478,7 @@ void status_pill(const char* label, const Color& color, bool dot)
 
 float status_pill_width(const char* label, bool dot)
 {
-    const ImVec2 text = ImGui::CalcTextSize(label ? label : "");
+    const ImVec2 text  = ImGui::CalcTextSize(label ? label : "");
     const float  dot_w = dot ? 8.0f + tokens::SPACE_1 : 0.0f;
     return text.x + dot_w + tokens::STATUS_BAR_PILL_PAD_H * 2.0f;
 }
@@ -1515,29 +1511,42 @@ void draw_status_pills(std::span<const StatusPillSpec> pills, float gap)
 
 void drop_zone_overlay(const ImVec2& min, const ImVec2& max, const char* label, bool valid)
 {
-    const auto& c = theme();
-    const spectra::Color accent = valid
-        ? spectra::Color{c.accent.r, c.accent.g, c.accent.b, c.accent.a}
-        : spectra::Color{c.warning.r, c.warning.g, c.warning.b, c.warning.a};
+    const auto&          c = theme();
+    const spectra::Color accent =
+        valid ? spectra::Color{c.accent.r, c.accent.g, c.accent.b, c.accent.a}
+              : spectra::Color{c.warning.r, c.warning.g, c.warning.b, c.warning.a};
     const float alpha = valid ? tokens::DROP_ZONE_ALPHA_VALID : tokens::DROP_ZONE_ALPHA_INVALID;
-    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImDrawList* dl    = ImGui::GetWindowDrawList();
     dl->AddRectFilled(min,
                       max,
                       ImGui::ColorConvertFloat4ToU32(ImVec4(accent.r, accent.g, accent.b, alpha)),
                       tokens::RADIUS_LG);
 
-    const ImU32 border = ImGui::ColorConvertFloat4ToU32(ImVec4(accent.r, accent.g, accent.b, 0.85f));
+    const ImU32 border =
+        ImGui::ColorConvertFloat4ToU32(ImVec4(accent.r, accent.g, accent.b, 0.85f));
     const float dash = tokens::DROP_ZONE_DASH_LEN;
-    const float gap = dash * 0.65f;
+    const float gap  = dash * 0.65f;
     for (float x = min.x; x < max.x; x += dash + gap)
     {
-        dl->AddLine(ImVec2(x, min.y), ImVec2(std::min(x + dash, max.x), min.y), border, tokens::DROP_ZONE_BORDER_WIDTH);
-        dl->AddLine(ImVec2(x, max.y), ImVec2(std::min(x + dash, max.x), max.y), border, tokens::DROP_ZONE_BORDER_WIDTH);
+        dl->AddLine(ImVec2(x, min.y),
+                    ImVec2(std::min(x + dash, max.x), min.y),
+                    border,
+                    tokens::DROP_ZONE_BORDER_WIDTH);
+        dl->AddLine(ImVec2(x, max.y),
+                    ImVec2(std::min(x + dash, max.x), max.y),
+                    border,
+                    tokens::DROP_ZONE_BORDER_WIDTH);
     }
     for (float y = min.y; y < max.y; y += dash + gap)
     {
-        dl->AddLine(ImVec2(min.x, y), ImVec2(min.x, std::min(y + dash, max.y)), border, tokens::DROP_ZONE_BORDER_WIDTH);
-        dl->AddLine(ImVec2(max.x, y), ImVec2(max.x, std::min(y + dash, max.y)), border, tokens::DROP_ZONE_BORDER_WIDTH);
+        dl->AddLine(ImVec2(min.x, y),
+                    ImVec2(min.x, std::min(y + dash, max.y)),
+                    border,
+                    tokens::DROP_ZONE_BORDER_WIDTH);
+        dl->AddLine(ImVec2(max.x, y),
+                    ImVec2(max.x, std::min(y + dash, max.y)),
+                    border,
+                    tokens::DROP_ZONE_BORDER_WIDTH);
     }
     if (label && label[0] != '\0')
     {
@@ -1551,14 +1560,15 @@ void drop_zone_overlay(const ImVec2& min, const ImVec2& max, const char* label, 
 
 void skeleton_rows(int count, float row_height)
 {
-    const auto& c = theme();
+    const auto& c  = theme();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    const float w = ImGui::GetContentRegionAvail().x;
-    const float t = static_cast<float>(std::fmod(ImGui::GetTime() * 1.8, 1.0));
+    const float w  = ImGui::GetContentRegionAvail().x;
+    const float t  = static_cast<float>(std::fmod(ImGui::GetTime() * 1.8, 1.0));
     for (int i = 0; i < count; ++i)
     {
         const ImVec2 pos = ImGui::GetCursorScreenPos();
-        const float alpha = 0.25f + 0.18f * std::sin((t + static_cast<float>(i) * 0.16f) * 6.28318f);
+        const float  alpha =
+            0.25f + 0.18f * std::sin((t + static_cast<float>(i) * 0.16f) * 6.28318f);
         dl->AddRectFilled(pos,
                           ImVec2(pos.x + w, pos.y + row_height),
                           ImGui::ColorConvertFloat4ToU32(

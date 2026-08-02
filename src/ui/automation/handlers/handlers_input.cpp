@@ -64,44 +64,44 @@ std::vector<AutomationHandlerEntry> make_input_handlers()
             req.response_json = json_ok(req.id);
         }));
 
-    entries.push_back(automation_handler(
-        "mouse_click",
-        "Click at the specified position.",
-        kWindowUi,
-        {{.name = "x", .kind = ParamKind::Number, .required = true},
-         {.name = "y", .kind = ParamKind::Number, .required = true}},
-        [](AutomationRequest& req, App* app, WindowUIContext* ui_ctx)
-        {
-            double x   = json_get_number(req.params_json, "x");
-            double y   = json_get_number(req.params_json, "y");
-            int    btn = json_get_int(req.params_json, "button", 0);
-            int    mod = json_get_int(req.params_json, "modifiers", 0);
+    entries.push_back(
+        automation_handler("mouse_click",
+                           "Click at the specified position.",
+                           kWindowUi,
+                           {{.name = "x", .kind = ParamKind::Number, .required = true},
+                            {.name = "y", .kind = ParamKind::Number, .required = true}},
+                           [](AutomationRequest& req, App* app, WindowUIContext* ui_ctx)
+                           {
+                               double x   = json_get_number(req.params_json, "x");
+                               double y   = json_get_number(req.params_json, "y");
+                               int    btn = json_get_int(req.params_json, "button", 0);
+                               int    mod = json_get_int(req.params_json, "modifiers", 0);
 #ifdef SPECTRA_USE_GLFW
-            if (auto* win = static_cast<GLFWwindow*>(ui_ctx->glfw_window))
-                glfwSetCursorPos(win, x, y);
+                               if (auto* win = static_cast<GLFWwindow*>(ui_ctx->glfw_window))
+                                   glfwSetCursorPos(win, x, y);
 #elif defined(SPECTRA_USE_SDL3)
             if (auto* win = static_cast<SDL_Window*>(ui_ctx->glfw_window))
                 SDL_WarpMouseInWindow(win, static_cast<float>(x), static_cast<float>(y));
 #endif
 #ifdef SPECTRA_USE_IMGUI
-            automation::inject_mouse_click(ui_ctx, x, y, btn);
+                               automation::inject_mouse_click(ui_ctx, x, y, btn);
 #endif
 #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
-            ui_ctx->input_handler.on_mouse_button(btn, 1, mod, x, y);
-            ui_ctx->input_handler.on_mouse_button(btn, 0, mod, x, y);
+                               ui_ctx->input_handler.on_mouse_button(btn, 1, mod, x, y);
+                               ui_ctx->input_handler.on_mouse_button(btn, 0, mod, x, y);
 #endif
 #ifdef SPECTRA_USE_IMGUI
-            ui::log_ui_action("mcp_click",
-                              std::to_string(btn),
-                              "ok",
-                              std::format("x={:.0f} y={:.0f}", x, y));
-            if (auto* sess = app->session())
-                sess->redraw_tracker().mark_dirty("mouse_click");
-            if (automation::tab_drag_active(ui_ctx))
-                automation::cancel_tab_drag_capture(ui_ctx);
+                               ui::log_ui_action("mcp_click",
+                                                 std::to_string(btn),
+                                                 "ok",
+                                                 std::format("x={:.0f} y={:.0f}", x, y));
+                               if (auto* sess = app->session())
+                                   sess->redraw_tracker().mark_dirty("mouse_click");
+                               if (automation::tab_drag_active(ui_ctx))
+                                   automation::cancel_tab_drag_capture(ui_ctx);
 #endif
-            req.response_json = json_ok(req.id);
-        }));
+                               req.response_json = json_ok(req.id);
+                           }));
 
     entries.push_back(
         automation_handler("mouse_drag",

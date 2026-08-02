@@ -536,6 +536,7 @@ if(SPECTRA_USE_QT)
         src/adapters/qt/components/spectra_panel.cpp
         src/adapters/qt/components/spectra_controls.cpp
         src/adapters/qt/components/spectra_inspector_drawer.cpp
+        src/adapters/qt/components/spectra_inspector_widgets.cpp
     )
     # ROS2 panel composition (requires both Qt and ROS2)
     if(SPECTRA_USE_ROS2)

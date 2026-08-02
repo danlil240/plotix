@@ -440,7 +440,7 @@ TEST(ParseDiagArray, MultipleStatuses)
 TEST(ParseDiagArray, KeyValuePairs)
 {
     DiagStatus s      = make_status_kv("cam",
-                                       DiagLevel::OK,
+                                  DiagLevel::OK,
                                        {{"fps", "30"}, {"exposure", "100us"}, {"gain", "1.0"}});
     auto       blob   = build_diag_array({s});
     auto       result = DiagnosticsPanel::parse_diag_array(blob.data(), blob.size(), 0);
@@ -787,14 +787,14 @@ TEST(DiagnosticsPanel, MultipleAlertCallbacksOnlyLastWins)
 TEST(DiagnosticsPanel, ParseRoundTripMultipleKV)
 {
     DiagStatus s      = make_status_kv("sensor",
-                                       DiagLevel::Warn,
+                                  DiagLevel::Warn,
                                        {
-                                           {"temperature", "85.3"},
-                                           {"voltage", "11.8"},
-                                           {"current", "2.1"},
-                                           {"rpm", "3000"},
-                                           {"status_code", "0x04"},
-                                       });
+                                      {"temperature", "85.3"},
+                                      {"voltage", "11.8"},
+                                      {"current", "2.1"},
+                                      {"rpm", "3000"},
+                                      {"status_code", "0x04"},
+                                  });
     auto       blob   = build_diag_array({s});
     auto       result = DiagnosticsPanel::parse_diag_array(blob.data(), blob.size(), 0);
     ASSERT_EQ(1u, result.size());

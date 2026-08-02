@@ -16,8 +16,7 @@
 namespace spectra::adapters::qt
 {
 
-QtIpcClient::QtIpcClient(QObject* parent)
-    : QObject(parent)
+QtIpcClient::QtIpcClient(QObject* parent) : QObject(parent)
 {
     QObject::connect(&poll_timer_, &QTimer::timeout, this, &QtIpcClient::poll_messages);
     QObject::connect(&heartbeat_timer_, &QTimer::timeout, this, [this]() { send_heartbeat(); });
@@ -104,19 +103,24 @@ void QtIpcClient::recv_welcome()
     ipc_window_id_ = welcome->window_id;
     heartbeat_ms_  = welcome->heartbeat_ms;
 
-    SPECTRA_LOG_INFO("qt_ipc", "WELCOME: session={} window={} heartbeat={}ms",
-                     session_id_, ipc_window_id_, heartbeat_ms_);
+    SPECTRA_LOG_INFO("qt_ipc",
+                     "WELCOME: session={} window={} heartbeat={}ms",
+                     session_id_,
+                     ipc_window_id_,
+                     heartbeat_ms_);
 }
 
 void QtIpcClient::drain_initial_messages()
 {
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    auto deadline     = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     bool got_snapshot = false;
 
     while (!got_snapshot && std::chrono::steady_clock::now() < deadline)
     {
-        struct pollfd pfd{};
-        pfd.fd     = conn_->fd();
+        struct pollfd pfd
+        {
+        };
+        pfd.fd      = conn_->fd();
         pfd.events  = POLLIN;
         pfd.revents = 0;
         if (::poll(&pfd, 1, 100) <= 0 || !(pfd.revents & POLLIN))
@@ -147,8 +151,10 @@ void QtIpcClient::drain_initial_messages()
                 got_snapshot      = true;
 
                 send_ack(current_revision_);
-                SPECTRA_LOG_DEBUG("qt_ipc", "STATE_SNAPSHOT (init): rev={} figures={}",
-                                  current_revision_, figure_cache_.size());
+                SPECTRA_LOG_DEBUG("qt_ipc",
+                                  "STATE_SNAPSHOT (init): rev={} figures={}",
+                                  current_revision_,
+                                  figure_cache_.size());
             }
         }
     }
@@ -172,11 +178,13 @@ void QtIpcClient::poll_messages()
 
     for (;;)
     {
-        struct pollfd pfd{};
+        struct pollfd pfd
+        {
+        };
         pfd.fd      = conn_->fd();
-        pfd.events   = POLLIN;
-        pfd.revents  = 0;
-        int ret = ::poll(&pfd, 1, 0);   // non-blocking
+        pfd.events  = POLLIN;
+        pfd.revents = 0;
+        int ret     = ::poll(&pfd, 1, 0);   // non-blocking
         if (ret > 0 && (pfd.revents & (POLLHUP | POLLERR)))
         {
             SPECTRA_LOG_WARN("qt_ipc", "Backend connection lost (poll)");
@@ -251,7 +259,9 @@ void QtIpcClient::poll_messages()
                         else
                         {
                             // Apply directly to live figure (fast path)
-                            for (size_t mi = 0; mi < assigned_figures_.size() && mi < local_ids_.size(); ++mi)
+                            for (size_t mi = 0;
+                                 mi < assigned_figures_.size() && mi < local_ids_.size();
+                                 ++mi)
                             {
                                 if (assigned_figures_[mi] == op.figure_id)
                                 {

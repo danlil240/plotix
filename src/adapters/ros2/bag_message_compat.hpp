@@ -20,7 +20,8 @@ inline int64_t bag_message_timestamp_ns(const rosbag2_storage::SerializedBagMess
 #endif
 }
 
-inline void set_bag_message_timestamp(rosbag2_storage::SerializedBagMessage& msg, int64_t timestamp_ns)
+inline void set_bag_message_timestamp(rosbag2_storage::SerializedBagMessage& msg,
+                                      int64_t                                timestamp_ns)
 {
 #if defined(SPECTRA_ROSBAG2_RECV_TIMESTAMP)
     msg.recv_timestamp = timestamp_ns;

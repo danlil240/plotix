@@ -72,7 +72,9 @@ std::vector<CommandDescriptor> make_plot_commands(CommandContext& ctx)
                         if (!ax && active_figure && !active_figure->axes().empty())
                             ax = active_figure->axes_mut()[0].get();
                         if (ax)
-                            imgui_ui->plot_overlay_dialog().open(ax, ui::PlotOverlayDialog::Mode::HorizontalLine);
+                            imgui_ui->plot_overlay_dialog().open(
+                                ax,
+                                ui::PlotOverlayDialog::Mode::HorizontalLine);
                     }});
 
     cmds.push_back({"plot.vline",
@@ -88,24 +90,27 @@ std::vector<CommandDescriptor> make_plot_commands(CommandContext& ctx)
                         if (!ax && active_figure && !active_figure->axes().empty())
                             ax = active_figure->axes_mut()[0].get();
                         if (ax)
-                            imgui_ui->plot_overlay_dialog().open(ax, ui::PlotOverlayDialog::Mode::VerticalLine);
+                            imgui_ui->plot_overlay_dialog().open(
+                                ax,
+                                ui::PlotOverlayDialog::Mode::VerticalLine);
                     }});
 
-    cmds.push_back({"plot.function",
-                    "Plot Function...",
-                    "",
-                    "Plot",
-                    0,
-                    [&imgui_ui, &input_handler, &active_figure]()
-                    {
-                        if (!imgui_ui || !imgui_ui->is_initialized())
-                            return;
-                        Axes* ax = input_handler.active_axes();
-                        if (!ax && active_figure && !active_figure->axes().empty())
-                            ax = active_figure->axes_mut()[0].get();
-                        if (ax)
-                            imgui_ui->plot_overlay_dialog().open(ax, ui::PlotOverlayDialog::Mode::Function);
-                    }});
+    cmds.push_back(
+        {"plot.function",
+         "Plot Function...",
+         "",
+         "Plot",
+         0,
+         [&imgui_ui, &input_handler, &active_figure]()
+         {
+             if (!imgui_ui || !imgui_ui->is_initialized())
+                 return;
+             Axes* ax = input_handler.active_axes();
+             if (!ax && active_figure && !active_figure->axes().empty())
+                 ax = active_figure->axes_mut()[0].get();
+             if (ax)
+                 imgui_ui->plot_overlay_dialog().open(ax, ui::PlotOverlayDialog::Mode::Function);
+         }});
 #else
     (void)ctx;
 #endif

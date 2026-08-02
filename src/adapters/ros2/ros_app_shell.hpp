@@ -60,7 +60,7 @@ namespace spectra
 class Figure;
 class LayoutManager;
 class ImGuiIntegration;
-}
+}   // namespace spectra
 
 namespace spectra::adapters::ros2
 {
@@ -181,7 +181,7 @@ class RosAppShell
 
     // Optional: bind SubplotManager to the application's render figure.
     // Must be called before init().
-    void set_canvas_figure(spectra::Figure* fig) { canvas_figure_ = fig; }
+    void             set_canvas_figure(spectra::Figure* fig) { canvas_figure_ = fig; }
     spectra::Figure* canvas_figure() const { return canvas_figure_; }
 
     // Stop live plot subscriptions before the canvas Figure is destroyed.
@@ -216,10 +216,10 @@ class RosAppShell
     void draw_expression_editor(bool* p_open = nullptr);
 
 #ifdef SPECTRA_USE_IMGUI
-    void register_ros_commands();
-    spectra::CommandRegistry&       command_registry() { return cmd_registry_; }
-    spectra::CommandPalette&       command_palette() { return cmd_palette_; }
-    spectra::ShortcutManager&      shortcut_manager() { return shortcut_mgr_; }
+    void                      register_ros_commands();
+    spectra::CommandRegistry& command_registry() { return cmd_registry_; }
+    spectra::CommandPalette&  command_palette() { return cmd_palette_; }
+    spectra::ShortcutManager& shortcut_manager() { return shortcut_mgr_; }
 #endif
     void draw_bag_info(bool* p_open = nullptr);
     void draw_bag_playback(bool* p_open = nullptr);
@@ -413,7 +413,7 @@ class RosAppShell
 
     std::unique_ptr<RosSessionManager> session_mgr_;
     std::unordered_set<std::string>    favorite_topics_;
-    bool                               show_session_save_dialog_ = false;
+    bool                               show_session_save_dialog_  = false;
     bool                               show_session_load_dialog_  = false;
     bool                               show_session_merge_dialog_ = false;
     std::string                        session_save_path_buf_;
@@ -429,22 +429,22 @@ class RosAppShell
     std::vector<std::string> recent_topics_;
     static constexpr size_t  MAX_RECENT_TOPICS = 8;
 
-    bool plot_area_was_visible_ = true;   // tracks previous frame for close detection
-    bool plot_theme_applied_    = false;
-    float nav_rail_width_       = 220.0f;
+    bool  plot_area_was_visible_ = true;   // tracks previous frame for close detection
+    bool  plot_theme_applied_    = false;
+    float nav_rail_width_        = 220.0f;
 
 #ifdef SPECTRA_USE_IMGUI
     std::unordered_map<std::string, bool> pending_panel_visibility_;
-    spectra::ImGuiIntegration*             imgui_ = nullptr;
+    spectra::ImGuiIntegration*            imgui_ = nullptr;
 #endif
 
     // Optional external render figure for subplot manager integration.
     spectra::Figure* canvas_figure_ = nullptr;
 
     // Lightweight per-topic subscriptions for Topic Monitor Hz/BW columns.
-    std::mutex                                                              pending_monitor_subs_mutex_;
-    std::vector<std::pair<TopicInfo, bool>>                                 pending_monitor_subs_;
-    std::mutex                                                              monitor_subs_mutex_;
+    std::mutex                              pending_monitor_subs_mutex_;
+    std::vector<std::pair<TopicInfo, bool>> pending_monitor_subs_;
+    std::mutex                              monitor_subs_mutex_;
     std::unordered_map<std::string, rclcpp::GenericSubscription::SharedPtr> monitor_subs_;
 
     std::atomic<uint64_t> total_messages_{0};
@@ -487,10 +487,10 @@ class RosAppShell
 #ifdef SPECTRA_USE_IMGUI
     spectra::ui::shell::CanvasHost* ros_canvas_host_ = nullptr;
 
-    spectra::CommandRegistry  cmd_registry_;
-    spectra::ShortcutManager  shortcut_mgr_;
-    spectra::CommandPalette   cmd_palette_;
-    bool                      ros_commands_registered_ = false;
+    spectra::CommandRegistry cmd_registry_;
+    spectra::ShortcutManager shortcut_mgr_;
+    spectra::CommandPalette  cmd_palette_;
+    bool                     ros_commands_registered_ = false;
 #endif
 };
 

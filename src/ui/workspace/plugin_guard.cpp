@@ -30,9 +30,15 @@ thread_local volatile int          t_caught_signal = 0;
 // Previous signal handlers, saved once at first use.
 struct OldHandlers
 {
-    struct sigaction segv{};
-    struct sigaction bus{};
-    struct sigaction fpe{};
+    struct sigaction segv
+    {
+    };
+    struct sigaction bus
+    {
+    };
+    struct sigaction fpe
+    {
+    };
 };
 
 OldHandlers    s_old_handlers;
@@ -88,7 +94,9 @@ void crash_signal_handler(int sig)
 
 void install_signal_handlers()
 {
-    struct sigaction sa{};
+    struct sigaction sa
+    {
+    };
     sa.sa_handler = crash_signal_handler;
     sa.sa_flags   = 0;
     sigemptyset(&sa.sa_mask);

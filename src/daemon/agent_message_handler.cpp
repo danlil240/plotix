@@ -287,11 +287,11 @@ HandleResult handle_evt_input(DaemonContext& ctx, ClientSlot& /*slot*/, const ip
                 double hw = (ax.x_max - ax.x_min) * 0.5 * zoom;
                 double hh = (ax.y_max - ax.y_min) * 0.5 * zoom;
                 auto   op = ctx.fig_model.set_axis_limits(input->figure_id,
-                                                          input->axes_index,
-                                                          cx - hw,
-                                                          cx + hw,
-                                                          cy - hh,
-                                                          cy + hh);
+                                                        input->axes_index,
+                                                        cx - hw,
+                                                        cx + hw,
+                                                        cy - hh,
+                                                        cy + hh);
                 diff.ops.push_back(op);
             }
             break;

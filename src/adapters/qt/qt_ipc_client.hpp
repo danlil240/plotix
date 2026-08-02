@@ -56,7 +56,7 @@ class QtIpcClient : public QObject
 
     // IPC session info (valid after connect)
     ipc::SessionId session_id() const { return session_id_; }
-    ipc::WindowId  window_id() const  { return ipc_window_id_; }
+    ipc::WindowId  window_id() const { return ipc_window_id_; }
 
     // Assigned figure IDs (IPC figure IDs, not local FigureIds)
     const std::vector<uint64_t>& assigned_figures() const { return assigned_figures_; }
@@ -103,13 +103,13 @@ class QtIpcClient : public QObject
     ipc::WindowId  ipc_window_id_ = ipc::INVALID_WINDOW;
     uint32_t       heartbeat_ms_  = 5000;
 
-    std::vector<uint64_t>                    assigned_figures_;
-    uint64_t                                 ipc_active_figure_id_ = 0;
-    std::vector<ipc::SnapshotFigureState>    figure_cache_;
-    std::vector<ipc::SnapshotKnobState>      knob_cache_;
-    std::vector<spectra::FigureId>           local_ids_;
-    ipc::Revision                            current_revision_ = 0;
-    std::atomic<bool>                        connected_{false};
+    std::vector<uint64_t>                 assigned_figures_;
+    uint64_t                              ipc_active_figure_id_ = 0;
+    std::vector<ipc::SnapshotFigureState> figure_cache_;
+    std::vector<ipc::SnapshotKnobState>   knob_cache_;
+    std::vector<spectra::FigureId>        local_ids_;
+    ipc::Revision                         current_revision_ = 0;
+    std::atomic<bool>                     connected_{false};
 
     spectra::FigureRegistry* figure_registry_ = nullptr;
 };

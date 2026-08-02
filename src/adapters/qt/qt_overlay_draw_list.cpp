@@ -40,8 +40,10 @@ void QtOverlayDrawList::pop_clip_rect()
         painter_->restore();
 }
 
-void QtOverlayDrawList::add_line(OverlayPoint p0, OverlayPoint p1,
-                                 OverlayColor color, float thickness)
+void QtOverlayDrawList::add_line(OverlayPoint p0,
+                                 OverlayPoint p1,
+                                 OverlayColor color,
+                                 float        thickness)
 {
     if (!painter_)
         return;
@@ -52,8 +54,10 @@ void QtOverlayDrawList::add_line(OverlayPoint p0, OverlayPoint p1,
     painter_->drawLine(QPointF(p0.x, p0.y), QPointF(p1.x, p1.y));
 }
 
-void QtOverlayDrawList::add_rect_filled(OverlayPoint p0, OverlayPoint p1,
-                                        OverlayColor color, float rounding,
+void QtOverlayDrawList::add_rect_filled(OverlayPoint p0,
+                                        OverlayPoint p1,
+                                        OverlayColor color,
+                                        float        rounding,
                                         OverlayRoundCorners /*corners*/)
 {
     if (!painter_)
@@ -72,9 +76,12 @@ void QtOverlayDrawList::add_rect_filled(OverlayPoint p0, OverlayPoint p1,
     }
 }
 
-void QtOverlayDrawList::add_rect(OverlayPoint p0, OverlayPoint p1,
-                                 OverlayColor color, float rounding,
-                                 OverlayRoundCorners /*corners*/, float thickness)
+void QtOverlayDrawList::add_rect(OverlayPoint p0,
+                                 OverlayPoint p1,
+                                 OverlayColor color,
+                                 float        rounding,
+                                 OverlayRoundCorners /*corners*/,
+                                 float thickness)
 {
     if (!painter_)
         return;
@@ -93,8 +100,10 @@ void QtOverlayDrawList::add_rect(OverlayPoint p0, OverlayPoint p1,
     }
 }
 
-void QtOverlayDrawList::add_circle_filled(OverlayPoint center, float radius,
-                                          OverlayColor color, int)
+void QtOverlayDrawList::add_circle_filled(OverlayPoint center,
+                                          float        radius,
+                                          OverlayColor color,
+                                          int)
 {
     if (!painter_)
         return;
@@ -103,8 +112,11 @@ void QtOverlayDrawList::add_circle_filled(OverlayPoint center, float radius,
     painter_->drawEllipse(QPointF(center.x, center.y), radius, radius);
 }
 
-void QtOverlayDrawList::add_circle(OverlayPoint center, float radius,
-                                   OverlayColor color, int, float thickness)
+void QtOverlayDrawList::add_circle(OverlayPoint center,
+                                   float        radius,
+                                   OverlayColor color,
+                                   int,
+                                   float thickness)
 {
     if (!painter_)
         return;
@@ -115,8 +127,10 @@ void QtOverlayDrawList::add_circle(OverlayPoint center, float radius,
     painter_->drawEllipse(QPointF(center.x, center.y), radius, radius);
 }
 
-void QtOverlayDrawList::add_triangle_filled(OverlayPoint p0, OverlayPoint p1,
-                                            OverlayPoint p2, OverlayColor color)
+void QtOverlayDrawList::add_triangle_filled(OverlayPoint p0,
+                                            OverlayPoint p1,
+                                            OverlayPoint p2,
+                                            OverlayColor color)
 {
     if (!painter_)
         return;
@@ -127,8 +141,10 @@ void QtOverlayDrawList::add_triangle_filled(OverlayPoint p0, OverlayPoint p1,
     painter_->drawPolygon(triangle);
 }
 
-void QtOverlayDrawList::add_text(OverlayFont* font, float font_size,
-                                 OverlayPoint pos, OverlayColor color,
+void QtOverlayDrawList::add_text(OverlayFont*     font,
+                                 float            font_size,
+                                 OverlayPoint     pos,
+                                 OverlayColor     color,
                                  std::string_view text)
 {
     if (!painter_)
@@ -138,7 +154,7 @@ void QtOverlayDrawList::add_text(OverlayFont* font, float font_size,
     if (font)
     {
         auto* qt_font = static_cast<QtOverlayFont*>(font);
-        qfont = qt_font->font;
+        qfont         = qt_font->font;
     }
     qfont.setPointSizeF(font_size * 0.75f);   // approximate px→pt
     painter_->setFont(qfont);
@@ -148,20 +164,21 @@ void QtOverlayDrawList::add_text(OverlayFont* font, float font_size,
     painter_->drawText(QPointF(pos.x, pos.y + font_size), str);
 }
 
-OverlayPoint QtOverlayDrawList::text_size(OverlayFont* font, float font_size,
+OverlayPoint QtOverlayDrawList::text_size(OverlayFont*     font,
+                                          float            font_size,
                                           std::string_view text) const
 {
     QFont qfont;
     if (font)
     {
         auto* qt_font = static_cast<QtOverlayFont*>(font);
-        qfont = qt_font->font;
+        qfont         = qt_font->font;
     }
     qfont.setPointSizeF(font_size * 0.75f);
     QFontMetrics fm(qfont);
 
     QString str = QString::fromUtf8(text.data(), static_cast<int>(text.size()));
-    QRectF br = fm.boundingRect(str);
+    QRectF  br  = fm.boundingRect(str);
     return {static_cast<float>(br.width()), static_cast<float>(br.height())};
 }
 

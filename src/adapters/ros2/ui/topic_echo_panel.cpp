@@ -26,9 +26,9 @@
 // Humble: get_typesupport_handle; Jazzy (rclcpp >= 28): get_message_typesupport_handle.
 namespace spectra::adapters::ros2::detail
 {
-inline const rosidl_message_type_support_t* get_message_ts_handle(
-    const std::string& type_name, const std::string& ts_id,
-    rcpputils::SharedLibrary& lib)
+inline const rosidl_message_type_support_t* get_message_ts_handle(const std::string& type_name,
+                                                                  const std::string& ts_id,
+                                                                  rcpputils::SharedLibrary& lib)
 {
 #if defined(RCLCPP_VERSION_MAJOR) && RCLCPP_VERSION_MAJOR >= 28
     return rclcpp::get_message_typesupport_handle(type_name, ts_id, lib);
@@ -60,10 +60,10 @@ namespace
 
 struct RosMessageTypeSupport
 {
-    std::shared_ptr<rcpputils::SharedLibrary> intro_lib;
-    const rosidl_message_type_support_t*      intro_ts{nullptr};
-    std::shared_ptr<rcpputils::SharedLibrary> cpp_lib;
-    const rosidl_message_type_support_t*      cpp_ts{nullptr};
+    std::shared_ptr<rcpputils::SharedLibrary>                   intro_lib;
+    const rosidl_message_type_support_t*                        intro_ts{nullptr};
+    std::shared_ptr<rcpputils::SharedLibrary>                   cpp_lib;
+    const rosidl_message_type_support_t*                        cpp_ts{nullptr};
     const rosidl_typesupport_introspection_cpp::MessageMembers* members{nullptr};
 };
 
@@ -72,15 +72,14 @@ std::optional<RosMessageTypeSupport> resolve_message_typesupport(const std::stri
     RosMessageTypeSupport out;
     try
     {
-        out.intro_lib = rclcpp::get_typesupport_library(type_name,
-                                                        "rosidl_typesupport_introspection_cpp");
-        out.intro_ts  = detail::get_message_ts_handle(type_name,
-                                                       "rosidl_typesupport_introspection_cpp",
-                                                       *out.intro_lib);
-        out.cpp_lib   = rclcpp::get_typesupport_library(type_name, "rosidl_typesupport_cpp");
-        out.cpp_ts    = detail::get_message_ts_handle(type_name,
-                                                       "rosidl_typesupport_cpp",
-                                                       *out.cpp_lib);
+        out.intro_lib =
+            rclcpp::get_typesupport_library(type_name, "rosidl_typesupport_introspection_cpp");
+        out.intro_ts = detail::get_message_ts_handle(type_name,
+                                                     "rosidl_typesupport_introspection_cpp",
+                                                     *out.intro_lib);
+        out.cpp_lib  = rclcpp::get_typesupport_library(type_name, "rosidl_typesupport_cpp");
+        out.cpp_ts =
+            detail::get_message_ts_handle(type_name, "rosidl_typesupport_cpp", *out.cpp_lib);
     }
     catch (const std::exception&)
     {
@@ -232,7 +231,7 @@ void TopicEchoPanel::ingest_bag_message(const BagMessage&    msg,
     if (!ts)
         return;
 
-    const auto* members = ts->members;
+    const auto*  members       = ts->members;
     const size_t cdr_body_size = msg.serialized_data.size() - 4;
     if (cdr_body_size < members->size_of_)
         return;
@@ -853,7 +852,8 @@ void TopicEchoPanel::on_message(sub_compat::SerializedMessageCallbackArg raw_msg
     out += std::format("stamp: {}\n", format_timestamp(msg.timestamp_ns));
     for (const auto& fv : msg.fields)
     {
-        if (fv.kind == EchoFieldValue::Kind::NestedHead || fv.kind == EchoFieldValue::Kind::ArrayHead)
+        if (fv.kind == EchoFieldValue::Kind::NestedHead
+            || fv.kind == EchoFieldValue::Kind::ArrayHead)
             continue;
         const std::string indent(static_cast<size_t>(fv.depth) * 2, ' ');
         out += indent + fv.path + ": " + field_value_text(fv) + "\n";
@@ -916,15 +916,16 @@ std::string json_escape(std::string_view text)
     bool first = true;
     for (const auto& fv : msg.fields)
     {
-        if (fv.kind == EchoFieldValue::Kind::NestedHead || fv.kind == EchoFieldValue::Kind::ArrayHead)
+        if (fv.kind == EchoFieldValue::Kind::NestedHead
+            || fv.kind == EchoFieldValue::Kind::ArrayHead)
             continue;
         if (!first)
             out += ",\n";
-        first = false;
-        const std::string value = field_value_text(fv);
-        const bool        numeric =
-            fv.kind == EchoFieldValue::Kind::Numeric || fv.kind == EchoFieldValue::Kind::ArrayElement;
-        const bool        quoted = !numeric || !std::isfinite(fv.numeric);
+        first                     = false;
+        const std::string value   = field_value_text(fv);
+        const bool        numeric = fv.kind == EchoFieldValue::Kind::Numeric
+                             || fv.kind == EchoFieldValue::Kind::ArrayElement;
+        const bool quoted = !numeric || !std::isfinite(fv.numeric);
         out += std::format("    \"{}\": ", json_escape(fv.path));
         if (quoted)
             out += std::format("\"{}\"", json_escape(value));
@@ -1015,7 +1016,7 @@ void TopicEchoPanel::draw(bool* p_open)
     }
 
     const float list_width = 210.0f;
-    const float avail_h      = ImGui::GetContentRegionAvail().y;
+    const float avail_h    = ImGui::GetContentRegionAvail().y;
 
     draw_message_list(snap, display_idx);
 
@@ -1091,7 +1092,7 @@ void TopicEchoPanel::draw_message_list(const std::vector<EchoMessage>& snap, int
 
     const std::string filter = message_filter_;
     const auto&       th     = spectra::ui::theme();
-    const float       row_h  = ImGui::GetTextLineHeight() + spectra::ui::tokens::ROW_PADDING_V * 2.0f;
+    const float row_h = ImGui::GetTextLineHeight() + spectra::ui::tokens::ROW_PADDING_V * 2.0f;
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 6.0f));
     for (int i = static_cast<int>(snap.size()) - 1; i >= 0; --i)
@@ -1102,7 +1103,8 @@ void TopicEchoPanel::draw_message_list(const std::vector<EchoMessage>& snap, int
         if (!filter.empty())
         {
             const std::string seq_str = std::to_string(msg.seq);
-            if (label.find(filter) == std::string::npos && seq_str.find(filter) == std::string::npos)
+            if (label.find(filter) == std::string::npos
+                && seq_str.find(filter) == std::string::npos)
                 continue;
         }
 
@@ -1183,7 +1185,7 @@ void TopicEchoPanel::draw_controls()
         return;
     }
 
-    const ImVec4 status_col = is_paused() ? kColorPaused : kColorLive;
+    const ImVec4   status_col  = is_paused() ? kColorPaused : kColorLive;
     const ui::Icon status_icon = is_paused() ? ui::Icon::Pause : ui::Icon::Circle;
     ImGui::TextColored(status_col, "%s %s", ui::icon_str(status_icon), topic_name_.c_str());
 
@@ -1279,9 +1281,9 @@ void TopicEchoPanel::draw_field_node(EchoFieldValue&                    fv,
         {
             const std::string label = std::format("{}  [{} items]", fv.display_name, fv.array_len);
             const bool        open  = ImGui::TreeNodeEx(fv.path.c_str(),
-                                                        ImGuiTreeNodeFlags_SpanFullWidth,
-                                                        "%s",
-                                                        label.c_str());
+                                                ImGuiTreeNodeFlags_SpanFullWidth,
+                                                "%s",
+                                                label.c_str());
             fv.is_open              = open;
             ++idx;
             const int parent_depth = fv.depth;

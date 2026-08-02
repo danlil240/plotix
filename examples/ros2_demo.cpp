@@ -664,8 +664,7 @@ static void init_param_editor(DemoApp& d)
 
     // Log refresh completion
     d.param_editor->set_on_refresh_done(
-        [](bool ok)
-        {
+        [](bool ok) {
             std::fprintf(stdout, "[ros2_demo] F3    refresh done  ok=%s\n", ok ? "true" : "false");
         });
 

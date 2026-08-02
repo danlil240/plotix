@@ -40,10 +40,10 @@ static bool icon_label_button(const char* icon_codepoint,
 
     // Rail metrics: icon above label, centered, with consistent spacing tokens.
     // Floors keep icon/label legible even when the rail compresses on short windows.
-    float icon_sz  = std::max(ui::tokens::NAV_RAIL_ICON_SIZE_BASE * scale,
-                              ui::tokens::NAV_RAIL_ICON_SIZE_MIN);
-    float label_sz = std::max(ui::tokens::NAV_RAIL_LABEL_SIZE_BASE * scale,
-                              ui::tokens::NAV_RAIL_LABEL_SIZE_MIN);
+    float icon_sz =
+        std::max(ui::tokens::NAV_RAIL_ICON_SIZE_BASE * scale, ui::tokens::NAV_RAIL_ICON_SIZE_MIN);
+    float label_sz =
+        std::max(ui::tokens::NAV_RAIL_LABEL_SIZE_BASE * scale, ui::tokens::NAV_RAIL_LABEL_SIZE_MIN);
     float icon_gap = ui::tokens::SPACE_1 * 0.75f * scale;
     float cell_h   = LayoutManager::NAV_RAIL_CELL_HEIGHT * scale;
     float pill_pad = ui::tokens::SPACE_2 * scale;
@@ -79,10 +79,9 @@ static bool icon_label_button(const char* icon_codepoint,
         ui::Color glow_color = ui::control_glow_color(colors);
         if (glow_scale > 0.01f)
             glow_color = glow_color.lerp(glass_palette::kAccentCyan, 0.25f * glow_scale);
-        const float glow_a =
-            (ui::tokens::NAV_RAIL_GLOW_ALPHA_HOVER * hover_t
-             + ui::tokens::NAV_RAIL_GLOW_ALPHA_ACTIVE * active_t)
-            * glow_scale;
+        const float glow_a = (ui::tokens::NAV_RAIL_GLOW_ALPHA_HOVER * hover_t
+                              + ui::tokens::NAV_RAIL_GLOW_ALPHA_ACTIVE * active_t)
+                             * glow_scale;
         for (int gi = 2; gi >= 1; --gi)
         {
             float e = static_cast<float>(gi);
@@ -97,12 +96,12 @@ static bool icon_label_button(const char* icon_codepoint,
 
         ui::Color pill_fill = ui::control_surface_color(colors, active, hovered);
         float     pill_a    = ui::tokens::NAV_RAIL_SURFACE_ALPHA_INACTIVE
-                          + active_t
-                                * (ui::tokens::NAV_RAIL_SURFACE_ALPHA_ACTIVE
-                                   - ui::tokens::NAV_RAIL_SURFACE_ALPHA_INACTIVE)
-                          + hover_t
-                                * (ui::tokens::NAV_RAIL_SURFACE_ALPHA_HOVER
-                                   - ui::tokens::NAV_RAIL_SURFACE_ALPHA_INACTIVE);
+                       + active_t
+                             * (ui::tokens::NAV_RAIL_SURFACE_ALPHA_ACTIVE
+                                - ui::tokens::NAV_RAIL_SURFACE_ALPHA_INACTIVE)
+                       + hover_t
+                             * (ui::tokens::NAV_RAIL_SURFACE_ALPHA_HOVER
+                                - ui::tokens::NAV_RAIL_SURFACE_ALPHA_INACTIVE);
         dl->AddRectFilled(
             pill_min,
             pill_max,
@@ -112,9 +111,8 @@ static bool icon_label_button(const char* icon_codepoint,
         // Top inner highlight on the pill (night glass only).
         if (glow_scale > 0.01f)
         {
-            ui::Color hi = colors.text_primary;
-            int       hi_a =
-                static_cast<int>((24.0f + 18.0f * active_t) * glow_scale);
+            ui::Color hi   = colors.text_primary;
+            int       hi_a = static_cast<int>((24.0f + 18.0f * active_t) * glow_scale);
             dl->AddLine(ImVec2(pill_min.x + 4.0f * scale, pill_min.y + 1.0f),
                         ImVec2(pill_max.x - 4.0f * scale, pill_min.y + 1.0f),
                         IM_COL32(static_cast<uint8_t>(hi.r * 255),
@@ -124,8 +122,8 @@ static bool icon_label_button(const char* icon_codepoint,
                         1.0f);
         }
 
-        ui::Color border = ui::control_border_color(colors, active, hovered);
-        float border_a = ui::tokens::NAV_RAIL_BORDER_ALPHA_HOVER * hover_t
+        ui::Color border   = ui::control_border_color(colors, active, hovered);
+        float     border_a = ui::tokens::NAV_RAIL_BORDER_ALPHA_HOVER * hover_t
                          + ui::tokens::NAV_RAIL_BORDER_ALPHA_ACTIVE * active_t;
         dl->AddRect(pill_min,
                     pill_max,
@@ -136,17 +134,15 @@ static bool icon_label_button(const char* icon_codepoint,
     // Single active state = the glowing pill above. No separate left accent bar
     // (avoids multiple cyan indicators that make several tools look active).
 
-    ui::Color icon_color = ui::control_text_color(colors, active, hovered);
-    ui::Color text_color = active ? colors.accent_hover : colors.text_secondary;
-    float icon_alpha_v =
-        active ? ui::tokens::NAV_RAIL_ICON_ALPHA_ACTIVE
-               : (hovered ? ui::tokens::NAV_RAIL_ICON_ALPHA_HOVER
-                          : ui::tokens::NAV_RAIL_ICON_ALPHA_INACTIVE);
-    float text_alpha_v =
-        active ? ui::tokens::NAV_RAIL_LABEL_ALPHA_ACTIVE
-               : (hovered ? ui::tokens::NAV_RAIL_LABEL_ALPHA_HOVER
-                          : ui::tokens::NAV_RAIL_LABEL_ALPHA_INACTIVE);
-    ImU32 icon_col = ImGui::ColorConvertFloat4ToU32(
+    ui::Color icon_color   = ui::control_text_color(colors, active, hovered);
+    ui::Color text_color   = active ? colors.accent_hover : colors.text_secondary;
+    float     icon_alpha_v = active ? ui::tokens::NAV_RAIL_ICON_ALPHA_ACTIVE
+                                    : (hovered ? ui::tokens::NAV_RAIL_ICON_ALPHA_HOVER
+                                               : ui::tokens::NAV_RAIL_ICON_ALPHA_INACTIVE);
+    float     text_alpha_v = active ? ui::tokens::NAV_RAIL_LABEL_ALPHA_ACTIVE
+                                    : (hovered ? ui::tokens::NAV_RAIL_LABEL_ALPHA_HOVER
+                                               : ui::tokens::NAV_RAIL_LABEL_ALPHA_INACTIVE);
+    ImU32     icon_col     = ImGui::ColorConvertFloat4ToU32(
         ImVec4(icon_color.r, icon_color.g, icon_color.b, icon_alpha_v));
     ImU32 text_col = ImGui::ColorConvertFloat4ToU32(
         ImVec4(text_color.r, text_color.g, text_color.b, text_alpha_v));
@@ -185,12 +181,10 @@ bool ImGuiIntegration::icon_label_button_rail(const char* icon_codepoint,
                                               float       width,
                                               float       scale)
 {
-    return icon_label_button(
-        icon_codepoint, label, active, icon_font, label_font, width, scale);
+    return icon_label_button(icon_codepoint, label, active, icon_font, label_font, width, scale);
 }
 
-void ImGuiIntegration::render_menubar_menu(const char*                  label,
-                                          const std::vector<MenuItem>& items)
+void ImGuiIntegration::render_menubar_menu(const char* label, const std::vector<MenuItem>& items)
 {
     draw_menubar_menu(label, items);
 }
@@ -467,7 +461,8 @@ bool ImGuiIntegration::begin_command_bar()
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
                         ImVec2(ui::tokens::SPACE_5, ui::tokens::SPACE_2));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ui::tokens::COMMAND_BAR_ITEM_SPACING, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
+                        ImVec2(ui::tokens::COMMAND_BAR_ITEM_SPACING, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Border,
                           ImVec4(theme_colors().border_subtle.r,
@@ -524,13 +519,12 @@ bool ImGuiIntegration::begin_command_bar()
                         1.0f);
 
         // Opaque command-bar base — follows the active theme (not hardcoded Vision navy).
-        bar_dl->AddRectFilled(
-            ImVec2(wpos.x, wpos.y),
-            ImVec2(wpos.x + wsz.x, bottom),
-            IM_COL32(static_cast<uint8_t>(c.bg_primary.r * 255),
-                     static_cast<uint8_t>(c.bg_primary.g * 255),
-                     static_cast<uint8_t>(c.bg_primary.b * 255),
-                     255));
+        bar_dl->AddRectFilled(ImVec2(wpos.x, wpos.y),
+                              ImVec2(wpos.x + wsz.x, bottom),
+                              IM_COL32(static_cast<uint8_t>(c.bg_primary.r * 255),
+                                       static_cast<uint8_t>(c.bg_primary.g * 255),
+                                       static_cast<uint8_t>(c.bg_primary.b * 255),
+                                       255));
 
         // Night-only Vision chrome: aurora wash + luminous perimeter.
         if (glow > 0.01f)
@@ -559,12 +553,24 @@ bool ImGuiIntegration::begin_command_bar()
             const int   viol_a = static_cast<int>((80.0f + 55.0f * glow) * glow);
             const ImU32 vio    = IM_COL32(175, 105, 195, std::clamp(viol_a, 0, 255));
             const ImU32 vio0   = IM_COL32(165, 95, 180, 0);
-            bar_dl->AddRectFilledMultiColor(
-                ImVec2(bx1 - 1.5f, by0), ImVec2(bx1, by1), vio, vio, vio, vio);
-            bar_dl->AddRectFilledMultiColor(
-                ImVec2(glow_x0, by0), ImVec2(bx1, by0 + 1.5f), vio0, vio, vio, vio0);
-            bar_dl->AddRectFilledMultiColor(
-                ImVec2(glow_x0, by1 - 1.5f), ImVec2(bx1, by1), vio0, vio, vio, vio0);
+            bar_dl->AddRectFilledMultiColor(ImVec2(bx1 - 1.5f, by0),
+                                            ImVec2(bx1, by1),
+                                            vio,
+                                            vio,
+                                            vio,
+                                            vio);
+            bar_dl->AddRectFilledMultiColor(ImVec2(glow_x0, by0),
+                                            ImVec2(bx1, by0 + 1.5f),
+                                            vio0,
+                                            vio,
+                                            vio,
+                                            vio0);
+            bar_dl->AddRectFilledMultiColor(ImVec2(glow_x0, by1 - 1.5f),
+                                            ImVec2(bx1, by1),
+                                            vio0,
+                                            vio,
+                                            vio,
+                                            vio0);
         }
     }
 
@@ -593,13 +599,13 @@ void ImGuiIntegration::draw_command_bar()
     {
         // ── App title/brand on the left — round S icon + clean wordmark ──
         {
-            const auto& c       = theme_colors();
-            ImDrawList* dl      = ImGui::GetWindowDrawList();
-            float       bar_h   = ImGui::GetWindowSize().y;
-            ImVec2      cursor  = ImGui::GetCursorScreenPos();
+            const auto& c      = theme_colors();
+            ImDrawList* dl     = ImGui::GetWindowDrawList();
+            float       bar_h  = ImGui::GetWindowSize().y;
+            ImVec2      cursor = ImGui::GetCursorScreenPos();
             // Center against the true window vertical midline (cursor.y already
             // includes the bar's top padding, which would bias everything down).
-            float       cy      = ImGui::GetWindowPos().y + bar_h * 0.5f;
+            float cy = ImGui::GetWindowPos().y + bar_h * 0.5f;
 
             // Round Spectra icon, vertically centered in the bar.
             float logo_sz = 26.0f;
@@ -651,7 +657,8 @@ void ImGuiIntegration::draw_command_bar()
             }
 
             // Advance ImGui cursor past the entire brand block (icon + wordmark).
-            float brand_w = (text_x - cursor.x) + total_w + ui::tokens::COMMAND_BAR_BRAND_TO_HOME_GAP;
+            float brand_w =
+                (text_x - cursor.x) + total_w + ui::tokens::COMMAND_BAR_BRAND_TO_HOME_GAP;
             ImGui::Dummy(ImVec2(brand_w, font_sz));
             ImGui::PopFont();
         }
@@ -682,7 +689,7 @@ void ImGuiIntegration::draw_command_bar()
             ImVec2      mx  = ImGui::GetItemRectMax();
             ImDrawList* hdl = ImGui::GetWindowDrawList();
             ImVec2      ctr((mn.x + mx.x) * 0.5f, (mn.y + mx.y) * 0.5f);
-            const bool  hovered  = ImGui::IsItemHovered();
+            const bool  hovered = ImGui::IsItemHovered();
 
             // Vision.png: soft light house, faint glow, no tile/border/halo.
             // Only a subtle hover background tile appears on interaction.
@@ -744,227 +751,227 @@ void ImGuiIntegration::draw_command_bar()
         }
         else
         {
-        // File menu — build dynamically to include plugin export formats
-        std::vector<MenuItem> file_items;
-        file_items.emplace_back("New Figure",
-                                [this]()
-                                {
-                                    if (command_registry_)
-                                        command_registry_->execute("figure.new");
-                                });
-        file_items.emplace_back("", nullptr);   // Separator
-        file_items.emplace_back("Export PNG",
-                                [this]()
-                                {
-                                    if (command_registry_)
-                                        command_registry_->execute("file.export_png");
-                                });
-        file_items.emplace_back("Export SVG",
-                                [this]()
-                                {
-                                    if (command_registry_)
-                                        command_registry_->execute("file.export_svg");
-                                });
-        file_items.emplace_back("Copy as Image\tCtrl+Shift+C",
-                                [this]()
-                                {
-                                    if (command_registry_)
-                                        command_registry_->execute("file.copy_to_clipboard");
-                                });
+            // File menu — build dynamically to include plugin export formats
+            std::vector<MenuItem> file_items;
+            file_items.emplace_back("New Figure",
+                                    [this]()
+                                    {
+                                        if (command_registry_)
+                                            command_registry_->execute("figure.new");
+                                    });
+            file_items.emplace_back("", nullptr);   // Separator
+            file_items.emplace_back("Export PNG",
+                                    [this]()
+                                    {
+                                        if (command_registry_)
+                                            command_registry_->execute("file.export_png");
+                                    });
+            file_items.emplace_back("Export SVG",
+                                    [this]()
+                                    {
+                                        if (command_registry_)
+                                            command_registry_->execute("file.export_svg");
+                                    });
+            file_items.emplace_back("Copy as Image\tCtrl+Shift+C",
+                                    [this]()
+                                    {
+                                        if (command_registry_)
+                                            command_registry_->execute("file.copy_to_clipboard");
+                                    });
 
-        // Plugin-registered export formats (API v1.3)
-        if (export_format_registry_)
-        {
-            auto formats = export_format_registry_->available_formats();
-            if (!formats.empty())
+            // Plugin-registered export formats (API v1.3)
+            if (export_format_registry_)
             {
-                file_items.emplace_back("", nullptr);   // Separator
-                for (const auto& fmt : formats)
+                auto formats = export_format_registry_->available_formats();
+                if (!formats.empty())
                 {
-                    std::string label    = "Export " + fmt.name + " (." + fmt.extension + ")";
-                    std::string fmt_name = fmt.name;
-                    file_items.emplace_back(
-                        label,
-                        [this, fmt_name]()
-                        {
-                            if (command_registry_)
-                                command_registry_->execute("file.export_plugin." + fmt_name);
-                        });
+                    file_items.emplace_back("", nullptr);   // Separator
+                    for (const auto& fmt : formats)
+                    {
+                        std::string label    = "Export " + fmt.name + " (." + fmt.extension + ")";
+                        std::string fmt_name = fmt.name;
+                        file_items.emplace_back(
+                            label,
+                            [this, fmt_name]()
+                            {
+                                if (command_registry_)
+                                    command_registry_->execute("file.export_plugin." + fmt_name);
+                            });
+                    }
                 }
             }
-        }
 
-        file_items.emplace_back("Save Workspace",
-                                [this]()
-                                {
-                                    if (command_registry_)
-                                        command_registry_->execute("file.save_workspace");
-                                });
-        file_items.emplace_back("Load Workspace",
-                                [this]()
-                                {
-                                    if (command_registry_)
-                                        command_registry_->execute("file.load_workspace");
-                                });
-        file_items.emplace_back("", nullptr);   // Separator
-        file_items.emplace_back("Save Figure...",
-                                [this]()
-                                {
-                                    if (command_registry_)
-                                        command_registry_->execute("file.save_figure");
-                                });
-        file_items.emplace_back("Load Figure...",
-                                [this]()
-                                {
-                                    if (command_registry_)
-                                        command_registry_->execute("file.load_figure");
-                                });
-        file_items.emplace_back("", nullptr);   // Separator
-        file_items.emplace_back("Exit",
-                                [this]()
-                                {
-                                    if (command_registry_)
-                                        command_registry_->execute("app.cancel");
-                                });
-        draw_menubar_menu("File", file_items);
+            file_items.emplace_back("Save Workspace",
+                                    [this]()
+                                    {
+                                        if (command_registry_)
+                                            command_registry_->execute("file.save_workspace");
+                                    });
+            file_items.emplace_back("Load Workspace",
+                                    [this]()
+                                    {
+                                        if (command_registry_)
+                                            command_registry_->execute("file.load_workspace");
+                                    });
+            file_items.emplace_back("", nullptr);   // Separator
+            file_items.emplace_back("Save Figure...",
+                                    [this]()
+                                    {
+                                        if (command_registry_)
+                                            command_registry_->execute("file.save_figure");
+                                    });
+            file_items.emplace_back("Load Figure...",
+                                    [this]()
+                                    {
+                                        if (command_registry_)
+                                            command_registry_->execute("file.load_figure");
+                                    });
+            file_items.emplace_back("", nullptr);   // Separator
+            file_items.emplace_back("Exit",
+                                    [this]()
+                                    {
+                                        if (command_registry_)
+                                            command_registry_->execute("app.cancel");
+                                    });
+            draw_menubar_menu("File", file_items);
 
-        ImGui::SameLine();
+            ImGui::SameLine();
 
-        // View menu
-        draw_menubar_menu(
-            "View",
-            {MenuItem("Toggle Inspector",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("panel.toggle_inspector");
-                          else
+            // View menu
+            draw_menubar_menu(
+                "View",
+                {MenuItem("Toggle Inspector",
+                          [this]()
                           {
-                              bool new_vis = !layout_manager_->is_inspector_visible();
-                              layout_manager_->set_inspector_visible(new_vis);
-                              panel_open_ = new_vis;
-                          }
-                      }),
-             MenuItem("Toggle Navigation Rail",
-                      [this]() { set_nav_rail_visible(!show_nav_rail_); }),
-             MenuItem("Zoom to Fit",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("view.autofit");
-                      }),
-             MenuItem("Reset View",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("view.reset");
-                      }),
-             MenuItem("Toggle Grid",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("view.toggle_grid");
-                      }),
-             MenuItem("Toggle Legend",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("view.toggle_legend");
-                      }),
-             MenuItem("Remove All Data Tips",
-                      [this]()
-                      {
-                          if (data_interaction_)
-                              data_interaction_->clear_markers();
-                      }),
-             MenuItem("", nullptr),   // Separator
-             MenuItem("Toggle Timeline",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("panel.toggle_timeline");
-                      }),
-             MenuItem("Toggle Curve Editor",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("panel.toggle_curve_editor");
-                      }),
-             MenuItem("Toggle Parameters",
-                      [this]()
-                      {
-                          if (knob_manager_ && !knob_manager_->empty())
-                              knob_manager_->set_visible(!knob_manager_->is_visible());
-                      }),
-             MenuItem("Toggle Data Editor",
-                      [this]()
-                      {
-                          if (active_section_ == Section::DataEditor && panel_open_)
+                              if (command_registry_)
+                                  command_registry_->execute("panel.toggle_inspector");
+                              else
+                              {
+                                  bool new_vis = !layout_manager_->is_inspector_visible();
+                                  layout_manager_->set_inspector_visible(new_vis);
+                                  panel_open_ = new_vis;
+                              }
+                          }),
+                 MenuItem("Toggle Navigation Rail",
+                          [this]() { set_nav_rail_visible(!show_nav_rail_); }),
+                 MenuItem("Zoom to Fit",
+                          [this]()
                           {
-                              panel_open_ = false;
-                              layout_manager_->set_inspector_visible(false);
-                          }
-                          else
+                              if (command_registry_)
+                                  command_registry_->execute("view.autofit");
+                          }),
+                 MenuItem("Reset View",
+                          [this]()
                           {
-                              active_section_ = Section::DataEditor;
-                              panel_open_     = true;
-                              layout_manager_->set_inspector_visible(true);
-                          }
-                      }),
-             MenuItem("Toggle Topics",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("panel.toggle_topics");
-                      }),
-             MenuItem("Plugins...",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("panel.toggle_plugins");
-                          else
-                              show_plugins_panel_ = !show_plugins_panel_;
-                      })});
+                              if (command_registry_)
+                                  command_registry_->execute("view.reset");
+                          }),
+                 MenuItem("Toggle Grid",
+                          [this]()
+                          {
+                              if (command_registry_)
+                                  command_registry_->execute("view.toggle_grid");
+                          }),
+                 MenuItem("Toggle Legend",
+                          [this]()
+                          {
+                              if (command_registry_)
+                                  command_registry_->execute("view.toggle_legend");
+                          }),
+                 MenuItem("Remove All Data Tips",
+                          [this]()
+                          {
+                              if (data_interaction_)
+                                  data_interaction_->clear_markers();
+                          }),
+                 MenuItem("", nullptr),   // Separator
+                 MenuItem("Toggle Timeline",
+                          [this]()
+                          {
+                              if (command_registry_)
+                                  command_registry_->execute("panel.toggle_timeline");
+                          }),
+                 MenuItem("Toggle Curve Editor",
+                          [this]()
+                          {
+                              if (command_registry_)
+                                  command_registry_->execute("panel.toggle_curve_editor");
+                          }),
+                 MenuItem("Toggle Parameters",
+                          [this]()
+                          {
+                              if (knob_manager_ && !knob_manager_->empty())
+                                  knob_manager_->set_visible(!knob_manager_->is_visible());
+                          }),
+                 MenuItem("Toggle Data Editor",
+                          [this]()
+                          {
+                              if (active_section_ == Section::DataEditor && panel_open_)
+                              {
+                                  panel_open_ = false;
+                                  layout_manager_->set_inspector_visible(false);
+                              }
+                              else
+                              {
+                                  active_section_ = Section::DataEditor;
+                                  panel_open_     = true;
+                                  layout_manager_->set_inspector_visible(true);
+                              }
+                          }),
+                 MenuItem("Toggle Topics",
+                          [this]()
+                          {
+                              if (command_registry_)
+                                  command_registry_->execute("panel.toggle_topics");
+                          }),
+                 MenuItem("Plugins...",
+                          [this]()
+                          {
+                              if (command_registry_)
+                                  command_registry_->execute("panel.toggle_plugins");
+                              else
+                                  show_plugins_panel_ = !show_plugins_panel_;
+                          })});
 
-        ImGui::SameLine();
+            ImGui::SameLine();
 
-        // Tools menu
-        draw_menubar_menu(
-            "Tools",
-            {MenuItem("Screenshot (PNG)",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("file.export_png");
-                      }),
-             MenuItem("Undo",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("edit.undo");
-                      }),
-             MenuItem("Redo",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("edit.redo");
-                      }),
-             MenuItem("", nullptr),   // Separator
-             MenuItem("Theme Settings", [this]() { show_theme_settings_ = !show_theme_settings_; }),
-             MenuItem("Command Palette",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("app.command_palette");
-                      }),
-             MenuItem("", nullptr),   // Separator
+            // Tools menu
+            draw_menubar_menu("Tools",
+                              {MenuItem("Screenshot (PNG)",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("file.export_png");
+                                        }),
+                               MenuItem("Undo",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("edit.undo");
+                                        }),
+                               MenuItem("Redo",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("edit.redo");
+                                        }),
+                               MenuItem("", nullptr),   // Separator
+                               MenuItem("Theme Settings",
+                                        [this]() { show_theme_settings_ = !show_theme_settings_; }),
+                               MenuItem("Command Palette",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("app.command_palette");
+                                        }),
+                               MenuItem("", nullptr),   // Separator
     #ifdef SPECTRA_USE_ROS2
-             MenuItem("ROS2 Adapter",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("tools.ros2_adapter");
-                      })
+                               MenuItem("ROS2 Adapter",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("tools.ros2_adapter");
+                                        })
     #else
              // Grayed-out placeholder when compiled without ROS2 support.
              // draw_menubar_menu skips items with a null callback; we render
@@ -972,46 +979,45 @@ void ImGuiIntegration::draw_command_bar()
              // is handled specially in draw_menubar_menu.
              MenuItem("\xEF\xA0\xAD ROS2 Adapter (not available)", nullptr)
     #endif
-            });
+                              });
 
-        ImGui::SameLine();
+            ImGui::SameLine();
 
-        // Plot menu — reference lines and function overlays (legacy path without AppShell)
-        draw_menubar_menu(
-            "Plot",
-            {MenuItem("Y = 0 Line",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("plot.hline_zero");
-                      }),
-             MenuItem("X = 0 Line",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("plot.vline_zero");
-                      }),
-             MenuItem("", nullptr),
-             MenuItem("Horizontal Line...",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("plot.hline");
-                      }),
-             MenuItem("Vertical Line...",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("plot.vline");
-                      }),
-             MenuItem("Plot Function...",
-                      [this]()
-                      {
-                          if (command_registry_)
-                              command_registry_->execute("plot.function");
-                      })});
+            // Plot menu — reference lines and function overlays (legacy path without AppShell)
+            draw_menubar_menu("Plot",
+                              {MenuItem("Y = 0 Line",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("plot.hline_zero");
+                                        }),
+                               MenuItem("X = 0 Line",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("plot.vline_zero");
+                                        }),
+                               MenuItem("", nullptr),
+                               MenuItem("Horizontal Line...",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("plot.hline");
+                                        }),
+                               MenuItem("Vertical Line...",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("plot.vline");
+                                        }),
+                               MenuItem("Plot Function...",
+                                        [this]()
+                                        {
+                                            if (command_registry_)
+                                                command_registry_->execute("plot.function");
+                                        })});
 
-        ImGui::SameLine();
+            ImGui::SameLine();
         }
 
         ImGui::SameLine();
@@ -1044,7 +1050,7 @@ void ImGuiIntegration::draw_command_bar()
                             csv_selected_y_.push_back(static_cast<int>(c));
                         if (csv_selected_y_.empty() && csv_data_.num_cols > 0)
                             csv_selected_y_.push_back(0);
-                        csv_col_z_       = -1;
+                        csv_col_z_ = -1;
                         if (csv_data_loaded_)
                             csv_dialog_open_ = true;
                     }
@@ -1494,9 +1500,10 @@ void ImGuiIntegration::draw_chrome_backdrops()
             const float inset = ui::tokens::PANEL_GAP + 2.0f;
             if (nr.w > inset * 2.0f + 8.0f && nr.h > inset * 2.0f + 8.0f)
             {
-                draw_zone(Rect{nr.x + inset, nr.y + inset, nr.w - inset * 2.0f, nr.h - inset * 2.0f},
-                          ui::GlassSurface::Toolbar,
-                          ui::tokens::RADIUS_LG);
+                draw_zone(
+                    Rect{nr.x + inset, nr.y + inset, nr.w - inset * 2.0f, nr.h - inset * 2.0f},
+                    ui::GlassSurface::Toolbar,
+                    ui::tokens::RADIUS_LG);
             }
             else
             {
@@ -1583,10 +1590,10 @@ void ImGuiIntegration::draw_nav_rail()
 
         ImFont* label_font = font_heading_;   // 12.5px — compact labels
         float   btn_w      = rail_w;
-        float   btn_scale  = LayoutManager::nav_rail_scale_for_height(
-            bounds.h,
-            LayoutManager::NAV_RAIL_FALLBACK_BUTTON_COUNT,
-            LayoutManager::NAV_RAIL_SEPARATOR_COUNT);
+        float   btn_scale =
+            LayoutManager::nav_rail_scale_for_height(bounds.h,
+                                                     LayoutManager::NAV_RAIL_FALLBACK_BUTTON_COUNT,
+                                                     LayoutManager::NAV_RAIL_SEPARATOR_COUNT);
 
         // Separator: subtle hairline with spacing tokens.
         auto draw_separator = [&]()

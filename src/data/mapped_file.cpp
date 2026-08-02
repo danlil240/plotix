@@ -74,7 +74,9 @@ MappedFile::MappedFile(const std::string& path)
     if (fd_ < 0)
         throw std::runtime_error("MappedFile: cannot open " + path);
 
-    struct stat st{};
+    struct stat st
+    {
+    };
     if (::fstat(fd_, &st) != 0)
     {
         ::close(fd_);

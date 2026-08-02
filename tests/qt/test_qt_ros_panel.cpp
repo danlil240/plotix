@@ -25,13 +25,13 @@ using namespace spectra::adapters;
 class StubDisplay : public ros2::DisplayPlugin
 {
    public:
-    std::string type_id() const override { return "stub"; }
-    std::string display_name() const override { return "Stub Display"; }
-    std::string icon() const override { return "stub"; }
-    void draw_inspector_ui() override {}
+    std::string              type_id() const override { return "stub"; }
+    std::string              display_name() const override { return "Stub Display"; }
+    std::string              icon() const override { return "stub"; }
+    void                     draw_inspector_ui() override {}
     std::vector<std::string> compatible_message_types() const override { return {}; }
-    std::string serialize_config_blob() const override { return "{}"; }
-    void deserialize_config_blob(const std::string&) override {}
+    std::string              serialize_config_blob() const override { return "{}"; }
+    void                     deserialize_config_blob(const std::string&) override {}
 };
 
 static int   argc    = 1;
@@ -53,8 +53,8 @@ class RosPanelManagerTest : public ::testing::Test
         registry_->register_display<StubDisplay>();
 
         main_window_ = std::make_unique<QMainWindow>();
-        manager_ = std::make_unique<qt::RosPanelManager>(
-            main_window_.get(), registry_.get(), nullptr);
+        manager_ =
+            std::make_unique<qt::RosPanelManager>(main_window_.get(), registry_.get(), nullptr);
     }
 
     void TearDown() override
@@ -64,10 +64,10 @@ class RosPanelManagerTest : public ::testing::Test
         registry_.reset();
     }
 
-    QApplication*                                 app_         = nullptr;
-    std::unique_ptr<ros2::DisplayRegistry>        registry_;
-    std::unique_ptr<QMainWindow>                  main_window_;
-    std::unique_ptr<qt::RosPanelManager>          manager_;
+    QApplication*                          app_ = nullptr;
+    std::unique_ptr<ros2::DisplayRegistry> registry_;
+    std::unique_ptr<QMainWindow>           main_window_;
+    std::unique_ptr<qt::RosPanelManager>   manager_;
 };
 
 TEST_F(RosPanelManagerTest, AddDisplay)
@@ -132,7 +132,8 @@ TEST_F(RosPanelManagerTest, SerializeLayout)
 
 TEST_F(RosPanelManagerTest, DeserializeLayout)
 {
-    std::string json = R"([{"id":"test1","type_id":"stub","enabled":true,"topic":"/test","config":"{}"}])";
+    std::string json =
+        R"([{"id":"test1","type_id":"stub","enabled":true,"topic":"/test","config":"{}"}])";
     bool result = manager_->deserialize_layout(json);
     EXPECT_TRUE(result);
     EXPECT_GE(manager_->displays().size(), 1u);

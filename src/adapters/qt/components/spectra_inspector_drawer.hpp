@@ -21,10 +21,10 @@ class SpectraDockHeader;
 class SpectraInspectorDrawer : public QWidget
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraInspectorDrawer(QWidget* parent = nullptr);
     ~SpectraInspectorDrawer() override;
-    SpectraInspectorDrawer(const SpectraInspectorDrawer&) = delete;
+    SpectraInspectorDrawer(const SpectraInspectorDrawer&)            = delete;
     SpectraInspectorDrawer& operator=(const SpectraInspectorDrawer&) = delete;
 
     bool is_open() const { return open_; }
@@ -36,20 +36,20 @@ public:
 
     int width_hint() const;
 
-signals:
+   signals:
     void opened();
     void closed();
 
-protected:
+   protected:
     void paintEvent(QPaintEvent* event) override;
 
-private:
+   private:
     void build_ui();
 
-    bool                open_       = false;
-    SpectraDockHeader*  header_     = nullptr;
-    QWidget*            content_    = nullptr;
-    QVBoxLayout*        layout_     = nullptr;
+    bool               open_    = false;
+    SpectraDockHeader* header_  = nullptr;
+    QWidget*           content_ = nullptr;
+    QVBoxLayout*       layout_  = nullptr;
 };
 
 }   // namespace spectra::adapters::qt

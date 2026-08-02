@@ -577,8 +577,10 @@ TEST_F(EasyAPITest, IhlineCreatesKnobAndBinding)
 
 TEST_F(EasyAPITest, IfplotCreatesParamKnobs)
 {
-    auto& line = spectra::ifplot(
-        [](double x, std::span<const double> p) { return p[0] * x; }, -1.0, 1.0, {{"scale", 1.0, 0.0, 2.0}});
+    auto& line = spectra::ifplot([](double x, std::span<const double> p) { return p[0] * x; },
+                                 -1.0,
+                                 1.0,
+                                 {{"scale", 1.0, 0.0, 2.0}});
     EXPECT_GT(line.point_count(), 2u);
     EXPECT_EQ(spectra::detail::easy_state().interactive_fplots_.size(), 1u);
 }

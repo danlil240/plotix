@@ -535,10 +535,10 @@ TEST(TestInfrastructure, GpuHangDetectorCompletes)
 {
     GpuHangDetector detector(std::chrono::seconds(5));
     bool            ok = detector.run("trivial",
-                                      []()
-                                      {
+                           []()
+                           {
                                // Instant completion
-                                      });
+                           });
     EXPECT_TRUE(ok);
     EXPECT_TRUE(detector.completed());
     EXPECT_FALSE(detector.timed_out());
@@ -548,7 +548,7 @@ TEST(TestInfrastructure, GpuHangDetectorCompletes)
 TEST(TestInfrastructure, GpuHangDetectorTimeout)
 {
     GpuHangDetector detector(std::chrono::milliseconds(50));
-    bool ok = detector.run("intentional hang",
+    bool            ok = detector.run("intentional hang",
                            []() { std::this_thread::sleep_for(std::chrono::milliseconds(200)); });
     // The callable still completes (we can't kill threads), but the
     // detector reports timeout

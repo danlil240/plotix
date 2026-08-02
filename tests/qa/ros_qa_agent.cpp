@@ -519,10 +519,10 @@ std::string write_float64_bag(const std::string& dir_name,
             cdr[3] = 0x00;
             std::memcpy(cdr.data() + 4, &value, sizeof(double));
 
-            auto msg             = std::make_shared<rosbag2_storage::SerializedBagMessage>();
-            msg->topic_name      = topic;
+            auto msg        = std::make_shared<rosbag2_storage::SerializedBagMessage>();
+            msg->topic_name = topic;
             bag_compat::set_bag_message_timestamp(*msg, t_ns);
-            msg->serialized_data = std::make_shared<rcutils_uint8_array_t>();
+            msg->serialized_data                  = std::make_shared<rcutils_uint8_array_t>();
             msg->serialized_data->allocator       = rcutils_get_default_allocator();
             msg->serialized_data->buffer_length   = cdr.size();
             msg->serialized_data->buffer_capacity = cdr.size();
@@ -860,10 +860,9 @@ class RosQAAgent
         scenarios_.push_back({"bag_playback",
                               "Open a synthetic bag and validate playback injection when enabled",
                               [this]() { return scenario_bag_playback(); }});
-        scenarios_.push_back(
-            {"nav_spatiotemporal",
-             "Nav2 debug bag scrub syncs TF, displays, and plots (Phase C7)",
-             [this]() { return scenario_nav_spatiotemporal(); }});
+        scenarios_.push_back({"nav_spatiotemporal",
+                              "Nav2 debug bag scrub syncs TF, displays, and plots (Phase C7)",
+                              [this]() { return scenario_nav_spatiotemporal(); }});
         scenarios_.push_back(
             {"design_review",
              "Capture named ROS shell design states and verify theme/layout presentation",
@@ -1501,8 +1500,7 @@ class RosQAAgent
 
         // Wait for all messages to be injected (bag has BAG_MSG_COUNT messages).
         [[maybe_unused]] const bool all_injected = wait_until(
-            [this]()
-            {
+            [this]() {
                 return shell_->bag_player()->total_injected()
                        >= static_cast<uint64_t>(BAG_MSG_COUNT);
             },
@@ -1549,14 +1547,14 @@ class RosQAAgent
     ScenarioOutcome scenario_nav_spatiotemporal()
     {
 #ifdef SPECTRA_ROS2_BAG
-        const std::string bag_path =
-            spectra_source_dir() + "/tests/data/ros_bags/nav2_debug";
+        const std::string bag_path = spectra_source_dir() + "/tests/data/ros_bags/nav2_debug";
         const std::string session_path =
             spectra_source_dir() + "/sessions/presets/nav2_debug.spectra-ros-session";
 
         if (!std::filesystem::exists(bag_path))
         {
-            return skip("nav2_debug reference bag missing — run scripts/generate_ros_reference_bags.py");
+            return skip(
+                "nav2_debug reference bag missing — run scripts/generate_ros_reference_bags.py");
         }
         if (!std::filesystem::exists(session_path))
             return fail("nav", "nav2_debug session preset not found at " + session_path);
@@ -1820,8 +1818,8 @@ class RosQAAgent
                     out << "  - " << result.name << ": " << scenario_status_str(result.status)
                         << " | frames=" << (result.frame_end - result.frame_start)
                         << " | rss=" << to_mb(result.rss_before_bytes) << "->"
-                        << to_mb(result.rss_after_bytes) << "MB"
-                        << " | detail=" << result.detail << "\n";
+                        << to_mb(result.rss_after_bytes) << "MB" << " | detail=" << result.detail
+                        << "\n";
                     if (!result.screenshot_path.empty())
                         out << "    screenshot: " << result.screenshot_path << "\n";
                 }

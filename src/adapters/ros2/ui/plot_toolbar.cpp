@@ -262,27 +262,25 @@ float draw_plot_toolbar(PlotToolbarState& state, const PlotToolbarActions& actio
     using spectra::ui::Icon;
     using spectra::ui::theme;
     using spectra::ui::widgets::icon_button;
-    const auto& colors  = theme();
-    const float avail_w = ImGui::GetContentRegionAvail().x;
-    const bool  tight   = avail_w < 480.0f;
-    const bool  compact = avail_w < 1120.0f;
-    const float content_left = ImGui::GetWindowContentRegionMin().x;
-    const float compact_cluster_w =
-        tokens::ICON_BUTTON_HITBOX * 2.0f + tokens::TOOLBAR_BUTTON_GAP;
-    const float cluster_x = ImGui::GetWindowContentRegionMax().x - compact_cluster_w;
-    const float tool_btn_w = tight ? tokens::ICON_BUTTON_HITBOX
-                                     : labeled_icon_button_width(compact ? "Fit" : "Fit Y");
-    const float tools_row_w =
-        tool_btn_w * 5.0f + tokens::TOOLBAR_BUTTON_GAP * 4.0f;
-    const bool tools_overflow_cluster =
+    const auto& colors            = theme();
+    const float avail_w           = ImGui::GetContentRegionAvail().x;
+    const bool  tight             = avail_w < 480.0f;
+    const bool  compact           = avail_w < 1120.0f;
+    const float content_left      = ImGui::GetWindowContentRegionMin().x;
+    const float compact_cluster_w = tokens::ICON_BUTTON_HITBOX * 2.0f + tokens::TOOLBAR_BUTTON_GAP;
+    const float cluster_x         = ImGui::GetWindowContentRegionMax().x - compact_cluster_w;
+    const float tool_btn_w =
+        tight ? tokens::ICON_BUTTON_HITBOX : labeled_icon_button_width(compact ? "Fit" : "Fit Y");
+    const float tools_row_w = tool_btn_w * 5.0f + tokens::TOOLBAR_BUTTON_GAP * 4.0f;
+    const bool  tools_overflow_cluster =
         compact && (content_left + tools_row_w > cluster_x - tokens::SPACE_2);
     const float tools_row_y_offset = tight ? 74.0f : 42.0f;
     const float export_row_y_offset =
         tools_overflow_cluster ? tools_row_y_offset + 36.0f : tools_row_y_offset;
     const float toolbar_h = compact ? (export_row_y_offset + 38.0f) : 44.0f;
 
-    ImVec2      bar_min = ImGui::GetCursorScreenPos();
-    const float tools_row_y = bar_min.y + tools_row_y_offset;
+    ImVec2      bar_min      = ImGui::GetCursorScreenPos();
+    const float tools_row_y  = bar_min.y + tools_row_y_offset;
     const float export_row_y = bar_min.y + export_row_y_offset;
     ImVec2      bar_max(bar_min.x + avail_w, bar_min.y + toolbar_h);
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -353,7 +351,7 @@ float draw_plot_toolbar(PlotToolbarState& state, const PlotToolbarActions& actio
     const float preset_right = ImGui::GetWindowContentRegionMax().x - 2.0f;
     for (size_t i = 0; i < std::size(kPresets); ++i)
     {
-        const auto& p = kPresets[i];
+        const auto& p        = kPresets[i];
         const float preset_w = labeled_icon_button_width(p.label);
         if (i > 0)
         {
@@ -426,19 +424,22 @@ float draw_plot_toolbar(PlotToolbarState& state, const PlotToolbarActions& actio
     }
 
     auto draw_tool = [&](const char* id,
-                         Icon icon,
+                         Icon        icon,
                          const char* compact_label,
                          const char* full_label,
                          const char* tooltip,
-                         bool selected,
-                         auto&& on_click)
+                         bool        selected,
+                         auto&&      on_click)
     {
         bool clicked = false;
         if (tight)
             clicked = icon_button(id, icon, tooltip, selected);
         else
-            clicked = labeled_icon_button(
-                id, icon, compact ? compact_label : full_label, tooltip, selected);
+            clicked = labeled_icon_button(id,
+                                          icon,
+                                          compact ? compact_label : full_label,
+                                          tooltip,
+                                          selected);
         if (clicked)
             on_click();
         ImGui::SameLine(0.0f, tokens::TOOLBAR_BUTTON_GAP);
@@ -450,7 +451,8 @@ float draw_plot_toolbar(PlotToolbarState& state, const PlotToolbarActions& actio
               "Fit Y",
               "Auto-fit Y axis",
               false,
-              [&]() {
+              [&]()
+              {
                   if (actions.autofit)
                       actions.autofit();
               });
@@ -460,7 +462,8 @@ float draw_plot_toolbar(PlotToolbarState& state, const PlotToolbarActions& actio
               "Clear",
               "Clear plot data",
               false,
-              [&]() {
+              [&]()
+              {
                   if (actions.clear_plot)
                       actions.clear_plot();
               });
@@ -470,7 +473,8 @@ float draw_plot_toolbar(PlotToolbarState& state, const PlotToolbarActions& actio
               "Add row",
               "Add subplot row",
               false,
-              [&]() {
+              [&]()
+              {
                   if (actions.add_subplot)
                       actions.add_subplot();
               });
@@ -480,7 +484,8 @@ float draw_plot_toolbar(PlotToolbarState& state, const PlotToolbarActions& actio
               "Remove row",
               "Remove last subplot row",
               false,
-              [&]() {
+              [&]()
+              {
                   if (actions.remove_subplot)
                       actions.remove_subplot();
               });
@@ -490,24 +495,24 @@ float draw_plot_toolbar(PlotToolbarState& state, const PlotToolbarActions& actio
               "Link X",
               state.x_links_enabled ? "Unlink X axes" : "Link X axes",
               state.x_links_enabled,
-              [&]() {
+              [&]()
+              {
                   state.x_links_enabled = !state.x_links_enabled;
                   if (actions.set_x_links)
                       actions.set_x_links(state.x_links_enabled);
               });
 
-    const float settings_w = tokens::ICON_BUTTON_HITBOX;
-    const float export_label_w = labeled_icon_button_width("Export");
-    const float wide_cluster_w = export_label_w + tokens::TOOLBAR_BUTTON_GAP + settings_w;
-    const float cluster_w      = compact ? compact_cluster_w : wide_cluster_w;
+    const float settings_w       = tokens::ICON_BUTTON_HITBOX;
+    const float export_label_w   = labeled_icon_button_width("Export");
+    const float wide_cluster_w   = export_label_w + tokens::TOOLBAR_BUTTON_GAP + settings_w;
+    const float cluster_w        = compact ? compact_cluster_w : wide_cluster_w;
     const float export_cluster_x = ImGui::GetWindowContentRegionMax().x - cluster_w;
-    const bool  export_fits_right = !compact
-                                    && export_cluster_x > ImGui::GetCursorPosX() + tokens::SPACE_2;
+    const bool  export_fits_right =
+        !compact && export_cluster_x > ImGui::GetCursorPosX() + tokens::SPACE_2;
 
     if (compact)
     {
-        ImGui::SetCursorScreenPos(
-            ImVec2(ImGui::GetWindowPos().x + export_cluster_x, export_row_y));
+        ImGui::SetCursorScreenPos(ImVec2(ImGui::GetWindowPos().x + export_cluster_x, export_row_y));
     }
     else if (export_fits_right)
     {

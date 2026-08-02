@@ -354,7 +354,7 @@ TEST(Mat4, InverseRotation)
 TEST(Mat4, InverseComplex)
 {
     auto M  = mat4_mul(mat4_translate(vec3{3, -1, 7}),
-                       mat4_mul(mat4_rotate_y(1.2f), mat4_scale(vec3{2, 0.5f, 3})));
+                      mat4_mul(mat4_rotate_y(1.2f), mat4_scale(vec3{2, 0.5f, 3})));
     auto Mi = mat4_inverse(M);
     auto R  = mat4_mul(M, Mi);
     auto I  = mat4_identity();

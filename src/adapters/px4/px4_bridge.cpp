@@ -210,12 +210,16 @@ bool Px4Bridge::start()
     }
 
     // Set receive timeout so the thread can check stop_requested_ periodically.
-    struct timeval tv{};
+    struct timeval tv
+    {
+    };
     tv.tv_sec  = 0;
     tv.tv_usec = 100000;   // 100ms
     setsockopt(socket_fd_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-    struct sockaddr_in addr{};
+    struct sockaddr_in addr
+    {
+    };
     addr.sin_family      = AF_INET;
     addr.sin_port        = htons(port_);
     addr.sin_addr.s_addr = INADDR_ANY;
@@ -246,7 +250,9 @@ bool Px4Bridge::start()
                reinterpret_cast<char*>(&timeout_ms),
                sizeof(timeout_ms));
 
-    struct sockaddr_in addr{};
+    struct sockaddr_in addr
+    {
+    };
     addr.sin_family      = AF_INET;
     addr.sin_port        = htons(port_);
     addr.sin_addr.s_addr = INADDR_ANY;
@@ -417,8 +423,8 @@ bool Px4Bridge::decode_mavlink_message(const uint8_t* data, size_t len, Telemetr
         payload_len = data[1];
         // data[2] = incompat_flags, data[3] = compat_flags, data[4] = seq
         // data[5] = sysid, data[6] = compid
-        msg_id  = static_cast<uint32_t>(data[7]) | (static_cast<uint32_t>(data[8]) << 8)
-                  | (static_cast<uint32_t>(data[9]) << 16);
+        msg_id = static_cast<uint32_t>(data[7]) | (static_cast<uint32_t>(data[8]) << 8)
+                 | (static_cast<uint32_t>(data[9]) << 16);
         payload = data + 10;
 
         if (static_cast<size_t>(10) + payload_len + 2u > len)   // payload + CRC

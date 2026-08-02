@@ -24,11 +24,11 @@ std::vector<uint8_t> encode_fb_hello(const HelloPayload& p)
 {
     flatbuffers::FlatBufferBuilder fbb(256);
     auto                           offset = fb::CreateHelloPayloadDirect(fbb,
-                                                                         p.protocol_major,
-                                                                         p.protocol_minor,
-                                                                         p.agent_build.c_str(),
-                                                                         p.capabilities,
-                                                                         p.client_type.c_str());
+                                               p.protocol_major,
+                                               p.protocol_minor,
+                                               p.agent_build.c_str(),
+                                               p.capabilities,
+                                               p.client_type.c_str());
     fbb.Finish(offset);
     return finalize(fbb);
 }
@@ -55,11 +55,11 @@ std::vector<uint8_t> encode_fb_welcome(const WelcomePayload& p)
 {
     flatbuffers::FlatBufferBuilder fbb(256);
     auto                           offset = fb::CreateWelcomePayloadDirect(fbb,
-                                                                           p.session_id,
-                                                                           p.window_id,
-                                                                           p.process_id,
-                                                                           p.heartbeat_ms,
-                                                                           p.mode.c_str());
+                                                 p.session_id,
+                                                 p.window_id,
+                                                 p.process_id,
+                                                 p.heartbeat_ms,
+                                                 p.mode.c_str());
     fbb.Finish(offset);
     return finalize(fbb);
 }
@@ -202,12 +202,12 @@ std::vector<uint8_t> encode_fb_req_detach_figure(const ReqDetachFigurePayload& p
 {
     flatbuffers::FlatBufferBuilder fbb(128);
     auto                           offset = fb::CreateReqDetachFigurePayload(fbb,
-                                                                             p.source_window_id,
-                                                                             p.figure_id,
-                                                                             p.width,
-                                                                             p.height,
-                                                                             p.screen_x,
-                                                                             p.screen_y);
+                                                   p.source_window_id,
+                                                   p.figure_id,
+                                                   p.width,
+                                                   p.height,
+                                                   p.screen_x,
+                                                   p.screen_y);
     fbb.Finish(offset);
     return finalize(fbb);
 }
@@ -639,7 +639,7 @@ std::optional<AckStatePayload> decode_fb_ack_state(std::span<const uint8_t> data
 std::vector<uint8_t> encode_fb_evt_input(const EvtInputPayload& p)
 {
     flatbuffers::FlatBufferBuilder fbb(128);
-    auto offset = fb::CreateEvtInputPayload(fbb,
+    auto                           offset = fb::CreateEvtInputPayload(fbb,
                                             p.window_id,
                                             static_cast<fb::InputType>(p.input_type),
                                             p.key,
@@ -720,11 +720,11 @@ std::vector<uint8_t> encode_fb_req_create_axes(const ReqCreateAxesPayload& p)
 {
     flatbuffers::FlatBufferBuilder fbb(128);
     auto                           offset = fb::CreateReqCreateAxesPayload(fbb,
-                                                                           p.figure_id,
-                                                                           p.grid_rows,
-                                                                           p.grid_cols,
-                                                                           p.grid_index,
-                                                                           p.is_3d);
+                                                 p.figure_id,
+                                                 p.grid_rows,
+                                                 p.grid_cols,
+                                                 p.grid_index,
+                                                 p.is_3d);
     fbb.Finish(offset);
     return finalize(fbb);
 }
@@ -748,7 +748,7 @@ std::optional<ReqCreateAxesPayload> decode_fb_req_create_axes(std::span<const ui
 std::vector<uint8_t> encode_fb_req_add_series(const ReqAddSeriesPayload& p)
 {
     flatbuffers::FlatBufferBuilder fbb(256);
-    auto offset = fb::CreateReqAddSeriesPayloadDirect(fbb,
+    auto                           offset = fb::CreateReqAddSeriesPayloadDirect(fbb,
                                                       p.figure_id,
                                                       p.axes_index,
                                                       p.series_type.c_str(),

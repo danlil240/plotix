@@ -122,9 +122,9 @@ void ImGuiIntegration::build_preview_ui(const std::string& title, Figure* figure
 
             const Color& sc  = s->color();
             ImU32        col = IM_COL32(static_cast<uint8_t>(sc.r * 255),
-                                        static_cast<uint8_t>(sc.g * 255),
-                                        static_cast<uint8_t>(sc.b * 255),
-                                        static_cast<uint8_t>(sc.a * s->opacity() * 220));
+                                 static_cast<uint8_t>(sc.g * 255),
+                                 static_cast<uint8_t>(sc.b * 255),
+                                 static_cast<uint8_t>(sc.a * s->opacity() * 220));
 
             // Try LineSeries
             auto* ls = dynamic_cast<const LineSeries*>(s.get());

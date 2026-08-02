@@ -24,7 +24,7 @@ bool accept_field_drop(const RosPlotDropTargetContext& ctx, FieldDragPayload& pa
         return false;
 
     const ImGuiPayload* imgui_payload = ImGui::AcceptDragDropPayload(FieldDragDrop::DRAG_TYPE);
-    const bool accepted = imgui_payload != nullptr
+    const bool          accepted      = imgui_payload != nullptr
                           && FieldDragDrop::try_parse_imgui_payload(imgui_payload, payload_out);
     ImGui::EndDragDropTarget();
     return accepted;

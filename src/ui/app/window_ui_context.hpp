@@ -100,7 +100,7 @@ struct WindowUIContext
 
     BoxZoomOverlay box_zoom_overlay;
 
-    CommandPalette  cmd_palette;
+    CommandPalette cmd_palette;
 
     TabDragController tab_drag_controller;
 
@@ -109,7 +109,7 @@ struct WindowUIContext
 
     // Settings panel — owned by this context, wired to the process-scoped
     // SettingsStore during window_ui_context_builder.
-    ui::settings::SettingsPanel  settings_panel;
+    ui::settings::SettingsPanel settings_panel;
 
     std::unique_ptr<ui::shell::SpectraAppShell> app_shell;
 #endif

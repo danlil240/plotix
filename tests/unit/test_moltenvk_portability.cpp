@@ -33,10 +33,10 @@
 namespace
 {
 
-bool has_instance_extension(const std::vector<VkExtensionProperties>& exts,
-                            const char* name)
+bool has_instance_extension(const std::vector<VkExtensionProperties>& exts, const char* name)
 {
-    return std::any_of(exts.begin(), exts.end(),
+    return std::any_of(exts.begin(),
+                       exts.end(),
                        [name](const VkExtensionProperties& e)
                        { return std::strcmp(e.extensionName, name) == 0; });
 }
@@ -47,7 +47,8 @@ bool has_device_extension(VkPhysicalDevice dev, const char* name)
     vkEnumerateDeviceExtensionProperties(dev, nullptr, &count, nullptr);
     std::vector<VkExtensionProperties> exts(count);
     vkEnumerateDeviceExtensionProperties(dev, nullptr, &count, exts.data());
-    return std::any_of(exts.begin(), exts.end(),
+    return std::any_of(exts.begin(),
+                       exts.end(),
                        [name](const VkExtensionProperties& e)
                        { return std::strcmp(e.extensionName, name) == 0; });
 }
@@ -64,8 +65,8 @@ TEST(MoltenVKPortability, InstanceCreationWithPortability)
     std::vector<VkExtensionProperties> available_exts(ext_count);
     vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, available_exts.data());
 
-    bool has_portability = has_instance_extension(available_exts,
-        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    bool has_portability =
+        has_instance_extension(available_exts, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 
     // Build extension list.
     std::vector<const char*> extensions;
@@ -142,9 +143,9 @@ TEST(MoltenVKPortability, DeviceExtensionQuery)
 {
     // Create a minimal instance.
     VkApplicationInfo app_info{};
-    app_info.sType        = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app_info.sType            = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = "SpectraDevExtTest";
-    app_info.apiVersion   = VK_API_VERSION_1_2;
+    app_info.apiVersion       = VK_API_VERSION_1_2;
 
     VkInstanceCreateInfo create_info{};
     create_info.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -203,15 +204,15 @@ TEST(MoltenVKPortability, HeadlessRenderSmoke)
     vkEnumerateInstanceExtensionProperties(nullptr, &ext_count, available_exts.data());
 
     std::vector<const char*> extensions;
-    bool has_portability = has_instance_extension(available_exts,
-        VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+    bool                     has_portability =
+        has_instance_extension(available_exts, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
     if (has_portability)
         extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 
     VkApplicationInfo app_info{};
-    app_info.sType        = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app_info.sType            = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app_info.pApplicationName = "SpectraHeadlessPortability";
-    app_info.apiVersion   = VK_API_VERSION_1_2;
+    app_info.apiVersion       = VK_API_VERSION_1_2;
 
     VkInstanceCreateInfo create_info{};
     create_info.sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -260,7 +261,7 @@ TEST(MoltenVKPortability, HeadlessRenderSmoke)
     if (has_device_extension(physical, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME))
         dev_exts.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 
-    float priority = 1.0f;
+    float                   priority = 1.0f;
     VkDeviceQueueCreateInfo queue_info{};
     queue_info.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_info.queueFamilyIndex = graphics_family;
@@ -275,7 +276,7 @@ TEST(MoltenVKPortability, HeadlessRenderSmoke)
     dev_info.ppEnabledExtensionNames = dev_exts.data();
 
     VkDevice device = VK_NULL_HANDLE;
-    result = vkCreateDevice(physical, &dev_info, nullptr, &device);
+    result          = vkCreateDevice(physical, &dev_info, nullptr, &device);
     ASSERT_EQ(result, VK_SUCCESS) << "Failed to create logical device";
 
     VkQueue queue = VK_NULL_HANDLE;
@@ -289,7 +290,7 @@ TEST(MoltenVKPortability, HeadlessRenderSmoke)
     pool_info.flags            = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
     VkCommandPool pool = VK_NULL_HANDLE;
-    result = vkCreateCommandPool(device, &pool_info, nullptr, &pool);
+    result             = vkCreateCommandPool(device, &pool_info, nullptr, &pool);
     ASSERT_EQ(result, VK_SUCCESS);
 
     VkCommandBufferAllocateInfo cmd_info{};
@@ -299,7 +300,7 @@ TEST(MoltenVKPortability, HeadlessRenderSmoke)
     cmd_info.commandBufferCount = 1;
 
     VkCommandBuffer cmd = VK_NULL_HANDLE;
-    result = vkAllocateCommandBuffers(device, &cmd_info, &cmd);
+    result              = vkAllocateCommandBuffers(device, &cmd_info, &cmd);
     ASSERT_EQ(result, VK_SUCCESS);
 
     // Begin/end a command buffer — verifies basic recording works.

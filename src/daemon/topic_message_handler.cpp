@@ -241,10 +241,10 @@ HandleResult handle_req_subscribe_topic(DaemonContext&      ctx,
         uint32_t              new_index = 0;
         ipc::StateDiffPayload diff;
         auto                  op = ctx.fig_model.add_series_with_diff(req->figure_id,
-                                                                      req->name,
-                                                                      type,
-                                                                      req->axes_index,
-                                                                      new_index);
+                                                     req->name,
+                                                     type,
+                                                     req->axes_index,
+                                                     new_index);
         diff.ops.push_back(std::move(op));
         diff.new_revision  = ctx.fig_model.revision();
         diff.base_revision = diff.new_revision > 0 ? diff.new_revision - 1 : 0;

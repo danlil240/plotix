@@ -79,7 +79,10 @@ void InputHandler::handle_mouse_button_annotate(int button, int action, double x
         }
     }
 #else
-    (void)button; (void)action; (void)x; (void)y;
+    (void)button;
+    (void)action;
+    (void)x;
+    (void)y;
 #endif
 }
 
@@ -93,7 +96,8 @@ void InputHandler::handle_mouse_move_annotate(double x, double y)
         data_interaction_->update_annotation_drag(x, y);
     }
 #else
-    (void)x; (void)y;
+    (void)x;
+    (void)y;
 #endif
 }
 

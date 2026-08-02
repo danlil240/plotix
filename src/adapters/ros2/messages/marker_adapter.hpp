@@ -109,14 +109,14 @@ inline std::optional<MarkerData> adapt_marker_message(const visualization_msgs::
                                                       const std::string&                     topic)
 {
     MarkerData data;
-    data.topic            = topic;
-    data.ns               = marker.ns;
-    data.id               = marker.id;
-    data.action           = marker.action;
-    data.primitive        = marker_primitive_from_ros_type(marker.type);
-    data.frame_id         = marker.header.frame_id;
-    data.stamp_ns         = static_cast<uint64_t>(marker.header.stamp.sec) * 1'000'000'000ULL
-                            + static_cast<uint64_t>(marker.header.stamp.nanosec);
+    data.topic     = topic;
+    data.ns        = marker.ns;
+    data.id        = marker.id;
+    data.action    = marker.action;
+    data.primitive = marker_primitive_from_ros_type(marker.type);
+    data.frame_id  = marker.header.frame_id;
+    data.stamp_ns  = static_cast<uint64_t>(marker.header.stamp.sec) * 1'000'000'000ULL
+                    + static_cast<uint64_t>(marker.header.stamp.nanosec);
     data.lifetime_ns      = marker_duration_to_ns(marker.lifetime);
     data.frame_locked     = marker.frame_locked;
     data.pose.translation = {

@@ -15,7 +15,7 @@ namespace spectra
 class PluginManager;
 class PluginUIRegistry;
 class DialogService;
-}
+}   // namespace spectra
 
 namespace spectra::adapters::qt
 {
@@ -40,8 +40,8 @@ class QtPluginsWidget : public QDockWidget
     void on_scan_default();
 
    private:
-    PluginManager*   mgr_     = nullptr;
-    PluginUIRegistry* ui_reg_ = nullptr;
+    PluginManager*           mgr_     = nullptr;
+    PluginUIRegistry*        ui_reg_  = nullptr;
     DialogService*           dialogs_ = nullptr;
     std::vector<std::string> scan_dirs_;
     std::string              status_;

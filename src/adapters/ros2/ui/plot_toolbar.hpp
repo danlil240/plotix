@@ -22,15 +22,15 @@ struct PlotToolbarActions
 {
     std::function<void(float)> set_time_window;
     std::function<void(bool)>  set_live;
-    std::function<void()>       autofit;
-    std::function<void()>       clear_plot;
-    std::function<void()>       add_subplot;
-    std::function<void()>       remove_subplot;
-    std::function<void(bool)>   set_x_links;
-    std::function<void()>       export_screenshot;
-    std::function<void()>       export_video;
-    std::function<void(bool)>   set_pruning;
-    std::function<void(float)>  set_prune_buffer;
+    std::function<void()>      autofit;
+    std::function<void()>      clear_plot;
+    std::function<void()>      add_subplot;
+    std::function<void()>      remove_subplot;
+    std::function<void(bool)>  set_x_links;
+    std::function<void()>      export_screenshot;
+    std::function<void()>      export_video;
+    std::function<void(bool)>  set_pruning;
+    std::function<void(float)> set_prune_buffer;
 };
 
 // Draw the plot-area toolbar strip. Returns the height consumed (for layout).

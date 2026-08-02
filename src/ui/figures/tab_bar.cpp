@@ -289,11 +289,10 @@ void TabBar::draw_tabs(const Rect& bounds, bool menus_open)
 
         bool is_active_styled = is_active && !menus_open;
 
-        float gap = 3.0f;
-        float selected_lift = is_active_styled ? SELECTED_HEIGHT_EXTRA : 0.0f;
+        float  gap           = 3.0f;
+        float  selected_lift = is_active_styled ? SELECTED_HEIGHT_EXTRA : 0.0f;
         ImVec2 tl(layout.bounds.x + gap, layout.bounds.y + 3 - selected_lift);
-        ImVec2 br(layout.bounds.x + layout.bounds.w - gap,
-                  layout.bounds.y + layout.bounds.h - 1);
+        ImVec2 br(layout.bounds.x + layout.bounds.w - gap, layout.bounds.y + layout.bounds.h - 1);
 
         // Tab background: shared shell control surface language.
         ui::Color bg = ui::control_surface_color(colors, is_active_styled, is_hovered);
@@ -333,7 +332,7 @@ void TabBar::draw_tabs(const Rect& bounds, bool menus_open)
                 1.0f);
 
             // Selected underline accent — centered, pill-ended.
-            const float underline_w = std::max(0.0f, br.x - tl.x - TAB_PADDING * 1.4f);
+            const float underline_w  = std::max(0.0f, br.x - tl.x - TAB_PADDING * 1.4f);
             const float underline_x0 = tl.x + (br.x - tl.x - underline_w) * 0.5f;
             draw_list->AddRectFilled(ImVec2(underline_x0, br.y - UNDERLINE_HEIGHT + 1.0f),
                                      ImVec2(underline_x0 + underline_w, br.y + 1.0f),
@@ -357,7 +356,7 @@ void TabBar::draw_tabs(const Rect& bounds, bool menus_open)
                         - (tab.can_close ? (CLOSE_BUTTON_SIZE + CLOSE_PAD_RIGHT) : 0.0f);
         ImVec2 text_pos(title_x, tl.y + (br.y - tl.y - text_size.y) * 0.5f + 0.5f);
 
-        ui::Color text_col = ui::control_text_color(colors, is_active_styled, is_hovered);
+        ui::Color text_col   = ui::control_text_color(colors, is_active_styled, is_hovered);
         float     text_alpha = is_active_styled ? 1.0f : (is_hovered ? 0.95f : 0.82f);
         draw_list->PushClipRect(ImVec2(title_x - 2, tl.y),
                                 ImVec2(title_x + title_w + 2, br.y),
@@ -372,8 +371,9 @@ void TabBar::draw_tabs(const Rect& bounds, bool menus_open)
             ImU32 close_color =
                 close_hovered ? to_imcol(colors.error) : to_imcol(colors.text_secondary, 0.72f);
 
-            ImVec2 close_center(tl.x + layout.bounds.w - TAB_PADDING * 0.55f - CLOSE_BUTTON_SIZE * 0.5f,
-                                tl.y + (br.y - tl.y) * 0.5f + 0.5f);
+            ImVec2 close_center(
+                tl.x + layout.bounds.w - TAB_PADDING * 0.55f - CLOSE_BUTTON_SIZE * 0.5f,
+                tl.y + (br.y - tl.y) * 0.5f + 0.5f);
 
             // Close button hover background
             if (close_hovered)
@@ -487,23 +487,22 @@ std::vector<TabBar::TabLayout> TabBar::compute_tab_layouts(const Rect& bounds) c
         float  text_w    = text_size.x;
 #else
         // Fallback: estimate text width without ImGui
-        float  text_w    = static_cast<float>(tab.title.size()) * 8.0f;
+        float text_w = static_cast<float>(tab.title.size()) * 8.0f;
 #endif
-        float  tab_width = std::clamp(text_w + TAB_PADDING * 2
-                                          + (tab.can_close ? CLOSE_BUTTON_SIZE + CLOSE_PAD_RIGHT : 0),
-                                      TAB_MIN_WIDTH,
-                                      TAB_MAX_WIDTH);
+        float tab_width = std::clamp(
+            text_w + TAB_PADDING * 2 + (tab.can_close ? CLOSE_BUTTON_SIZE + CLOSE_PAD_RIGHT : 0),
+            TAB_MIN_WIDTH,
+            TAB_MAX_WIDTH);
 
         layout.bounds = Rect{current_x, bounds.y, tab_width, TAB_HEIGHT};
 
         // Close button bounds (right side of tab)
         if (tab.can_close)
         {
-            layout.close_bounds =
-                Rect{current_x + tab_width - CLOSE_BUTTON_SIZE - CLOSE_PAD_RIGHT,
-                     bounds.y + (TAB_HEIGHT - CLOSE_BUTTON_SIZE) * 0.5f,
-                     CLOSE_BUTTON_SIZE,
-                     CLOSE_BUTTON_SIZE};
+            layout.close_bounds = Rect{current_x + tab_width - CLOSE_BUTTON_SIZE - CLOSE_PAD_RIGHT,
+                                       bounds.y + (TAB_HEIGHT - CLOSE_BUTTON_SIZE) * 0.5f,
+                                       CLOSE_BUTTON_SIZE,
+                                       CLOSE_BUTTON_SIZE};
         }
         else
         {
@@ -563,7 +562,7 @@ size_t TabBar::get_close_button_at_position(const ImVec2&                 pos,
     }
     return SIZE_MAX;
 }
-#endif // SPECTRA_USE_IMGUI
+#endif   // SPECTRA_USE_IMGUI
 
 void TabBar::start_drag(size_t tab_index, float mouse_x)
 {
@@ -696,12 +695,12 @@ bool TabBar::needs_scroll_buttons(const Rect& bounds) const
         ImVec2 text_size = ImGui::CalcTextSize(tab.title.c_str());
         float  text_w    = text_size.x;
 #else
-        float  text_w    = static_cast<float>(tab.title.size()) * 8.0f;
+        float text_w = static_cast<float>(tab.title.size()) * 8.0f;
 #endif
-        float  tab_width = std::clamp(text_w + TAB_PADDING * 2
-                                          + (tab.can_close ? CLOSE_BUTTON_SIZE + CLOSE_PAD_RIGHT : 0),
-                                      TAB_MIN_WIDTH,
-                                      TAB_MAX_WIDTH);
+        float tab_width = std::clamp(
+            text_w + TAB_PADDING * 2 + (tab.can_close ? CLOSE_BUTTON_SIZE + CLOSE_PAD_RIGHT : 0),
+            TAB_MIN_WIDTH,
+            TAB_MAX_WIDTH);
         total_width += tab_width;
     }
 
@@ -998,10 +997,10 @@ void TabBar::scroll_to_tab(size_t index)
     for (size_t i = 0; i < index; ++i)
     {
         ImVec2 ts = ImGui::CalcTextSize(tabs_[i].title.c_str());
-        float tw = std::clamp(ts.x + TAB_PADDING * 2
-                                  + (tabs_[i].can_close ? CLOSE_BUTTON_SIZE + CLOSE_PAD_RIGHT : 0),
-                              TAB_MIN_WIDTH,
-                              TAB_MAX_WIDTH);
+        float  tw = std::clamp(
+            ts.x + TAB_PADDING * 2 + (tabs_[i].can_close ? CLOSE_BUTTON_SIZE + CLOSE_PAD_RIGHT : 0),
+            TAB_MIN_WIDTH,
+            TAB_MAX_WIDTH);
         x += tw;
     }
     // Adjust scroll so the tab is visible

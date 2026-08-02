@@ -615,10 +615,8 @@ void DiagnosticsPanel::draw_summary_bar()
         const ImVec4 col{r * alpha, g * alpha, bl * alpha, 1.0f};
         const ImVec4 col_hov{r, g, bl, 1.0f};
 
-        const std::string buf = std::format("{}: {}##badge{}",
-                                            level_short(b.lvl),
-                                            b.count,
-                                            static_cast<int>(b.lvl));
+        const std::string buf =
+            std::format("{}: {}##badge{}", level_short(b.lvl), b.count, static_cast<int>(b.lvl));
 
         ImGui::PushStyleColor(ImGuiCol_Button, col);
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, col_hov);
@@ -754,9 +752,9 @@ void DiagnosticsPanel::draw_component_row(DiagComponent& comp)
         if (comp.level == DiagLevel::Stale && since_s > 0.5)
         {
             // Show "STALE (Xs)" badge in muted orange before the message.
-            const std::string stale_buf =
-                since_s < 60.0 ? std::format("STALE ({:.0f}s)", since_s)
-                               : std::format("STALE ({:.0f}min)", since_s / 60.0);
+            const std::string stale_buf = since_s < 60.0
+                                              ? std::format("STALE ({:.0f}s)", since_s)
+                                              : std::format("STALE ({:.0f}min)", since_s / 60.0);
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.55f, 0.15f, 1.0f));
             ImGui::TextUnformatted(stale_buf.c_str());
             ImGui::PopStyleColor();

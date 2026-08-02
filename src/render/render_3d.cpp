@@ -57,8 +57,8 @@ void Renderer::render_bounding_box(Axes3D& axes, const Rect& /*viewport*/)
     // Check if limits changed — skip regeneration if cached
     auto& bc             = gpu.bbox_cache;
     bool  limits_changed = !bc.valid || bc.xmin != xlim.min || bc.xmax != xlim.max
-                           || bc.ymin != ylim.min || bc.ymax != ylim.max || bc.zmin != zlim.min
-                           || bc.zmax != zlim.max;
+                          || bc.ymin != ylim.min || bc.ymax != ylim.max || bc.zmin != zlim.min
+                          || bc.zmax != zlim.max;
 
     if (limits_changed)
     {
@@ -131,8 +131,8 @@ void Renderer::render_tick_marks(Axes3D& axes, const Rect& /*viewport*/)
     // Check if limits changed — skip regeneration if cached
     auto& tc             = gpu.tick_cache;
     bool  limits_changed = !tc.valid || tc.xmin != xlim.min || tc.xmax != xlim.max
-                           || tc.ymin != ylim.min || tc.ymax != ylim.max || tc.zmin != zlim.min
-                           || tc.zmax != zlim.max;
+                          || tc.ymin != ylim.min || tc.ymax != ylim.max || tc.zmin != zlim.min
+                          || tc.zmax != zlim.max;
 
     if (limits_changed)
     {
@@ -220,9 +220,9 @@ void Renderer::render_tick_marks(Axes3D& axes, const Rect& /*viewport*/)
     SeriesPushConstants pc{};
     const auto&         theme_colors = theme_mgr_.colors();
     ui::Color           tick_color(theme_colors.grid_major.r * 0.8f,
-                                   theme_colors.grid_major.g * 0.8f,
-                                   theme_colors.grid_major.b * 0.8f,
-                                   theme_colors.grid_major.a);
+                         theme_colors.grid_major.g * 0.8f,
+                         theme_colors.grid_major.b * 0.8f,
+                         theme_colors.grid_major.a);
     set_pc_color_3d(pc.color, tick_color, theme_mgr_);
     pc.line_width    = 1.5f;
     pc.data_offset_x = 0.0f;
@@ -546,10 +546,9 @@ void Renderer::render_arrows(Axes3D& axes, const Rect& /*viewport*/)
         uint32_t num_arrows = total_floats / FLOATS_PER_ARROW;
         for (uint32_t i = 0; i < num_arrows && i < 3; ++i)
         {
-            const bool is_hovered =
-                (i == 0 && hover == Axes3D::AxisArrowHover::X)
-                || (i == 1 && hover == Axes3D::AxisArrowHover::Y)
-                || (i == 2 && hover == Axes3D::AxisArrowHover::Z);
+            const bool is_hovered = (i == 0 && hover == Axes3D::AxisArrowHover::X)
+                                    || (i == 1 && hover == Axes3D::AxisArrowHover::Y)
+                                    || (i == 2 && hover == Axes3D::AxisArrowHover::Z);
             const float brighten = is_hovered ? kHoverBrighten : 1.0f;
 
             SeriesPushConstants pc{};

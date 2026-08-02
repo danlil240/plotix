@@ -16,11 +16,11 @@
 #include "anim/frame_scheduler.hpp"
 
 #ifdef SPECTRA_USE_IMGUI
-#include "ui/commands/command_palette.hpp"
+    #include "ui/commands/command_palette.hpp"
 #endif
 
 #ifndef _WIN32
-#include "app/inproc_topic_server.hpp"
+    #include "app/inproc_topic_server.hpp"
 #endif
 
 #include <spectra/animator.hpp>
@@ -52,19 +52,19 @@ void ApplicationServices::init(FigureRegistry&   registry,
     theme_mgr_ = &theme_mgr;
 
     // Core registries (framework-neutral)
-    cmd_registry_         = std::make_unique<CommandRegistry>();
-    shortcut_mgr_         = std::make_unique<ShortcutManager>();
-    undo_mgr_             = std::make_unique<UndoManager>();
+    cmd_registry_ = std::make_unique<CommandRegistry>();
+    shortcut_mgr_ = std::make_unique<ShortcutManager>();
+    undo_mgr_     = std::make_unique<UndoManager>();
 
     // Plugin and data registries
-    plugin_mgr_           = std::make_unique<PluginManager>();
-    plugin_ui_registry_   = std::make_unique<PluginUIRegistry>();
+    plugin_mgr_             = std::make_unique<PluginManager>();
+    plugin_ui_registry_     = std::make_unique<PluginUIRegistry>();
     export_format_registry_ = std::make_unique<ExportFormatRegistry>();
-    data_source_registry_ = std::make_unique<DataSourceRegistry>();
-    series_type_registry_ = std::make_unique<SeriesTypeRegistry>();
+    data_source_registry_   = std::make_unique<DataSourceRegistry>();
+    series_type_registry_   = std::make_unique<SeriesTypeRegistry>();
 
     // Settings
-    settings_store_       = std::make_unique<ui::settings::SettingsStore>();
+    settings_store_ = std::make_unique<ui::settings::SettingsStore>();
     settings_store_->load();
     settings_store_->apply_to(theme_mgr);
     {
@@ -73,12 +73,12 @@ void ApplicationServices::init(FigureRegistry&   registry,
     }
 
     // Frame infrastructure
-    cmd_queue_            = std::make_unique<CommandQueue>();
-    scheduler_            = std::make_unique<FrameScheduler>(fps);
-    animator_             = std::make_unique<Animator>();
+    cmd_queue_ = std::make_unique<CommandQueue>();
+    scheduler_ = std::make_unique<FrameScheduler>(fps);
+    animator_  = std::make_unique<Animator>();
 
     // Session (ties backend + renderer + registry together)
-    session_              = std::make_unique<SessionRuntime>(backend, renderer, registry);
+    session_ = std::make_unique<SessionRuntime>(backend, renderer, registry);
 
     shortcut_mgr_->set_command_registry(cmd_registry_.get());
 
@@ -162,7 +162,7 @@ bool ApplicationServices::start_automation(const std::string& socket_path,
                                            uint16_t           mcp_port)
 {
     if (auto_server_)
-        return true;  // already running
+        return true;   // already running
 
     std::string sock = socket_path;
     if (sock.empty())

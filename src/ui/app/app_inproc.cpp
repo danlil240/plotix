@@ -59,16 +59,13 @@ void App::render_secondary_window(WindowContext* wctx)
 
     if (wctx->needs_resize && wctx->pending_width > 0 && wctx->pending_height > 0)
     {
-        const uint32_t cur_w = wctx->swapchain.extent.width;
-        const uint32_t cur_h = wctx->swapchain.extent.height;
-        const bool     size_differs =
-            wctx->pending_width != cur_w || wctx->pending_height != cur_h;
-        const bool urgent =
-            wctx->swapchain_invalidated || wctx->swapchain_dirty;
+        const uint32_t cur_w        = wctx->swapchain.extent.width;
+        const uint32_t cur_h        = wctx->swapchain.extent.height;
+        const bool     size_differs = wctx->pending_width != cur_w || wctx->pending_height != cur_h;
+        const bool     urgent       = wctx->swapchain_invalidated || wctx->swapchain_dirty;
         static constexpr auto kThrottle = std::chrono::milliseconds(16);
         const auto            now       = std::chrono::steady_clock::now();
-        if (size_differs
-            && (urgent || (now - wctx->last_swapchain_recreate_time) >= kThrottle))
+        if (size_differs && (urgent || (now - wctx->last_swapchain_recreate_time) >= kThrottle))
         {
             wctx->last_swapchain_recreate_time = now;
             vk->recreate_swapchain_for_with_imgui(*wctx, wctx->pending_width, wctx->pending_height);

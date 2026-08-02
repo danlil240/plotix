@@ -12,28 +12,29 @@ namespace spectra::adapters::qt
 class SpectraStatusChip : public QWidget
 {
     Q_OBJECT
-public:
+   public:
     enum class Type
     {
         Normal,
-        Accent,      // cyan accent
-        Success,     // green (FPS)
+        Accent,    // cyan accent
+        Success,   // green (FPS)
         Warning,
     };
 
-    explicit SpectraStatusChip(const QString& text, Type type = Type::Normal,
-                               QWidget* parent = nullptr);
+    explicit SpectraStatusChip(const QString& text,
+                               Type           type   = Type::Normal,
+                               QWidget*       parent = nullptr);
 
-    void set_text(const QString& text);
+    void           set_text(const QString& text);
     const QString& text() const { return text_; }
-    void set_type(Type type);
+    void           set_type(Type type);
 
     QSize sizeHint() const override;
 
-protected:
+   protected:
     void paintEvent(QPaintEvent* event) override;
 
-private:
+   private:
     QString text_;
     Type    type_ = Type::Normal;
 };

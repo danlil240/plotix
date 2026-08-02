@@ -43,19 +43,13 @@ std::vector<CommandDescriptor> make_animation_commands(CommandContext& ctx)
     cmds.push_back(
         {"anim.stop", "Stop Playback", "", "Animation", 0, [&]() { timeline_editor.stop(); }});
 
-    cmds.push_back({"anim.go_to_start",
-                    "Go to Start",
-                    "",
-                    "Animation",
-                    0,
-                    [&]() { timeline_editor.set_playhead(0.0f); }});
+    cmds.push_back({"anim.go_to_start", "Go to Start", "", "Animation", 0, [&]() {
+                        timeline_editor.set_playhead(0.0f);
+                    }});
 
-    cmds.push_back({"anim.go_to_end",
-                    "Go to End",
-                    "",
-                    "Animation",
-                    0,
-                    [&]() { timeline_editor.set_playhead(timeline_editor.duration()); }});
+    cmds.push_back({"anim.go_to_end", "Go to End", "", "Animation", 0, [&]() {
+                        timeline_editor.set_playhead(timeline_editor.duration());
+                    }});
 #else
     (void)ctx;
 #endif

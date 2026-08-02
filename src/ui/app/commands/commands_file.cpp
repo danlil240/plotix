@@ -49,11 +49,11 @@ std::vector<CommandDescriptor> make_file_commands(CommandContext& ctx)
                             return;
                         const char* patterns[] = {"*.png"};
                         auto        path       = spectra::ask_export_path("Export PNG",
-                                                                          "spectra_export.png",
-                                                                          1,
-                                                                          patterns,
-                                                                          "PNG Image",
-                                                                          ui_ctx.last_export_dir);
+                                                             "spectra_export.png",
+                                                             1,
+                                                             patterns,
+                                                             "PNG Image",
+                                                             ui_ctx.last_export_dir);
                         if (!path)
                             return;
                         active_figure->save_png(*path);
@@ -70,11 +70,11 @@ std::vector<CommandDescriptor> make_file_commands(CommandContext& ctx)
                             return;
                         const char* patterns[] = {"*.svg"};
                         auto        path       = spectra::ask_export_path("Export SVG",
-                                                                          "spectra_export.svg",
-                                                                          1,
-                                                                          patterns,
-                                                                          "SVG Image",
-                                                                          ui_ctx.last_export_dir);
+                                                             "spectra_export.svg",
+                                                             1,
+                                                             patterns,
+                                                             "SVG Image",
+                                                             ui_ctx.last_export_dir);
                         if (!path)
                             return;
                         active_figure->save_svg(*path);

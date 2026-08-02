@@ -122,8 +122,8 @@ struct WorkspaceData
     // v3: Data transform pipeline presets per-axes
     struct TransformState
     {
-        FigureId figure_index = 0;
-        size_t   axes_index   = 0;
+        FigureId    figure_index = 0;
+        size_t      axes_index   = 0;
         size_t      series_index = 0;
         bool        all_visible  = false;
         bool        axes_only    = false;
@@ -131,9 +131,9 @@ struct WorkspaceData
         std::string name;
         struct Step
         {
-            int   type    = 0;      // DataTransform::Type enum value
-            float param   = 0.0f;   // Scale/offset/clamp parameter
-            bool  enabled = true;
+            int         type    = 0;      // DataTransform::Type enum value
+            float       param   = 0.0f;   // Scale/offset/clamp parameter
+            bool        enabled = true;
             std::string name;
             std::string source;
             int         params_version  = 0;

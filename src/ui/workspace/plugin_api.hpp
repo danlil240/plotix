@@ -81,7 +81,7 @@ extern "C"
         void*                     backend_handle;         // opaque Backend* for C ABI wrappers
 
         // Added in API v2.1
-        SpectraPluginUIRegistry   plugin_ui_registry;     // nullptr for v2.0 plugins
+        SpectraPluginUIRegistry plugin_ui_registry;   // nullptr for v2.0 plugins
     };
 
     // Plugin info returned by plugin_init.
@@ -543,31 +543,31 @@ extern "C"
         SpectraPluginUIElementType type;
 
         // Property fields (used when type == SPECTRA_UI_ELEM_PROPERTY)
-        const char* prop_id;            // unique within schema
-        const char* prop_label;
+        const char*                 prop_id;   // unique within schema
+        const char*                 prop_label;
         SpectraPluginUIPropertyType prop_type;
-        const char* prop_value;         // current value as string
-        const char* prop_min;           // optional, may be NULL
-        const char* prop_max;           // optional, may be NULL
-        const char* prop_default;       // optional, may be NULL
-        const char* const* enum_options; // array of strings, NULL-terminated if enum
-        uint32_t    enum_count;
-        int         prop_read_only;     // bool as int
-        const char* prop_tooltip;       // optional, may be NULL
+        const char*                 prop_value;     // current value as string
+        const char*                 prop_min;       // optional, may be NULL
+        const char*                 prop_max;       // optional, may be NULL
+        const char*                 prop_default;   // optional, may be NULL
+        const char* const*          enum_options;   // array of strings, NULL-terminated if enum
+        uint32_t                    enum_count;
+        int                         prop_read_only;   // bool as int
+        const char*                 prop_tooltip;     // optional, may be NULL
 
         // Action fields (used when type == SPECTRA_UI_ELEM_ACTION)
         const char* action_id;
         const char* action_label;
-        const char* action_tooltip;     // optional, may be NULL
-        int         action_enabled;     // bool as int
+        const char* action_tooltip;   // optional, may be NULL
+        int         action_enabled;   // bool as int
 
         // Label fields (used when type == SPECTRA_UI_ELEM_LABEL)
         const char* label_text;
-        const char* label_style;        // optional, may be NULL
+        const char* label_style;   // optional, may be NULL
 
         // Group fields (used when type == SPECTRA_UI_ELEM_GROUP)
         const char* group_title;
-        int         group_collapsed;    // bool as int
+        int         group_collapsed;   // bool as int
     } SpectraPluginUIElementDesc;
 
     // Schema descriptor passed to spectra_register_plugin_ui.
@@ -580,25 +580,25 @@ extern "C"
     } SpectraPluginUISchemaDesc;
 
     // Callback signatures for plugin UI interaction.
-    typedef const char* (*SpectraPluginUIPropertyChangedFn)(
-        const char* schema_id, const char* property_id,
-        const char* new_value, void* user_data);
-    typedef void (*SpectraPluginUIActionTriggeredFn)(
-        const char* schema_id, const char* action_id, void* user_data);
+    typedef const char* (*SpectraPluginUIPropertyChangedFn)(const char* schema_id,
+                                                            const char* property_id,
+                                                            const char* new_value,
+                                                            void*       user_data);
+    typedef void (*SpectraPluginUIActionTriggeredFn)(const char* schema_id,
+                                                     const char* action_id,
+                                                     void*       user_data);
 
     // Register a plugin UI schema.  Returns a schema ID string (owned by the
     // registry, valid until the schema is unregistered or the registry is
     // destroyed).  Returns NULL on failure.
-    const char* spectra_register_plugin_ui(
-        SpectraPluginUIRegistry              registry,
-        const SpectraPluginUISchemaDesc*     schema,
-        SpectraPluginUIPropertyChangedFn     on_changed,
-        SpectraPluginUIActionTriggeredFn     on_action,
-        void*                                user_data);
+    const char* spectra_register_plugin_ui(SpectraPluginUIRegistry          registry,
+                                           const SpectraPluginUISchemaDesc* schema,
+                                           SpectraPluginUIPropertyChangedFn on_changed,
+                                           SpectraPluginUIActionTriggeredFn on_action,
+                                           void*                            user_data);
 
     // Unregister a plugin UI schema by plugin name.
-    void spectra_unregister_plugin_ui(
-        SpectraPluginUIRegistry registry, const char* plugin_name);
+    void spectra_unregister_plugin_ui(SpectraPluginUIRegistry registry, const char* plugin_name);
 
 }   // extern "C"
 
@@ -618,7 +618,7 @@ struct PluginEntry
     uint32_t          api_version_minor  = 0;   // API minor version the plugin was built against
     void*             handle             = nullptr;   // dlopen/LoadLibrary handle
     SpectraPluginShutdownFn  shutdown_fn = nullptr;
-    std::vector<std::string> registered_commands;   // Commands registered by this plugin
+    std::vector<std::string> registered_commands;     // Commands registered by this plugin
     std::vector<std::string> registered_transforms;   // Transforms registered by this plugin
     PluginManifest manifest;   // Parsed plugin.json manifest (may be empty if no manifest)
 };

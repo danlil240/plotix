@@ -12,13 +12,13 @@ namespace spectra::ui::shell
 {
 struct MenuAction
 {
-    std::string             label         {};
-    std::string             shortcut      {};
-    std::function<void()>   on_click      {};
-    std::function<bool()>   enabled       {};
-    std::function<bool()>   checked       {};
-    bool                    separator     = false;
-    std::vector<MenuAction> submenu       {};
+    std::string             label{};
+    std::string             shortcut{};
+    std::function<void()>   on_click{};
+    std::function<bool()>   enabled{};
+    std::function<bool()>   checked{};
+    bool                    separator = false;
+    std::vector<MenuAction> submenu{};
 };
 
 class Menu
@@ -69,8 +69,8 @@ class MenuBar
     void draw();
 
    private:
-    std::deque<Menu>        menus_;
-    std::function<void()>   trailing_draw_;
+    std::deque<Menu>      menus_;
+    std::function<void()> trailing_draw_;
 };
 
 // Shared converter for Vision command-bar menu rendering.

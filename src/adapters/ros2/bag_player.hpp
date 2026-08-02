@@ -373,10 +373,10 @@ class BagPlayer
     SubplotManager* subplot_mgr_{nullptr};
 
     // Callbacks.
-    StateCallback    on_state_change_;
-    PlayheadCallback    on_playhead_;
-    MessageCallback     on_message_;
-    RawMessageCallback  on_raw_message_;
+    StateCallback      on_state_change_;
+    PlayheadCallback   on_playhead_;
+    MessageCallback    on_message_;
+    RawMessageCallback on_raw_message_;
 
     // Topic filter applied to the reader.
     std::vector<std::string> topic_filter_;

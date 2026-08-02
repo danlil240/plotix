@@ -124,14 +124,14 @@ static void write_float64_bag(const std::string& bag_path,
 
     for (int i = 0; i < n_messages; ++i)
     {
-        auto msg                     = std::make_shared<rosbag2_storage::SerializedBagMessage>();
-        msg->topic_name              = topic;
-        bag_compat::set_bag_message_timestamp(
-            *msg, start_ts_ns + static_cast<int64_t>(i) * step_ns);
-        const double val             = value_start + static_cast<double>(i) * value_step;
-        const auto   cdr             = make_float64_cdr(val);
-        msg->serialized_data         = std::make_shared<rcutils_uint8_array_t>();
-        msg->serialized_data->buffer = new uint8_t[cdr.size()];
+        auto msg        = std::make_shared<rosbag2_storage::SerializedBagMessage>();
+        msg->topic_name = topic;
+        bag_compat::set_bag_message_timestamp(*msg,
+                                              start_ts_ns + static_cast<int64_t>(i) * step_ns);
+        const double val                      = value_start + static_cast<double>(i) * value_step;
+        const auto   cdr                      = make_float64_cdr(val);
+        msg->serialized_data                  = std::make_shared<rcutils_uint8_array_t>();
+        msg->serialized_data->buffer          = new uint8_t[cdr.size()];
         msg->serialized_data->buffer_length   = cdr.size();
         msg->serialized_data->buffer_capacity = cdr.size();
         msg->serialized_data->allocator       = rcutils_get_default_allocator();
@@ -169,24 +169,24 @@ static void write_two_topic_bag(const std::string& bag_path,
     {
         const int64_t ts = start_ts_ns + static_cast<int64_t>(i) * step_ns;
 
-        auto m1                     = std::make_shared<rosbag2_storage::SerializedBagMessage>();
-        m1->topic_name              = "/topic_a";
+        auto m1        = std::make_shared<rosbag2_storage::SerializedBagMessage>();
+        m1->topic_name = "/topic_a";
         bag_compat::set_bag_message_timestamp(*m1, ts);
-        const auto cdr1             = make_float64_cdr(static_cast<double>(i));
-        m1->serialized_data         = std::make_shared<rcutils_uint8_array_t>();
-        m1->serialized_data->buffer = new uint8_t[cdr1.size()];
+        const auto cdr1                      = make_float64_cdr(static_cast<double>(i));
+        m1->serialized_data                  = std::make_shared<rcutils_uint8_array_t>();
+        m1->serialized_data->buffer          = new uint8_t[cdr1.size()];
         m1->serialized_data->buffer_length   = cdr1.size();
         m1->serialized_data->buffer_capacity = cdr1.size();
         m1->serialized_data->allocator       = rcutils_get_default_allocator();
         std::memcpy(m1->serialized_data->buffer, cdr1.data(), cdr1.size());
         writer.write(m1);
 
-        auto m2                     = std::make_shared<rosbag2_storage::SerializedBagMessage>();
-        m2->topic_name              = "/topic_b";
+        auto m2        = std::make_shared<rosbag2_storage::SerializedBagMessage>();
+        m2->topic_name = "/topic_b";
         bag_compat::set_bag_message_timestamp(*m2, ts + step_ns / 2);   // interleaved
-        const auto cdr2             = make_float64_cdr(static_cast<double>(i) * 2.0);
-        m2->serialized_data         = std::make_shared<rcutils_uint8_array_t>();
-        m2->serialized_data->buffer = new uint8_t[cdr2.size()];
+        const auto cdr2                      = make_float64_cdr(static_cast<double>(i) * 2.0);
+        m2->serialized_data                  = std::make_shared<rcutils_uint8_array_t>();
+        m2->serialized_data->buffer          = new uint8_t[cdr2.size()];
         m2->serialized_data->buffer_length   = cdr2.size();
         m2->serialized_data->buffer_capacity = cdr2.size();
         m2->serialized_data->allocator       = rcutils_get_default_allocator();

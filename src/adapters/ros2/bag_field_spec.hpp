@@ -20,7 +20,7 @@ struct BagFieldSpec
 bool parse_bag_field_spec(const std::string& token, BagFieldSpec& out);
 
 // Resolve topic prefix against known bag topics (longest match wins).
-bool resolve_bag_field_spec(const std::string&  token,
+bool resolve_bag_field_spec(const std::string&              token,
                             const std::vector<std::string>& bag_topics,
                             BagFieldSpec&                   out);
 

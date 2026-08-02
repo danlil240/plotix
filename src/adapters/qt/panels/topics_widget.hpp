@@ -43,10 +43,10 @@ class QtTopicsWidget : public QDockWidget
    private:
     DataSourceRegistry* data_sources_ = nullptr;
 
-    QListWidget*   sources_list_   = nullptr;
-    QPushButton*   start_button_   = nullptr;
-    QPushButton*   stop_button_    = nullptr;
-    QLabel*        status_label_   = nullptr;
+    QListWidget* sources_list_ = nullptr;
+    QPushButton* start_button_ = nullptr;
+    QPushButton* stop_button_  = nullptr;
+    QLabel*      status_label_ = nullptr;
 };
 
 }   // namespace spectra::adapters::qt

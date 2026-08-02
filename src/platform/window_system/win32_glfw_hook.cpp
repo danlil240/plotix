@@ -23,12 +23,8 @@ constexpr UINT_PTR kSubclassId = 1;
 
 std::unordered_map<HWND, bool> g_size_move;
 
-LRESULT CALLBACK win32_subclass_proc(HWND hwnd,
-                                     UINT   msg,
-                                     WPARAM wparam,
-                                     LPARAM lparam,
-                                     UINT_PTR,
-                                     DWORD_PTR ref_data)
+LRESULT CALLBACK
+win32_subclass_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam, UINT_PTR, DWORD_PTR ref_data)
 {
     auto* mgr = reinterpret_cast<WindowManager*>(ref_data);
 

@@ -267,13 +267,13 @@ void GenericSubscriber::on_message(sub_compat::SerializedMessageCallbackArg seri
     const rosidl_message_type_support_t*      cpp_ts = nullptr;
     try
     {
-        intro_lib = rclcpp::get_typesupport_library(type_name_,
-                                                    "rosidl_typesupport_introspection_cpp");
-        intro_ts  = rclcpp::get_typesupport_handle(type_name_,
+        intro_lib =
+            rclcpp::get_typesupport_library(type_name_, "rosidl_typesupport_introspection_cpp");
+        intro_ts = rclcpp::get_typesupport_handle(type_name_,
                                                   "rosidl_typesupport_introspection_cpp",
                                                   *intro_lib);
-        cpp_lib   = rclcpp::get_typesupport_library(type_name_, "rosidl_typesupport_cpp");
-        cpp_ts    = rclcpp::get_typesupport_handle(type_name_, "rosidl_typesupport_cpp", *cpp_lib);
+        cpp_lib  = rclcpp::get_typesupport_library(type_name_, "rosidl_typesupport_cpp");
+        cpp_ts   = rclcpp::get_typesupport_handle(type_name_, "rosidl_typesupport_cpp", *cpp_lib);
     }
     catch (const std::exception&)
     {

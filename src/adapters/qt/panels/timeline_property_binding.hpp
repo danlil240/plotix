@@ -8,7 +8,7 @@ namespace spectra
 {
 class Figure;
 class TimelineEditor;
-}
+}   // namespace spectra
 
 namespace spectra::adapters::qt
 {

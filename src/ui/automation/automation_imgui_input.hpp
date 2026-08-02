@@ -21,9 +21,7 @@ struct ScopedImGuiContext
     ImGuiContext*    win;
 
     explicit ScopedImGuiContext(WindowUIContext* ctx)
-        : ui_ctx(ctx)
-        , prev(ImGui::GetCurrentContext())
-        , win(nullptr)
+        : ui_ctx(ctx), prev(ImGui::GetCurrentContext()), win(nullptr)
     {
         if (ui_ctx && ui_ctx->imgui_ui)
         {
@@ -39,10 +37,7 @@ struct ScopedImGuiContext
             ImGui::SetCurrentContext(prev);
     }
 
-    bool active() const
-    {
-        return win != nullptr;
-    }
+    bool active() const { return win != nullptr; }
 };
 
 inline void inject_mouse_click(WindowUIContext* ui_ctx, double x, double y, int btn)

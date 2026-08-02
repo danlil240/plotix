@@ -272,7 +272,7 @@ class RosLogViewer
     std::string             topic_{"/rosout"};
 
     // Subscription (executor thread owns create/destroy, protected by sub_mutex_).
-    mutable std::mutex                     sub_mutex_;
+    mutable std::mutex                                        sub_mutex_;
     rclcpp::Subscription<rcl_interfaces::msg::Log>::SharedPtr subscription_;
 
     // Circular ring buffer (protected by ring_mutex_).

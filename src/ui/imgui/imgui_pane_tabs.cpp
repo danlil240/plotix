@@ -200,7 +200,7 @@ void ImGuiIntegration::draw_pane_tab_headers()
 
             bool is_active_local = (li == pane->active_local_index());
             bool hovered         = (mouse.x >= draw_x && mouse.x < draw_x + tw && mouse.y >= hr.y
-                                    && mouse.y < hr.y + TAB_H);
+                            && mouse.y < hr.y + TAB_H);
             anim.target_opacity  = hovered ? 1.0f : (is_active_local ? 0.72f : 0.0f);
             anim.opacity += (anim.target_opacity - anim.opacity) * lerp_t;
 
@@ -331,7 +331,7 @@ void ImGuiIntegration::draw_pane_tab_headers()
             else if (tr.is_hovered)
             {
                 bg         = to_col(theme.bg_tertiary.lerp(theme.accent, 0.06f + hover_t * 0.06f),
-                                    0.72f + hover_t * 0.18f);
+                            0.72f + hover_t * 0.18f);
                 border_col = to_col(theme.border_subtle, 0.68f + hover_t * 0.14f);
             }
             else
@@ -485,9 +485,9 @@ void ImGuiIntegration::draw_pane_tab_headers()
 
         if (ph.show_add_button)
         {
-            const Rect& add_rect = ph.add_button_rect;
-            bool add_hovered     = (mouse.x >= add_rect.x && mouse.x < add_rect.x + add_rect.w
-                                    && mouse.y >= add_rect.y && mouse.y < add_rect.y + add_rect.h);
+            const Rect& add_rect    = ph.add_button_rect;
+            bool        add_hovered = (mouse.x >= add_rect.x && mouse.x < add_rect.x + add_rect.w
+                                && mouse.y >= add_rect.y && mouse.y < add_rect.y + add_rect.h);
 
             if (add_hovered)
                 pane_tab_hovered_ = true;
@@ -739,7 +739,7 @@ void ImGuiIntegration::draw_pane_tab_headers()
             // Check if mouse is outside the window → detach to new window
             ImVec2 display_size = ImGui::GetIO().DisplaySize;
             bool   outside      = (mouse.x < 0 || mouse.y < 0 || mouse.x >= display_size.x
-                                   || mouse.y >= display_size.y);
+                            || mouse.y >= display_size.y);
 
             if (outside && pane_tab_detach_cb_)
             {
@@ -869,9 +869,9 @@ void ImGuiIntegration::draw_pane_tab_headers()
                                                  0.7f));
                     float item_h  = ImGui::GetTextLineHeight() + 8.0f;
                     bool  clicked = ImGui::Selectable(label,
-                                                      false,
-                                                      ImGuiSelectableFlags_None,
-                                                      ImVec2(0, item_h));
+                                                     false,
+                                                     ImGuiSelectableFlags_None,
+                                                     ImVec2(0, item_h));
                     ImGui::PopStyleColor(3);
                     return clicked;
                 };
@@ -1061,9 +1061,9 @@ void ImGuiIntegration::draw_plot_overlays(Figure& figure)
         float cell_h = canvas.h / static_cast<float>(rows);
 
         ImU32 sep_col       = IM_COL32(static_cast<uint8_t>(colors.border_subtle.r * 255),
-                                       static_cast<uint8_t>(colors.border_subtle.g * 255),
-                                       static_cast<uint8_t>(colors.border_subtle.b * 255),
-                                       50);
+                                 static_cast<uint8_t>(colors.border_subtle.g * 255),
+                                 static_cast<uint8_t>(colors.border_subtle.b * 255),
+                                 50);
         float sep_thickness = 1.0f;
         float inset         = 12.0f;
 
@@ -1180,9 +1180,9 @@ void ImGuiIntegration::draw_plot_overlays(Figure& figure)
             ImVec2      rmax     = ImGui::GetItemRectMax();
             ImVec2      center   = ImVec2((rmin.x + rmax.x) * 0.5f, (rmin.y + rmax.y) * 0.5f);
             ImU32       icon_col = IM_COL32(static_cast<int>(colors.text_inverse.r * 255.0f),
-                                            static_cast<int>(colors.text_inverse.g * 255.0f),
-                                            static_cast<int>(colors.text_inverse.b * 255.0f),
-                                            255);
+                                      static_cast<int>(colors.text_inverse.g * 255.0f),
+                                      static_cast<int>(colors.text_inverse.b * 255.0f),
+                                      255);
 
             if (live_following)
             {

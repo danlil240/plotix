@@ -21,26 +21,22 @@ namespace spectra
 namespace
 {
 
-void queue_figure_detach(SessionRuntime&  session,
-                         FigureRegistry&  registry,
-                         FigureManager&   fig_mgr,
-                         FigureId         figure_id,
-                         float            screen_x,
-                         float            screen_y)
+void queue_figure_detach(SessionRuntime& session,
+                         FigureRegistry& registry,
+                         FigureManager&  fig_mgr,
+                         FigureId        figure_id,
+                         float           screen_x,
+                         float           screen_y)
 {
     Figure* fig = registry.get(figure_id);
     if (!fig)
         return;
 
-    const uint32_t win_w = fig->width() > 0 ? fig->width() : 800;
-    const uint32_t win_h = fig->height() > 0 ? fig->height() : 600;
+    const uint32_t    win_w = fig->width() > 0 ? fig->width() : 800;
+    const uint32_t    win_h = fig->height() > 0 ? fig->height() : 600;
     const std::string title = fig_mgr.get_title(figure_id);
-    session.queue_detach({figure_id,
-                          win_w,
-                          win_h,
-                          title,
-                          static_cast<int>(screen_x),
-                          static_cast<int>(screen_y)});
+    session.queue_detach(
+        {figure_id, win_w, win_h, title, static_cast<int>(screen_x), static_cast<int>(screen_y)});
 }
 
 void wire_timeline_from_figure(WindowUIContext& ui_ctx, Figure* figure, bool has_animation)
@@ -96,10 +92,10 @@ void wire_demo_animation_channels(WindowUIContext& ui_ctx, Figure& figure)
                 timeline_editor.add_animated_keyframe(ch_id, anim_dur, 1.0f, 5);
 
                 Series* raw = s.get();
-                keyframe_interpolator.bind_callback(
-                    ch_id,
-                    prefix + " Opacity",
-                    [raw](float v) { raw->opacity(std::clamp(v, 0.0f, 1.0f)); });
+                keyframe_interpolator.bind_callback(ch_id,
+                                                    prefix + " Opacity",
+                                                    [raw](float v)
+                                                    { raw->opacity(std::clamp(v, 0.0f, 1.0f)); });
             }
 
             if (auto* sc = dynamic_cast<ScatterSeries*>(s.get()))
@@ -111,10 +107,9 @@ void wire_demo_animation_channels(WindowUIContext& ui_ctx, Figure& figure)
                 timeline_editor.add_animated_keyframe(ch_id, anim_dur * 0.6f, base * 0.5f, 6);
                 timeline_editor.add_animated_keyframe(ch_id, anim_dur, base, 5);
 
-                keyframe_interpolator.bind_callback(
-                    ch_id,
-                    prefix + " Size",
-                    [sc](float v) { sc->size(std::max(v, 1.0f)); });
+                keyframe_interpolator.bind_callback(ch_id,
+                                                    prefix + " Size",
+                                                    [sc](float v) { sc->size(std::max(v, 1.0f)); });
             }
             else if (auto* ln = dynamic_cast<LineSeries*>(s.get()))
             {
@@ -125,10 +120,10 @@ void wire_demo_animation_channels(WindowUIContext& ui_ctx, Figure& figure)
                 timeline_editor.add_animated_keyframe(ch_id, anim_dur * 0.6f, base * 0.5f, 6);
                 timeline_editor.add_animated_keyframe(ch_id, anim_dur, base, 5);
 
-                keyframe_interpolator.bind_callback(
-                    ch_id,
-                    prefix + " Width",
-                    [ln](float v) { ln->width(std::max(v, 0.5f)); });
+                keyframe_interpolator.bind_callback(ch_id,
+                                                    prefix + " Width",
+                                                    [ln](float v)
+                                                    { ln->width(std::max(v, 0.5f)); });
             }
 
             ++s_idx;
@@ -138,7 +133,7 @@ void wire_demo_animation_channels(WindowUIContext& ui_ctx, Figure& figure)
     keyframe_interpolator.compute_all_auto_tangents();
 }
 
-#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
+    #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
 void wire_input_handler_from_figure(WindowUIContext& ui_ctx, Figure* figure)
 {
     if (!figure)
@@ -152,12 +147,12 @@ void wire_input_handler_from_figure(WindowUIContext& ui_ctx, Figure* figure)
     const auto& vp = figure->axes()[0]->viewport();
     ui_ctx.input_handler.set_viewport(vp.x, vp.y, vp.w, vp.h);
 }
-#endif
+    #endif
 
-void wire_tab_split_callbacks(TabBar&          tabs,
-                              DockSystem&      dock_system,
-                              FigureManager&   fig_mgr,
-                              TabSplitMode       mode)
+void wire_tab_split_callbacks(TabBar&        tabs,
+                              DockSystem&    dock_system,
+                              FigureManager& fig_mgr,
+                              TabSplitMode   mode)
 {
     if (mode == TabSplitMode::DuplicateThenSplit)
     {
@@ -194,11 +189,10 @@ void wire_tab_split_callbacks(TabBar&          tabs,
         {
             if (pos >= fig_mgr.figure_ids().size())
                 return;
-            const FigureId id = fig_mgr.figure_ids()[pos];
-            auto*            pane =
-                dock_system.split_view().root()
-                    ? dock_system.split_view().root()->find_by_figure(id)
-                    : nullptr;
+            const FigureId id   = fig_mgr.figure_ids()[pos];
+            auto*          pane = dock_system.split_view().root()
+                                      ? dock_system.split_view().root()->find_by_figure(id)
+                                      : nullptr;
             if (!pane || pane->figure_count() < 2)
                 return;
             auto* new_pane = dock_system.split_figure_right(id, id);
@@ -215,11 +209,10 @@ void wire_tab_split_callbacks(TabBar&          tabs,
         {
             if (pos >= fig_mgr.figure_ids().size())
                 return;
-            const FigureId id = fig_mgr.figure_ids()[pos];
-            auto*            pane =
-                dock_system.split_view().root()
-                    ? dock_system.split_view().root()->find_by_figure(id)
-                    : nullptr;
+            const FigureId id   = fig_mgr.figure_ids()[pos];
+            auto*          pane = dock_system.split_view().root()
+                                      ? dock_system.split_view().root()->find_by_figure(id)
+                                      : nullptr;
             if (!pane || pane->figure_count() < 2)
                 return;
             auto* new_pane = dock_system.split_figure_down(id, id);
@@ -239,9 +232,9 @@ void wire_window_ui_runtime(const WindowUIContextRuntimeWireOptions& options)
     if (!options.ui_ctx || !options.registry || !options.session || !options.ui_ctx->fig_mgr)
         return;
 
-    auto& ui_ctx  = *options.ui_ctx;
-    auto& fig_mgr = *ui_ctx.fig_mgr;
-    auto& session = *options.session;
+    auto& ui_ctx   = *options.ui_ctx;
+    auto& fig_mgr  = *ui_ctx.fig_mgr;
+    auto& session  = *options.session;
     auto& registry = *options.registry;
 
     wire_timeline_from_figure(ui_ctx, options.active_figure, options.has_animation);
@@ -249,7 +242,7 @@ void wire_window_ui_runtime(const WindowUIContextRuntimeWireOptions& options)
     if (options.wire_demo_animation_channels && options.active_figure)
         wire_demo_animation_channels(ui_ctx, *options.active_figure);
 
-#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
+    #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
     if (options.window_manager)
     {
         // Always assign WindowManager — tab drag needs it for preview windows and
@@ -258,7 +251,7 @@ void wire_window_ui_runtime(const WindowUIContextRuntimeWireOptions& options)
 
         wire_input_handler_from_figure(ui_ctx, options.active_figure);
     }
-#endif
+    #endif
 
     if (options.enable_window_tab_callbacks && ui_ctx.figure_tabs)
     {
@@ -279,7 +272,7 @@ void wire_window_ui_runtime(const WindowUIContextRuntimeWireOptions& options)
             });
     }
 
-#if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
+    #if defined(SPECTRA_USE_GLFW) || defined(SPECTRA_USE_SDL3)
     if (!options.tab_drag_already_wired && options.window_manager)
     {
         auto* window_mgr = options.window_manager;
@@ -306,7 +299,7 @@ void wire_window_ui_runtime(const WindowUIContextRuntimeWireOptions& options)
                 session.queue_move({index, target_window_id, zone, lx, ly});
             });
     }
-#endif
+    #endif
 
     if (ui_ctx.imgui_ui)
     {

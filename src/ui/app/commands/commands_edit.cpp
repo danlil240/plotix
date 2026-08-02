@@ -19,19 +19,15 @@ std::vector<CommandDescriptor> make_edit_commands(CommandContext& ctx)
 #ifdef SPECTRA_USE_IMGUI
     auto& undo_mgr = ctx.ui_ctx.undo_mgr;
 
-    cmds.push_back({"edit.undo",
-                    "Undo",
-                    "Ctrl+Z",
-                    "Edit",
-                    static_cast<uint16_t>(ui::Icon::Undo),
-                    [&]() { undo_mgr.undo(); }});
+    cmds.push_back(
+        {"edit.undo", "Undo", "Ctrl+Z", "Edit", static_cast<uint16_t>(ui::Icon::Undo), [&]() {
+             undo_mgr.undo();
+         }});
 
-    cmds.push_back({"edit.redo",
-                    "Redo",
-                    "Ctrl+Y",
-                    "Edit",
-                    static_cast<uint16_t>(ui::Icon::Redo),
-                    [&]() { undo_mgr.redo(); }});
+    cmds.push_back(
+        {"edit.redo", "Redo", "Ctrl+Y", "Edit", static_cast<uint16_t>(ui::Icon::Redo), [&]() {
+             undo_mgr.redo();
+         }});
 #else
     (void)ctx;
 #endif

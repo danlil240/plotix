@@ -33,14 +33,14 @@ namespace spectra::test
 // Severity filter for which messages to capture
 enum class ValidationSeverity : uint32_t
 {
-    Error             = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-    Warning           = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
-    Info              = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
-    Verbose           = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
-    All               = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT
-                        | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-                        | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
-                        | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
+    Error   = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+    Warning = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+    Info    = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
+    Verbose = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
+    All     = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT
+          | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+          | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
+          | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
     ErrorsAndWarnings = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT
                         | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
 };
@@ -82,8 +82,8 @@ class ValidationGuard
         ci.sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         ci.messageSeverity = static_cast<VkDebugUtilsMessageSeverityFlagsEXT>(severity_filter);
         ci.messageType     = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-                             | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-                             | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+                         | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+                         | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
         ci.pfnUserCallback = debug_callback;
         ci.pUserData       = this;
 

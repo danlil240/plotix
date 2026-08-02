@@ -33,12 +33,11 @@ std::string normalize_frame_label(const std::string& frame)
     return frame;
 }
 
-spectra::ui::shell::MenuAction make_menu_action(
-    std::string             label,
-    std::function<void()>   on_click,
-    std::string             shortcut = {},
-    std::function<bool()>   enabled  = {},
-    std::function<bool()>   checked  = {})
+spectra::ui::shell::MenuAction make_menu_action(std::string           label,
+                                                std::function<void()> on_click,
+                                                std::string           shortcut = {},
+                                                std::function<bool()> enabled  = {},
+                                                std::function<bool()> checked  = {})
 {
     spectra::ui::shell::MenuAction action;
     action.label    = std::move(label);
@@ -124,7 +123,8 @@ void RosAppShell::on_populate_menus(spectra::ui::shell::MenuBar& bar)
     view.add({.label = "Reset Dock Layout", .on_click = [this]() { request_dock_layout_reset(); }});
 
     auto& layout_menu = bar.menu("Layout");
-    layout_menu.add({.label = "Reset Docked Layout", .on_click = [this]() { request_dock_layout_reset(); }});
+    layout_menu.add(
+        {.label = "Reset Docked Layout", .on_click = [this]() { request_dock_layout_reset(); }});
     layout_menu.add_separator();
     {
         static const LayoutPreset kPresets[] = {
@@ -158,9 +158,8 @@ void RosAppShell::on_populate_menus(spectra::ui::shell::MenuBar& bar)
         {},
         [this]() { return !workspace_state_.selected_topic.empty(); }));
     plots.add_separator();
-    plots.add({.label = "Add Subplot Row", .on_click = [this]() {
-                   cmd_registry_.execute("ros.plot.add_subplot");
-               }});
+    plots.add({.label    = "Add Subplot Row",
+               .on_click = [this]() { cmd_registry_.execute("ros.plot.add_subplot"); }});
     plots.add(make_menu_action(
         "Remove Last Row",
         [this]()
@@ -171,9 +170,8 @@ void RosAppShell::on_populate_menus(spectra::ui::shell::MenuBar& bar)
         {},
         [this]() { return subplot_mgr_ && subplot_mgr_->rows() > 1; }));
     plots.add_separator();
-    plots.add({.label = "Clear Active Plot", .on_click = [this]() {
-                   cmd_registry_.execute("ros.plot.clear_active");
-               }});
+    plots.add({.label    = "Clear Active Plot",
+               .on_click = [this]() { cmd_registry_.execute("ros.plot.clear_active"); }});
     plots.add({.label = "Clear All Plots", .on_click = [this]() { clear_plots(); }});
     plots.add_separator();
     plots.add({.label = "Reset Basic Display", .shortcut = "R", .on_click = [this]() {
@@ -193,7 +191,9 @@ void RosAppShell::on_populate_menus(spectra::ui::shell::MenuBar& bar)
     plots.add({.label = "Resume All Scroll", .shortcut = "Home", .on_click = [this]() {
                    cmd_registry_.execute("ros.plot.resume_all");
                }});
-    plots.add({.label = "Pause All Scroll", .on_click = [this]() {
+    plots.add({.label    = "Pause All Scroll",
+               .on_click = [this]()
+               {
                    if (subplot_mgr_)
                        subplot_mgr_->pause_all_scroll();
                }});
@@ -208,20 +208,17 @@ void RosAppShell::on_populate_menus(spectra::ui::shell::MenuBar& bar)
     session.add({.label = "Save Session", .shortcut = "Ctrl+Shift+W", .on_click = [this]() {
                      cmd_registry_.execute("ros.session.save");
                  }});
-    session.add(
-        {.label = "Save Session As...",
-         .on_click =
-             [this]()
-             {
-                 session_save_path_buf_    = RosSessionManager::default_session_path(cfg_.node_name);
-                 cmd_registry_.execute("ros.session.save");
-             }});
-    session.add({.label = "Load Session...", .on_click = [this]() {
-                     cmd_registry_.execute("ros.session.load");
+    session.add({.label    = "Save Session As...",
+                 .on_click = [this]()
+                 {
+                     session_save_path_buf_ =
+                         RosSessionManager::default_session_path(cfg_.node_name);
+                     cmd_registry_.execute("ros.session.save");
                  }});
-    session.add({.label = "Import Session (merge)...", .on_click = [this]() {
-                     cmd_registry_.execute("ros.session.merge");
-                 }});
+    session.add({.label    = "Load Session...",
+                 .on_click = [this]() { cmd_registry_.execute("ros.session.load"); }});
+    session.add({.label    = "Import Session (merge)...",
+                 .on_click = [this]() { cmd_registry_.execute("ros.session.merge"); }});
     session.add_separator();
 
     spectra::ui::shell::MenuAction recent_parent;
@@ -233,25 +230,24 @@ void RosAppShell::on_populate_menus(spectra::ui::shell::MenuBar& bar)
         {
             const std::string& path  = recents[i].path;
             const auto         slash = path.rfind('/');
-            const std::string  label =
-                (slash != std::string::npos) ? path.substr(slash + 1) : path;
-            recent_parent.submenu.push_back(
-                {.label    = label,
-                 .shortcut = recents[i].node,
-                 .on_click = [this, path, label]()
-                 {
-                     const auto result = load_session(path);
-                     if (result.ok)
-                     {
-                         session_status_msg_   = "Loaded: " + label;
-                         session_status_timer_ = 3.0f;
-                     }
-                     else
-                     {
-                         session_status_msg_   = "Load failed: " + result.error;
-                         session_status_timer_ = 4.0f;
-                     }
-                 }});
+            const std::string  label = (slash != std::string::npos) ? path.substr(slash + 1) : path;
+            recent_parent.submenu.push_back({.label    = label,
+                                             .shortcut = recents[i].node,
+                                             .on_click = [this, path, label]()
+                                             {
+                                                 const auto result = load_session(path);
+                                                 if (result.ok)
+                                                 {
+                                                     session_status_msg_   = "Loaded: " + label;
+                                                     session_status_timer_ = 3.0f;
+                                                 }
+                                                 else
+                                                 {
+                                                     session_status_msg_ =
+                                                         "Load failed: " + result.error;
+                                                     session_status_timer_ = 4.0f;
+                                                 }
+                                             }});
         }
         if (!recents.empty())
         {
@@ -276,30 +272,27 @@ void RosAppShell::on_populate_menus(spectra::ui::shell::MenuBar& bar)
         [this]() { return show_record_dialog_; }));
 
     auto& help = bar.menu("Help");
-    help.add({.label = "About Spectra-ROS", .on_click = []() { ImGui::OpenPopup("##ros_about_popup"); }});
-    help.add(
-        {.label = "Keyboard Shortcuts",
-         .on_click = []() { ImGui::OpenPopup("##ros_shortcuts_popup"); }});
-    help.add(
-        {.label = "Command Palette (Ctrl+K)",
-         .on_click = [this]() { cmd_registry_.execute("ros.app.command_palette"); }});
+    help.add({.label    = "About Spectra-ROS",
+              .on_click = []() { ImGui::OpenPopup("##ros_about_popup"); }});
+    help.add({.label    = "Keyboard Shortcuts",
+              .on_click = []() { ImGui::OpenPopup("##ros_shortcuts_popup"); }});
+    help.add({.label    = "Command Palette (Ctrl+K)",
+              .on_click = [this]() { cmd_registry_.execute("ros.app.command_palette"); }});
 }
 
 void RosAppShell::on_populate_nav_rail(spectra::ui::shell::NavRail& rail)
 {
     rail.set_show_registry_panels(false);
 
-    auto add_panel_toggle = [this, &rail](const char* id,
-                                          const char* label,
-                                          spectra::ui::Icon icon)
+    auto add_panel_toggle = [this, &rail](const char* id, const char* label, spectra::ui::Icon icon)
     {
         spectra::ui::shell::NavItem item;
-        item.id         = id;
-        item.label      = label;
-        item.icon       = icon;
-        item.tooltip    = label;
-        item.is_active  = [this, id]() { return panel_visible(id); };
-        item.on_click   = [this, id]() { panels().toggle(id); };
+        item.id        = id;
+        item.label     = label;
+        item.icon      = icon;
+        item.tooltip   = label;
+        item.is_active = [this, id]() { return panel_visible(id); };
+        item.on_click  = [this, id]() { panels().toggle(id); };
         rail.add_custom_item(std::move(item));
     };
 
@@ -322,10 +315,10 @@ void RosAppShell::on_populate_nav_rail(spectra::ui::shell::NavRail& rail)
     rail.add_custom_item(std::move(tools_header));
 
     spectra::ui::shell::NavItem layouts_item;
-    layouts_item.id    = "ros.nav.layouts";
-    layouts_item.label = "Layouts";
-    layouts_item.icon  = spectra::ui::Icon::Layout;
-    layouts_item.tooltip = "Layout presets";
+    layouts_item.id       = "ros.nav.layouts";
+    layouts_item.label    = "Layouts";
+    layouts_item.icon     = spectra::ui::Icon::Layout;
+    layouts_item.tooltip  = "Layout presets";
     layouts_item.on_click = []() { ImGui::OpenPopup("##ros_nav_layouts_popup"); };
     rail.add_custom_item(std::move(layouts_item));
 
@@ -384,10 +377,10 @@ void build_default_ros_dock(unsigned int dockspace_id)
     ImGuiID root = 0;
     begin_ros_dock_layout(dockspace_id, root);
 
-    ImGuiID dock_left = 0;
-    ImGuiID dock_main = 0;
-    ImGuiID dock_right = 0;
-    ImGuiID dock_bottom = 0;
+    ImGuiID dock_left         = 0;
+    ImGuiID dock_main         = 0;
+    ImGuiID dock_right        = 0;
+    ImGuiID dock_bottom       = 0;
     ImGuiID dock_right_bottom = 0;
     ImGui::DockBuilderSplitNode(root, ImGuiDir_Left, 0.18f, &dock_left, &dock_main);
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.24f, &dock_right, &dock_main);
@@ -409,8 +402,8 @@ void build_debug_ros_dock(unsigned int dockspace_id)
     ImGuiID root = 0;
     begin_ros_dock_layout(dockspace_id, root);
 
-    ImGuiID dock_left = 0;
-    ImGuiID dock_main = 0;
+    ImGuiID dock_left  = 0;
+    ImGuiID dock_main  = 0;
     ImGuiID dock_right = 0;
     ImGui::DockBuilderSplitNode(root, ImGuiDir_Left, 0.26f, &dock_left, &dock_main);
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.28f, &dock_right, &dock_main);
@@ -428,8 +421,8 @@ void build_monitor_ros_dock(unsigned int dockspace_id)
     ImGuiID root = 0;
     begin_ros_dock_layout(dockspace_id, root);
 
-    ImGuiID dock_left = 0;
-    ImGuiID dock_main = 0;
+    ImGuiID dock_left  = 0;
+    ImGuiID dock_main  = 0;
     ImGuiID dock_right = 0;
     ImGui::DockBuilderSplitNode(root, ImGuiDir_Left, 0.26f, &dock_left, &dock_main);
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.28f, &dock_right, &dock_main);
@@ -448,9 +441,9 @@ void build_bag_review_ros_dock(unsigned int dockspace_id)
     begin_ros_dock_layout(dockspace_id, root);
 
     ImGuiID dock_bottom = 0;
-    ImGuiID dock_top = 0;
-    ImGuiID dock_left = 0;
-    ImGuiID dock_main = 0;
+    ImGuiID dock_top    = 0;
+    ImGuiID dock_left   = 0;
+    ImGuiID dock_main   = 0;
     ImGui::DockBuilderSplitNode(root, ImGuiDir_Down, 0.22f, &dock_bottom, &dock_top);
     ImGui::DockBuilderSplitNode(dock_top, ImGuiDir_Left, 0.28f, &dock_left, &dock_main);
 
@@ -466,8 +459,8 @@ void build_rviz_ros_dock(unsigned int dockspace_id)
     ImGuiID root = 0;
     begin_ros_dock_layout(dockspace_id, root);
 
-    ImGuiID dock_left = 0;
-    ImGuiID dock_main = 0;
+    ImGuiID dock_left  = 0;
+    ImGuiID dock_main  = 0;
     ImGuiID dock_right = 0;
     ImGui::DockBuilderSplitNode(root, ImGuiDir_Left, 0.24f, &dock_left, &dock_main);
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.26f, &dock_right, &dock_main);
@@ -486,8 +479,8 @@ void build_rviz_plot_ros_dock(unsigned int dockspace_id)
     ImGuiID root = 0;
     begin_ros_dock_layout(dockspace_id, root);
 
-    ImGuiID dock_left = 0;
-    ImGuiID dock_main = 0;
+    ImGuiID dock_left  = 0;
+    ImGuiID dock_main  = 0;
     ImGuiID dock_right = 0;
     ImGui::DockBuilderSplitNode(root, ImGuiDir_Left, 0.24f, &dock_left, &dock_main);
     ImGui::DockBuilderSplitNode(dock_main, ImGuiDir_Right, 0.28f, &dock_right, &dock_main);
@@ -550,22 +543,20 @@ void RosAppShell::on_build_status_bar(spectra::ui::shell::StatusBar& bar)
         {.align   = spectra::ui::shell::StatusAlign::Left,
          .draw_fn = [this]()
          {
-             const auto& colors = spectra::ui::theme();
-             const bool connected = bridge_ && bridge_->is_ok();
-             const uint64_t total = total_messages_.load(std::memory_order_relaxed);
-             const int      plots = active_plot_count();
+             const auto&    colors    = spectra::ui::theme();
+             const bool     connected = bridge_ && bridge_->is_ok();
+             const uint64_t total     = total_messages_.load(std::memory_order_relaxed);
+             const int      plots     = active_plot_count();
              std::vector<spectra::ui::widgets::StatusPillSpec> pills;
              pills.push_back({connected ? "ROS connected" : "ROS idle",
                               connected ? colors.success : colors.warning,
                               true});
-             pills.push_back({std::format("{} · domain {}",
-                                          cfg_.node_name,
-                                          bridge_ ? bridge_->domain_id() : 0),
-                              colors.accent,
-                              false});
-             pills.push_back({std::format("{} plots · {} msgs", plots, total),
-                              colors.accent,
-                              false});
+             pills.push_back(
+                 {std::format("{} · domain {}", cfg_.node_name, bridge_ ? bridge_->domain_id() : 0),
+                  colors.accent,
+                  false});
+             pills.push_back(
+                 {std::format("{} plots · {} msgs", plots, total), colors.accent, false});
              if (layout_unsaved_)
                  pills.push_back({"layout unsaved", colors.warning, false});
              spectra::ui::widgets::draw_status_pills(pills);
@@ -575,13 +566,12 @@ void RosAppShell::on_build_status_bar(spectra::ui::shell::StatusBar& bar)
         {.align   = spectra::ui::shell::StatusAlign::Center,
          .draw_fn = [this]()
          {
-             const auto& colors = spectra::ui::theme();
+             const auto&                                       colors = spectra::ui::theme();
              std::vector<spectra::ui::widgets::StatusPillSpec> pills;
              if (discovery_)
              {
-                 pills.push_back({std::format("{} topics", discovery_->topics().size()),
-                                  colors.accent,
-                                  false});
+                 pills.push_back(
+                     {std::format("{} topics", discovery_->topics().size()), colors.accent, false});
              }
              if (bag_player_ && bag_player_->is_open())
                  pills.push_back({"bag", colors.success, false});
@@ -600,7 +590,7 @@ void RosAppShell::on_build_status_bar(spectra::ui::shell::StatusBar& bar)
         {.align   = spectra::ui::shell::StatusAlign::Right,
          .draw_fn = [this]()
          {
-             const auto& colors = spectra::ui::theme();
+             const auto&                                       colors = spectra::ui::theme();
              std::vector<spectra::ui::widgets::StatusPillSpec> pills;
              if (panel_visible("ros.scene_viewport") || panel_visible("ros.displays")
                  || !displays_.empty())
@@ -666,9 +656,7 @@ void RosAppShell::draw_ros_shell_popups()
     }
 
     ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_FirstUseEver);
-    if (ImGui::BeginPopupModal("##ros_shortcuts_popup",
-                               nullptr,
-                               ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal("##ros_shortcuts_popup", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         ImGui::TextDisabled("Global");
         ImGui::TextUnformatted("Ctrl+K          Command Palette");
@@ -730,9 +718,9 @@ void RosAppShell::draw_recent_sessions_menu()
     }
     for (size_t i = 0; i < recents.size() && i < 5; ++i)
     {
-        const std::string& path = recents[i].path;
+        const std::string& path  = recents[i].path;
         const auto         slash = path.rfind('/');
-        const std::string label = (slash != std::string::npos) ? path.substr(slash + 1) : path;
+        const std::string  label = (slash != std::string::npos) ? path.substr(slash + 1) : path;
         if (ImGui::MenuItem(label.c_str(), recents[i].node.c_str()))
         {
             const auto result = load_session(path);

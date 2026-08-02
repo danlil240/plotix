@@ -126,10 +126,10 @@ void AppShell::draw_canvas_host_window()
     else
     {
         const ImGuiViewport* vp = ImGui::GetMainViewport();
-        workspace.x               = vp->WorkPos.x;
-        workspace.y               = vp->WorkPos.y;
-        workspace.w               = vp->WorkSize.x;
-        workspace.h               = vp->WorkSize.y;
+        workspace.x             = vp->WorkPos.x;
+        workspace.y             = vp->WorkPos.y;
+        workspace.w             = vp->WorkSize.x;
+        workspace.h             = vp->WorkSize.y;
     }
 
     ImGui::SetNextWindowPos(ImVec2(workspace.x, workspace.y), ImGuiCond_Always);

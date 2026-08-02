@@ -14,8 +14,8 @@ namespace glass_palette
 {
 // Night Glass surfaces — lifted from pre-redesign night theme (not near-black)
 constexpr Color kBaseBackground{0.063f, 0.102f, 0.169f, 1.0f};   // #101A2B Vision chrome
-constexpr Color kSurfacePanel{0.071f, 0.110f, 0.204f, 1.0f};   // #121C34 nav rail
-constexpr Color kSurfacePlot{0.075f, 0.118f, 0.192f, 1.0f};    // #131E31 plot canvas
+constexpr Color kSurfacePanel{0.071f, 0.110f, 0.204f, 1.0f};     // #121C34 nav rail
+constexpr Color kSurfacePlot{0.075f, 0.118f, 0.192f, 1.0f};      // #131E31 plot canvas
 constexpr Color kSurfacePanelHover{0.11f, 0.14f, 0.19f, 1.0f};
 constexpr Color kSurfacePanelActive{0.13f, 0.17f, 0.24f, 1.0f};
 constexpr Color kSurfaceToolbar{0.055f, 0.082f, 0.125f, 1.0f};
@@ -32,10 +32,10 @@ constexpr Color kAccentCyan{0.24f, 0.84f, 0.96f, 1.0f};
 constexpr Color kAccentViolet{0.58f, 0.45f, 0.96f, 1.0f};
 constexpr Color kAccentMagenta{0.92f, 0.36f, 0.78f, 1.0f};
 constexpr Color kSuccessGreen{0.25f, 0.73f, 0.31f, 1.0f};
-constexpr Color kFpsPillGreen{0.067f, 0.106f, 0.071f, 1.0f};   // dark green-tinted pill fill
-constexpr Color kFpsPillBorder{0.255f, 0.420f, 0.169f, 1.0f};  // muted green rim
-constexpr Color kFpsPillText{0.569f, 0.906f, 0.184f, 1.0f};    // #91E72F bright green readout
-constexpr Color kStatusGpuText{0.62f, 0.66f, 0.74f, 1.0f};     // muted GPU label
+constexpr Color kFpsPillGreen{0.067f, 0.106f, 0.071f, 1.0f};    // dark green-tinted pill fill
+constexpr Color kFpsPillBorder{0.255f, 0.420f, 0.169f, 1.0f};   // muted green rim
+constexpr Color kFpsPillText{0.569f, 0.906f, 0.184f, 1.0f};     // #91E72F bright green readout
+constexpr Color kStatusGpuText{0.62f, 0.66f, 0.74f, 1.0f};      // muted GPU label
 constexpr Color kWarningAmber{0.82f, 0.60f, 0.13f, 1.0f};
 }   // namespace glass_palette
 

@@ -10,7 +10,7 @@ namespace spectra
 {
 class LayoutManager;
 class ImGuiIntegration;
-}
+}   // namespace spectra
 
 namespace spectra::ui::shell
 {
@@ -70,14 +70,14 @@ class NavRail
    protected:
     static bool matches_filter(std::string_view title, std::string_view filter);
 
-    PanelRegistry*            registry_ = nullptr;
-    spectra::LayoutManager*   layout_manager_ = nullptr;
-    spectra::ImGuiIntegration* imgui_chrome_  = nullptr;
-    std::vector<NavItem>      custom_items_;
-    bool           expanded_              = false;
-    bool           search_enabled_        = false;
-    bool           show_registry_panels_  = true;
-    std::string    search_;
+    PanelRegistry*             registry_       = nullptr;
+    spectra::LayoutManager*    layout_manager_ = nullptr;
+    spectra::ImGuiIntegration* imgui_chrome_   = nullptr;
+    std::vector<NavItem>       custom_items_;
+    bool                       expanded_             = false;
+    bool                       search_enabled_       = false;
+    bool                       show_registry_panels_ = true;
+    std::string                search_;
 };
 }   // namespace spectra::ui::shell
 #endif   // SPECTRA_USE_IMGUI

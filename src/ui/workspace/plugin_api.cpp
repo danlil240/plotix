@@ -509,14 +509,14 @@ extern "C"
 
         // Build CustomPipelineDesc from the C ABI descriptor.
         CustomPipelineDesc pd;
-        pd.vert_spirv           = desc->vert_spirv;
-        pd.vert_spirv_size      = desc->vert_spirv_size;
-        pd.frag_spirv           = desc->frag_spirv;
-        pd.frag_spirv_size      = desc->frag_spirv_size;
-        pd.topology             = desc->topology;
-        pd.enable_depth_test    = (desc->flags & SPECTRA_SERIES_FLAG_3D) != 0;
-        pd.enable_depth_write   = (desc->flags & SPECTRA_SERIES_FLAG_3D) != 0
-                                  && (desc->flags & SPECTRA_SERIES_FLAG_TRANSPARENT) == 0;
+        pd.vert_spirv         = desc->vert_spirv;
+        pd.vert_spirv_size    = desc->vert_spirv_size;
+        pd.frag_spirv         = desc->frag_spirv;
+        pd.frag_spirv_size    = desc->frag_spirv_size;
+        pd.topology           = desc->topology;
+        pd.enable_depth_test  = (desc->flags & SPECTRA_SERIES_FLAG_3D) != 0;
+        pd.enable_depth_write = (desc->flags & SPECTRA_SERIES_FLAG_3D) != 0
+                                && (desc->flags & SPECTRA_SERIES_FLAG_TRANSPARENT) == 0;
         pd.enable_backface_cull = (desc->flags & SPECTRA_SERIES_FLAG_BACKFACE_CULL) != 0;
         pd.enable_blending      = true;
 
@@ -713,12 +713,11 @@ extern "C"
     // keep it in a thread-local std::string that stays valid until the next call.
     static thread_local std::string tl_last_schema_id;
 
-    const char* spectra_register_plugin_ui(
-        SpectraPluginUIRegistry              registry,
-        const SpectraPluginUISchemaDesc*     schema_desc,
-        SpectraPluginUIPropertyChangedFn     on_changed,
-        SpectraPluginUIActionTriggeredFn     on_action,
-        void*                                user_data)
+    const char* spectra_register_plugin_ui(SpectraPluginUIRegistry          registry,
+                                           const SpectraPluginUISchemaDesc* schema_desc,
+                                           SpectraPluginUIPropertyChangedFn on_changed,
+                                           SpectraPluginUIActionTriggeredFn on_action,
+                                           void*                            user_data)
     {
         if (!registry || !schema_desc || !schema_desc->plugin_name || !schema_desc->panel_title)
             return nullptr;
@@ -732,23 +731,23 @@ extern "C"
 
         for (uint32_t i = 0; i < schema_desc->element_count; ++i)
         {
-            const auto& src = schema_desc->elements[i];
+            const auto&     src = schema_desc->elements[i];
             PluginUIElement elem;
 
             switch (src.type)
             {
                 case SPECTRA_UI_ELEM_PROPERTY:
                 {
-                    elem.type = PluginUIElementType::Property;
-                    elem.property.id    = src.prop_id ? src.prop_id : "";
-                    elem.property.label = src.prop_label ? src.prop_label : "";
-                    elem.property.type  = static_cast<PluginUIPropertyType>(src.prop_type);
-                    elem.property.value = src.prop_value ? src.prop_value : "";
-                    elem.property.min_value = src.prop_min ? src.prop_min : "";
-                    elem.property.max_value = src.prop_max ? src.prop_max : "";
+                    elem.type                   = PluginUIElementType::Property;
+                    elem.property.id            = src.prop_id ? src.prop_id : "";
+                    elem.property.label         = src.prop_label ? src.prop_label : "";
+                    elem.property.type          = static_cast<PluginUIPropertyType>(src.prop_type);
+                    elem.property.value         = src.prop_value ? src.prop_value : "";
+                    elem.property.min_value     = src.prop_min ? src.prop_min : "";
+                    elem.property.max_value     = src.prop_max ? src.prop_max : "";
                     elem.property.default_value = src.prop_default ? src.prop_default : "";
-                    elem.property.read_only = src.prop_read_only != 0;
-                    elem.property.tooltip = src.prop_tooltip ? src.prop_tooltip : "";
+                    elem.property.read_only     = src.prop_read_only != 0;
+                    elem.property.tooltip       = src.prop_tooltip ? src.prop_tooltip : "";
                     for (uint32_t j = 0; j < src.enum_count && src.enum_options; ++j)
                     {
                         if (src.enum_options[j])
@@ -758,17 +757,17 @@ extern "C"
                 }
                 case SPECTRA_UI_ELEM_ACTION:
                 {
-                    elem.type = PluginUIElementType::Action;
-                    elem.action.id       = src.action_id ? src.action_id : "";
-                    elem.action.label    = src.action_label ? src.action_label : "";
-                    elem.action.tooltip  = src.action_tooltip ? src.action_tooltip : "";
-                    elem.action.enabled  = src.action_enabled != 0;
+                    elem.type           = PluginUIElementType::Action;
+                    elem.action.id      = src.action_id ? src.action_id : "";
+                    elem.action.label   = src.action_label ? src.action_label : "";
+                    elem.action.tooltip = src.action_tooltip ? src.action_tooltip : "";
+                    elem.action.enabled = src.action_enabled != 0;
                     break;
                 }
                 case SPECTRA_UI_ELEM_LABEL:
                 {
-                    elem.type = PluginUIElementType::Label;
-                    elem.label.text  = src.label_text ? src.label_text : "";
+                    elem.type             = PluginUIElementType::Label;
+                    elem.label.text       = src.label_text ? src.label_text : "";
                     elem.label.style_hint = src.label_style ? src.label_style : "";
                     break;
                 }
@@ -779,7 +778,7 @@ extern "C"
                 }
                 case SPECTRA_UI_ELEM_GROUP:
                 {
-                    elem.type = PluginUIElementType::Group;
+                    elem.type            = PluginUIElementType::Group;
                     elem.group.title     = src.group_title ? src.group_title : "";
                     elem.group.collapsed = src.group_collapsed != 0;
                     break;
@@ -794,32 +793,27 @@ extern "C"
         PluginUICallbacks callbacks;
         if (on_changed)
         {
-            callbacks.on_property_changed =
-                [on_changed, user_data](const std::string& sid,
-                                        const std::string& pid,
-                                        const std::string& val) -> std::string
+            callbacks.on_property_changed = [on_changed, user_data](
+                                                const std::string& sid,
+                                                const std::string& pid,
+                                                const std::string& val) -> std::string
             {
-                const char* result = on_changed(sid.c_str(), pid.c_str(),
-                                                val.c_str(), user_data);
+                const char* result = on_changed(sid.c_str(), pid.c_str(), val.c_str(), user_data);
                 return result ? std::string(result) : val;
             };
         }
         if (on_action)
         {
             callbacks.on_action_triggered =
-                [on_action, user_data](const std::string& sid,
-                                       const std::string& aid)
-            {
-                on_action(sid.c_str(), aid.c_str(), user_data);
-            };
+                [on_action, user_data](const std::string& sid, const std::string& aid)
+            { on_action(sid.c_str(), aid.c_str(), user_data); };
         }
 
         tl_last_schema_id = reg->register_schema(schema, std::move(callbacks));
         return tl_last_schema_id.c_str();
     }
 
-    void spectra_unregister_plugin_ui(
-        SpectraPluginUIRegistry registry, const char* plugin_name)
+    void spectra_unregister_plugin_ui(SpectraPluginUIRegistry registry, const char* plugin_name)
     {
         if (!registry || !plugin_name)
             return;
@@ -926,8 +920,8 @@ bool PluginManager::load_plugin(const std::string& path)
         return false;
     }
 
-    SpectraPluginContext ctx = make_context(SPECTRA_PLUGIN_API_VERSION_MINOR);
-    SpectraPluginInfo    info{};
+    SpectraPluginContext     ctx = make_context(SPECTRA_PLUGIN_API_VERSION_MINOR);
+    SpectraPluginInfo        info{};
     std::vector<std::string> registered_transforms;
     if (transform_reg_)
         transform_reg_->begin_registration_capture(&registered_transforms);
@@ -935,8 +929,8 @@ bool PluginManager::load_plugin(const std::string& path)
     int  result = init_fn(&ctx, &info);
     if (transform_reg_)
         transform_reg_->end_registration_capture();
-    auto                 t1     = std::chrono::steady_clock::now();
-    size_t               init_us =
+    auto   t1 = std::chrono::steady_clock::now();
+    size_t init_us =
         static_cast<size_t>(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
     const auto unregister_new_transforms = [&]()
     {

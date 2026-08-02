@@ -38,9 +38,9 @@ void LayoutManager::update_inspector_animation(float dt)
 
     if (std::abs(inspector_anim_t_ - target_t) > 0.001f)
     {
-        const bool  opening  = target_t > inspector_anim_t_;
-        const float duration = opening ? ui::tokens::DURATION_INSPECTOR_OPEN
-                                       : ui::tokens::DURATION_INSPECTOR_CLOSE;
+        const bool  opening = target_t > inspector_anim_t_;
+        const float duration =
+            opening ? ui::tokens::DURATION_INSPECTOR_OPEN : ui::tokens::DURATION_INSPECTOR_CLOSE;
         // Cap per-frame progress so a large DeltaTime spike cannot snap the panel.
         constexpr float kMaxProgressStep = 0.25f;
         const float     step             = std::min(dt / duration, kMaxProgressStep);
@@ -55,8 +55,8 @@ void LayoutManager::update_inspector_animation(float dt)
     }
 
     // ease-out when opening (fast start), ease-in feel when closing (slow start).
-    const float eased_t         = ease::ease_out(inspector_anim_t_);
-    inspector_anim_width_       = inspector_width_ * eased_t;
+    const float eased_t   = ease::ease_out(inspector_anim_t_);
+    inspector_anim_width_ = inspector_width_ * eased_t;
 }
 
 void LayoutManager::update(float window_width, float window_height, float dt)
@@ -68,8 +68,7 @@ void LayoutManager::update(float window_width, float window_height, float dt)
     float nav_rail_target = 0.0f;
     if (nav_rail_visible_)
     {
-        nav_rail_target =
-            nav_rail_expanded_ ? nav_rail_expanded_width_ : nav_rail_collapsed_width_;
+        nav_rail_target = nav_rail_expanded_ ? nav_rail_expanded_width_ : nav_rail_collapsed_width_;
     }
 
     // Animate toward targets (snap instantly during live resize so chrome zones
@@ -205,10 +204,9 @@ float LayoutManager::nav_rail_width() const
 bool LayoutManager::is_animating() const
 {
     const float inspector_target_t = inspector_visible_ ? 1.0f : 0.0f;
-    float nav_target = nav_rail_visible_
-                           ? (nav_rail_expanded_ ? nav_rail_expanded_width_
-                                                 : nav_rail_collapsed_width_)
-                           : 0.0f;
+    float       nav_target = nav_rail_visible_ ? (nav_rail_expanded_ ? nav_rail_expanded_width_
+                                                                     : nav_rail_collapsed_width_)
+                                               : 0.0f;
     return std::abs(inspector_anim_t_ - inspector_target_t) > 0.001f
            || std::abs(nav_rail_anim_width_ - nav_target) > 0.5f;
 }
@@ -263,7 +261,9 @@ void LayoutManager::set_tab_bar_visible(bool visible)
     tab_bar_visible_ = visible;
 }
 
-float LayoutManager::nav_rail_content_height(int button_count, int separator_count, float cell_scale)
+float LayoutManager::nav_rail_content_height(int   button_count,
+                                             int   separator_count,
+                                             float cell_scale)
 {
     return NAV_RAIL_VERTICAL_PADDING
            + static_cast<float>(button_count) * NAV_RAIL_CELL_HEIGHT * cell_scale
@@ -282,8 +282,8 @@ float LayoutManager::nav_rail_min_content_height()
 }
 
 float LayoutManager::nav_rail_scale_for_height(float available_height,
-                                               int    button_count,
-                                               int    separator_count)
+                                               int   button_count,
+                                               int   separator_count)
 {
     const float nominal   = nav_rail_content_height(button_count, separator_count, 1.0f);
     const float min_scale = NAV_RAIL_CELL_HEIGHT_MIN / NAV_RAIL_CELL_HEIGHT;
@@ -297,8 +297,9 @@ float LayoutManager::nav_rail_scale_for_height(float available_height,
 
 float LayoutManager::nav_rail_scale_for_height(float available_height)
 {
-    return nav_rail_scale_for_height(
-        available_height, NAV_RAIL_BUTTON_COUNT, NAV_RAIL_SEPARATOR_COUNT);
+    return nav_rail_scale_for_height(available_height,
+                                     NAV_RAIL_BUTTON_COUNT,
+                                     NAV_RAIL_SEPARATOR_COUNT);
 }
 
 float LayoutManager::min_window_height(bool nav_rail_visible,

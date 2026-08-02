@@ -40,8 +40,8 @@ TEST(PlotAnnotations, CopyPreservesLegendAndReferenceFlags)
 
 TEST(PlotAnnotations, LegendHiddenDataSeriesIsNotReferenceLine)
 {
-    float x[] = {0.0f, 1.0f};
-    float y[] = {0.0f, 1.0f};
+    float         x[] = {0.0f, 1.0f};
+    float         y[] = {0.0f, 1.0f};
     spectra::Axes ax;
     auto&         line = ax.plot(std::span<const float>(x, 2), std::span<const float>(y, 2), "r-");
     line.set_show_in_legend(false);

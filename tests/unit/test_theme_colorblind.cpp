@@ -745,7 +745,7 @@ TEST_F(ThemeExportImportTest, ExportImportRoundTrip)
     {
         std::ifstream fin(path);
         std::string   content((std::istreambuf_iterator<char>(fin)),
-                              std::istreambuf_iterator<char>());
+                            std::istreambuf_iterator<char>());
         fin.close();
 
         auto pos = content.find("\"dark\"");

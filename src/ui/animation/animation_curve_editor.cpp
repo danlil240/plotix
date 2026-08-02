@@ -505,7 +505,7 @@ void AnimationCurveEditor::update_drag(float screen_x, float screen_y)
                 float len_out = std::sqrt(kf.out_tangent.dt * kf.out_tangent.dt
                                           + kf.out_tangent.dv * kf.out_tangent.dv);
                 float len_in  = std::sqrt(kf.in_tangent.dt * kf.in_tangent.dt
-                                          + kf.in_tangent.dv * kf.in_tangent.dv);
+                                         + kf.in_tangent.dv * kf.in_tangent.dv);
                 if (len_in > 0.0001f)
                 {
                     kf.out_tangent.dt = -kf.in_tangent.dt * (len_out / len_in);
@@ -527,7 +527,7 @@ void AnimationCurveEditor::update_drag(float screen_x, float screen_y)
             if (kf.tangent_mode == TangentMode::Aligned)
             {
                 float len_in  = std::sqrt(kf.in_tangent.dt * kf.in_tangent.dt
-                                          + kf.in_tangent.dv * kf.in_tangent.dv);
+                                         + kf.in_tangent.dv * kf.in_tangent.dv);
                 float len_out = std::sqrt(kf.out_tangent.dt * kf.out_tangent.dt
                                           + kf.out_tangent.dv * kf.out_tangent.dv);
                 if (len_out > 0.0001f)
@@ -666,7 +666,8 @@ void AnimationCurveEditor::draw(float width, float height)
         }
     }
 
-    if (is_dragging() && ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f))
+    if (is_dragging() && ImGui::IsItemActive()
+        && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 1.0f))
     {
         update_drag(mx, my);
         if (interpolator_)
@@ -687,12 +688,12 @@ void AnimationCurveEditor::draw(float width, float height)
 
     if (box_select_active_ && ImGui::IsMouseReleased(ImGuiMouseButton_Left))
     {
-        float t_min  = view_.x_to_time(std::min(box_select_start_x_, mx));
-        float t_max  = view_.x_to_time(std::max(box_select_start_x_, mx));
-        float y_top  = std::min(box_select_start_y_, my);
-        float y_bot  = std::max(box_select_start_y_, my);
-        float v_max  = view_.y_to_value(y_top);
-        float v_min  = view_.y_to_value(y_bot);
+        float t_min = view_.x_to_time(std::min(box_select_start_x_, mx));
+        float t_max = view_.x_to_time(std::max(box_select_start_x_, mx));
+        float y_top = std::min(box_select_start_y_, my);
+        float y_bot = std::max(box_select_start_y_, my);
+        float v_max = view_.y_to_value(y_top);
+        float v_min = view_.y_to_value(y_bot);
         select_keyframes_in_rect(t_min, t_max, v_min, v_max);
         box_select_active_ = false;
     }
@@ -864,7 +865,9 @@ void AnimationCurveEditor::draw(float width, float height)
             if (show_value_labels_)
             {
                 const std::string buf = std::format("{:.2f}", kf.value);
-                draw_list->AddText(ImVec2(kx + 8, ky - 8), IM_COL32(200, 200, 200, 180), buf.c_str());
+                draw_list->AddText(ImVec2(kx + 8, ky - 8),
+                                   IM_COL32(200, 200, 200, 180),
+                                   buf.c_str());
             }
         }
     }

@@ -116,8 +116,8 @@ std::string RosClipboardExport::build_tsv(const std::vector<SeriesData>& series,
     {
         constexpr double EPS = 1e-12;
         auto             it  = std::unique(all_x.begin(),
-                                           all_x.end(),
-                                           [](double a, double b) { return (b - a) < EPS; });
+                              all_x.end(),
+                              [](double a, double b) { return (b - a) < EPS; });
         all_x.erase(it, all_x.end());
     }
 

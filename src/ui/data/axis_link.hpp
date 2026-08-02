@@ -195,8 +195,8 @@ class AxisLinkManager
     // Serialize to minimal JSON string.
     // Axes are identified by their pointer address offset from a base
     // figure's axes vector — caller provides the mapping.
-    using AxesToIndex = std::function<int(const Axes*)>;
-    using IndexToAxes = std::function<Axes*(int)>;
+    using AxesToIndex   = std::function<int(const Axes*)>;
+    using IndexToAxes   = std::function<Axes*(int)>;
     using Axes3DToIndex = std::function<int(const Axes3D*)>;
     using IndexToAxes3D = std::function<Axes3D*(int)>;
 

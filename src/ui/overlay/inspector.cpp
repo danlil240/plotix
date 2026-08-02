@@ -109,9 +109,8 @@ void Inspector::draw_figure_properties(Figure& fig)
         if (ax)
             total_series += static_cast<int>(ax->series().size());
     }
-    const std::string subtitle = std::format("{} axes, {} series",
-                                               static_cast<int>(fig.axes().size()),
-                                               total_series);
+    const std::string subtitle =
+        std::format("{} axes, {} series", static_cast<int>(fig.axes().size()), total_series);
     ImGui::TextUnformatted(subtitle.c_str());
     ImGui::PopStyleColor();
 
@@ -402,7 +401,11 @@ void Inspector::draw_series_browser(Figure& fig)
         float bx = bar_min.x + pad_h;
 
         // Copy all selected
-        if (bulk_btn("##bulk_cp", icon_str(Icon::Copy), copy_lbl.c_str(), ImVec2(bx, bar_min.y), muted))
+        if (bulk_btn("##bulk_cp",
+                     icon_str(Icon::Copy),
+                     copy_lbl.c_str(),
+                     ImVec2(bx, bar_min.y),
+                     muted))
         {
             std::vector<const Series*> to_copy;
             for (const auto& e : ctx_.selected_series)
@@ -593,13 +596,13 @@ void Inspector::draw_series_browser(Figure& fig)
             {
                 ImDrawList* dl       = ImGui::GetWindowDrawList();
                 ImVec4      icon_col = vis ? ImVec4(c.text_secondary.r,
-                                                    c.text_secondary.g,
-                                                    c.text_secondary.b,
-                                                    eye_hovered ? 1.0f : 0.7f)
+                                               c.text_secondary.g,
+                                               c.text_secondary.b,
+                                               eye_hovered ? 1.0f : 0.7f)
                                            : ImVec4(c.text_tertiary.r,
-                                                    c.text_tertiary.g,
-                                                    c.text_tertiary.b,
-                                                    eye_hovered ? 0.7f : 0.35f);
+                                               c.text_tertiary.g,
+                                               c.text_tertiary.b,
+                                               eye_hovered ? 0.7f : 0.35f);
                 ImFont*     fnt      = icon_f ? icon_f : ImGui::GetFont();
                 float       glyph_sz = tokens::ICON_SM;
                 ImVec2      tsz      = fnt->CalcTextSizeA(glyph_sz, FLT_MAX, 0.0f, eye_icon);
@@ -1008,8 +1011,9 @@ void Inspector::draw_reference_lines(Axes& ax)
 
     if (refs.empty())
     {
-        ImGui::PushStyleColor(ImGuiCol_Text,
-                              ImVec4(c.text_tertiary.r, c.text_tertiary.g, c.text_tertiary.b, 0.7f));
+        ImGui::PushStyleColor(
+            ImGuiCol_Text,
+            ImVec4(c.text_tertiary.r, c.text_tertiary.g, c.text_tertiary.b, 0.7f));
         ImGui::TextUnformatted("No reference lines");
         ImGui::PopStyleColor();
         return;
@@ -1026,12 +1030,12 @@ void Inspector::draw_reference_lines(Axes& ax)
     {
         ImGui::PushID(static_cast<int>(ri));
 
-        auto&   ref     = refs[ri];
-        float   row_h   = tokens::SERIES_ROW_HEIGHT;
-        ImVec2  row_min = ImGui::GetCursorScreenPos();
-        float   avail_w = ImGui::GetContentRegionAvail().x;
-        ImVec2  row_max = ImVec2(row_min.x + avail_w, row_min.y + row_h);
-        float   cy      = row_min.y + row_h * 0.5f;
+        auto&  ref     = refs[ri];
+        float  row_h   = tokens::SERIES_ROW_HEIGHT;
+        ImVec2 row_min = ImGui::GetCursorScreenPos();
+        float  avail_w = ImGui::GetContentRegionAvail().x;
+        ImVec2 row_max = ImVec2(row_min.x + avail_w, row_min.y + row_h);
+        float  cy      = row_min.y + row_h * 0.5f;
 
         // Hover background
         bool hovered = ImGui::IsMouseHoveringRect(row_min, row_max);
@@ -1046,16 +1050,15 @@ void Inspector::draw_reference_lines(Axes& ax)
         }
 
         // Color dot
-        constexpr float dot_sz = 10.0f;
-        constexpr float pad_l  = 8.0f;
-        float           x_dot  = row_min.x + pad_l;
+        constexpr float dot_sz  = 10.0f;
+        constexpr float pad_l   = 8.0f;
+        float           x_dot   = row_min.x + pad_l;
         ImU32           dot_col = ImGui::ColorConvertFloat4ToU32(
             ImVec4(ref.color.r, ref.color.g, ref.color.b, ref.color.a));
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            ImVec2(x_dot, cy - dot_sz * 0.5f),
-            ImVec2(x_dot + dot_sz, cy + dot_sz * 0.5f),
-            dot_col,
-            tokens::RADIUS_SM);
+        ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(x_dot, cy - dot_sz * 0.5f),
+                                                  ImVec2(x_dot + dot_sz, cy + dot_sz * 0.5f),
+                                                  dot_col,
+                                                  tokens::RADIUS_SM);
 
         // Label
         float label_x = x_dot + dot_sz + 8.0f;
@@ -1077,8 +1080,7 @@ void Inspector::draw_reference_lines(Axes& ax)
             ImGui::GetWindowDrawList()->AddRectFilled(
                 ImVec2(btn_x, btn_y),
                 ImVec2(btn_x + btn_sz, btn_y + btn_sz),
-                ImGui::ColorConvertFloat4ToU32(
-                    ImVec4(0.85f, 0.35f, 0.35f, 0.2f)),
+                ImGui::ColorConvertFloat4ToU32(ImVec4(0.85f, 0.35f, 0.35f, 0.2f)),
                 tokens::RADIUS_SM);
             ImGui::SetTooltip("Remove reference line");
         }
@@ -1086,7 +1088,8 @@ void Inspector::draw_reference_lines(Axes& ax)
         ImVec4 icon_col(0.85f, 0.35f, 0.35f, 0.75f);
         ImVec2 tsz = fnt->CalcTextSizeA(gsz, FLT_MAX, 0.0f, icon_str(Icon::Trash));
         ImGui::GetWindowDrawList()->AddText(
-            fnt, gsz,
+            fnt,
+            gsz,
             ImVec2(btn_x + (btn_sz - tsz.x) * 0.5f, btn_y + (btn_sz - gsz) * 0.5f + 1.0f),
             ImGui::ColorConvertFloat4ToU32(icon_col),
             icon_str(Icon::Trash));
@@ -1123,7 +1126,7 @@ void Inspector::draw_series_properties(Series& s, int /*index*/)
     else if (dynamic_cast<ScatterSeries*>(&s))
         type_name = "Scatter Series";
 
-    const char* name = s.label().empty() ? "Unnamed" : s.label().c_str();
+    const char*       name  = s.label().empty() ? "Unnamed" : s.label().c_str();
     const std::string title = std::format("{}: {}", type_name, name);
     ImGui::TextUnformatted(title.c_str());
     ImGui::PopStyleColor();
@@ -1533,12 +1536,12 @@ void Inspector::draw_axes_statistics(const Axes& ax)
         if (global_xmin <= global_xmax)
         {
             widgets::stat_row("X Extent",
-                            std::format("[{:.4g}, {:.4g}]", global_xmin, global_xmax).c_str());
+                              std::format("[{:.4g}, {:.4g}]", global_xmin, global_xmax).c_str());
         }
         if (global_ymin <= global_ymax)
         {
             widgets::stat_row("Y Extent",
-                            std::format("[{:.4g}, {:.4g}]", global_ymin, global_ymax).c_str());
+                              std::format("[{:.4g}, {:.4g}]", global_ymin, global_ymax).c_str());
         }
     }
 }

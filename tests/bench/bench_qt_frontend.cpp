@@ -55,10 +55,9 @@ static void BM_CommandRegistry_Register100(benchmark::State& state)
 
         for (int i = 0; i < 100; ++i)
         {
-            registry.register_command(
-                "bench.cmd_" + std::to_string(i),
-                "Bench Command " + std::to_string(i),
-                []() {});
+            registry.register_command("bench.cmd_" + std::to_string(i),
+                                      "Bench Command " + std::to_string(i),
+                                      []() {});
         }
         benchmark::DoNotOptimize(registry);
     }
@@ -71,10 +70,9 @@ static void BM_CommandRegistry_Invoke100(benchmark::State& state)
     int             counter = 0;
     for (int i = 0; i < 100; ++i)
     {
-        registry.register_command(
-            "bench.cmd_" + std::to_string(i),
-            "Bench Command " + std::to_string(i),
-            [&counter]() { ++counter; });
+        registry.register_command("bench.cmd_" + std::to_string(i),
+                                  "Bench Command " + std::to_string(i),
+                                  [&counter]() { ++counter; });
     }
 
     for (auto _ : state)
@@ -91,10 +89,9 @@ static void BM_CommandRegistry_Search(benchmark::State& state)
     CommandRegistry registry;
     for (int i = 0; i < 100; ++i)
     {
-        registry.register_command(
-            "bench.cmd_" + std::to_string(i),
-            "Bench Command " + std::to_string(i),
-            []() {});
+        registry.register_command("bench.cmd_" + std::to_string(i),
+                                  "Bench Command " + std::to_string(i),
+                                  []() {});
     }
 
     for (auto _ : state)
@@ -217,8 +214,8 @@ BENCHMARK(BM_FigureCreation_MultiFigure_4)->Unit(benchmark::kMillisecond);
 
 static void BM_QtActionBridge_Rebuild100(benchmark::State& state)
 {
-    int   argc_local = 1;
-    char* argv_local[] = {(char*)"bench", nullptr};
+    int          argc_local   = 1;
+    char*        argv_local[] = {(char*)"bench", nullptr};
     QApplication app(argc_local, argv_local);
 
     CommandRegistry registry;
@@ -243,8 +240,8 @@ BENCHMARK(BM_QtActionBridge_Rebuild100)->Unit(benchmark::kMicrosecond);
 
 static void BM_QtActionBridge_ActionLookup(benchmark::State& state)
 {
-    int   argc_local = 1;
-    char* argv_local[] = {(char*)"bench", nullptr};
+    int          argc_local   = 1;
+    char*        argv_local[] = {(char*)"bench", nullptr};
     QApplication app(argc_local, argv_local);
 
     CommandRegistry registry;

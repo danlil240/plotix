@@ -1472,7 +1472,7 @@ void ParamEditorPanel::draw_toolbar()
     if (!live)
     {
         ImGui::SameLine();
-        size_t dirty = staged_count();
+        size_t            dirty     = staged_count();
         const std::string apply_lbl = std::format("Apply ({})##apply", dirty);
         if (ImGui::Button(apply_lbl.c_str()))
             apply_staged();
@@ -1580,10 +1580,10 @@ void ParamEditorPanel::draw_param_table()
         return;
     }
 
-    ImGuiTableFlags flags        = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg
-                                   | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable
-                                   | ImGuiTableFlags_SizingStretchProp;
-    float           table_height = ImGui::GetContentRegionAvail().y - 4.0f;
+    ImGuiTableFlags flags = ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg
+                            | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable
+                            | ImGuiTableFlags_SizingStretchProp;
+    float table_height = ImGui::GetContentRegionAvail().y - 4.0f;
     if (!ImGui::BeginTable("##params", 3, flags, ImVec2(0, table_height)))
         return;
 

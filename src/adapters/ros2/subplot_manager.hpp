@@ -326,9 +326,9 @@ class SubplotManager
     void resume_all_scroll();
 
     // When enabled (default), time-series subplots share X-axis limits.
-    void   set_x_links_enabled(bool enabled);
-    bool   x_links_enabled() const { return x_links_enabled_; }
-    void   rebuild_x_links();
+    void set_x_links_enabled(bool enabled);
+    bool x_links_enabled() const { return x_links_enabled_; }
+    void rebuild_x_links();
 
     // Total estimated memory across all active series.
     size_t total_memory_bytes() const;
@@ -500,7 +500,6 @@ class SubplotManager
 
     // Assign next palette color.
     spectra::Color next_color();
-
 
     // Update slot labels based on its configured axis mode and series layout.
     void update_slot_labels(SlotEntry& se);

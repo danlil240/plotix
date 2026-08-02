@@ -212,9 +212,8 @@ bool LegendInteraction::draw(Axes&               axes,
     ly = std::max(viewport.y + 4.0f, std::min(ly, viewport.y + viewport.h - legend_h - 4.0f));
 
     // Draw legend window — use figure_id in the ImGui ID to prevent cross-figure collisions
-    const std::string win_id = std::format("##legend_{:x}_{}",
-                                           static_cast<unsigned long>(figure_id),
-                                           axes_index);
+    const std::string win_id =
+        std::format("##legend_{:x}_{}", static_cast<unsigned long>(figure_id), axes_index);
 
     ImGui::SetNextWindowPos(ImVec2(lx, ly));
     ImGui::SetNextWindowSize(ImVec2(legend_w, legend_h));
@@ -274,10 +273,10 @@ bool LegendInteraction::draw(Axes&               axes,
         // Frosted glass card behind the legend content (skip if user set a bg).
         if (!user_bg)
         {
-            ImDrawList* wdl  = ImGui::GetWindowDrawList();
-            ImVec2      wp0  = ImGui::GetWindowPos();
-            ImVec2      wsz  = ImGui::GetWindowSize();
-            ImVec2      wp1  = ImVec2(wp0.x + wsz.x, wp0.y + wsz.y);
+            ImDrawList* wdl = ImGui::GetWindowDrawList();
+            ImVec2      wp0 = ImGui::GetWindowPos();
+            ImVec2      wsz = ImGui::GetWindowSize();
+            ImVec2      wp1 = ImVec2(wp0.x + wsz.x, wp0.y + wsz.y);
             wdl->PushClipRectFullScreen();
             ui::glass_draw::draw_glass_card(wdl,
                                             wp0,

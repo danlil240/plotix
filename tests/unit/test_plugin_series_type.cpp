@@ -100,11 +100,11 @@ TEST(PluginSeriesType, FindRegisteredType)
     desc.upload_fn       = [](SpectraBackendHandle, const void*, void*, size_t, void*) -> int
     { return 0; };
     desc.draw_fn   = [](SpectraBackendHandle,
-                        SpectraPipelineHandle,
-                        const void*,
-                        const SpectraViewport*,
-                        const SpectraSeriesPushConst*,
-                        void*) -> int { return 0; };
+                      SpectraPipelineHandle,
+                      const void*,
+                      const SpectraViewport*,
+                      const SpectraSeriesPushConst*,
+                      void*) -> int { return 0; };
     desc.bounds_fn = [](const void*, size_t, SpectraRect*, void*) -> int { return 0; };
     desc.user_data = nullptr;
 
@@ -136,11 +136,11 @@ TEST(PluginSeriesType, SPIRVBytecodeIsCopied)
     desc.upload_fn       = [](SpectraBackendHandle, const void*, void*, size_t, void*) -> int
     { return 0; };
     desc.draw_fn   = [](SpectraBackendHandle,
-                        SpectraPipelineHandle,
-                        const void*,
-                        const SpectraViewport*,
-                        const SpectraSeriesPushConst*,
-                        void*) -> int { return 0; };
+                      SpectraPipelineHandle,
+                      const void*,
+                      const SpectraViewport*,
+                      const SpectraSeriesPushConst*,
+                      void*) -> int { return 0; };
     desc.bounds_fn = [](const void*, size_t, SpectraRect*, void*) -> int { return 0; };
 
     spectra_register_series_type(&reg, &desc);
@@ -173,11 +173,11 @@ TEST(PluginSeriesType, UploadCallbackInvoked)
         return 0;
     };
     desc.draw_fn   = [](SpectraBackendHandle,
-                        SpectraPipelineHandle,
-                        const void*,
-                        const SpectraViewport*,
-                        const SpectraSeriesPushConst*,
-                        void*) -> int { return 0; };
+                      SpectraPipelineHandle,
+                      const void*,
+                      const SpectraViewport*,
+                      const SpectraSeriesPushConst*,
+                      void*) -> int { return 0; };
     desc.bounds_fn = [](const void*, size_t, SpectraRect*, void*) -> int { return 0; };
     desc.user_data = &tracker;
 
@@ -207,11 +207,11 @@ TEST(PluginSeriesType, BoundsCallbackProducesCorrectResult)
     desc.upload_fn       = [](SpectraBackendHandle, const void*, void*, size_t, void*) -> int
     { return 0; };
     desc.draw_fn   = [](SpectraBackendHandle,
-                        SpectraPipelineHandle,
-                        const void*,
-                        const SpectraViewport*,
-                        const SpectraSeriesPushConst*,
-                        void*) -> int { return 0; };
+                      SpectraPipelineHandle,
+                      const void*,
+                      const SpectraViewport*,
+                      const SpectraSeriesPushConst*,
+                      void*) -> int { return 0; };
     desc.bounds_fn = [](const void* data, size_t count, SpectraRect* rect, void*) -> int
     {
         // Interpret data as float pairs (x, y) and compute bounds.
@@ -267,11 +267,11 @@ TEST(PluginSeriesType, UnregisterRemovesType)
     desc.upload_fn       = [](SpectraBackendHandle, const void*, void*, size_t, void*) -> int
     { return 0; };
     desc.draw_fn   = [](SpectraBackendHandle,
-                        SpectraPipelineHandle,
-                        const void*,
-                        const SpectraViewport*,
-                        const SpectraSeriesPushConst*,
-                        void*) -> int { return 0; };
+                      SpectraPipelineHandle,
+                      const void*,
+                      const SpectraViewport*,
+                      const SpectraSeriesPushConst*,
+                      void*) -> int { return 0; };
     desc.bounds_fn = [](const void*, size_t, SpectraRect*, void*) -> int { return 0; };
 
     spectra_register_series_type(&reg, &desc);
@@ -334,11 +334,11 @@ TEST(PluginSeriesType, DuplicateNameIgnored)
     desc.upload_fn       = [](SpectraBackendHandle, const void*, void*, size_t, void*) -> int
     { return 0; };
     desc.draw_fn   = [](SpectraBackendHandle,
-                        SpectraPipelineHandle,
-                        const void*,
-                        const SpectraViewport*,
-                        const SpectraSeriesPushConst*,
-                        void*) -> int { return 0; };
+                      SpectraPipelineHandle,
+                      const void*,
+                      const SpectraViewport*,
+                      const SpectraSeriesPushConst*,
+                      void*) -> int { return 0; };
     desc.bounds_fn = [](const void*, size_t, SpectraRect*, void*) -> int { return 0; };
 
     EXPECT_EQ(spectra_register_series_type(&reg, &desc), 0);
@@ -415,11 +415,11 @@ TEST(PluginSeriesType, MultipleTypesRegistered)
         d.upload_fn       = [](SpectraBackendHandle, const void*, void*, size_t, void*) -> int
         { return 0; };
         d.draw_fn   = [](SpectraBackendHandle,
-                         SpectraPipelineHandle,
-                         const void*,
-                         const SpectraViewport*,
-                         const SpectraSeriesPushConst*,
-                         void*) -> int { return 0; };
+                       SpectraPipelineHandle,
+                       const void*,
+                       const SpectraViewport*,
+                       const SpectraSeriesPushConst*,
+                       void*) -> int { return 0; };
         d.bounds_fn = [](const void*, size_t, SpectraRect*, void*) -> int { return 0; };
         return d;
     };
@@ -474,11 +474,11 @@ TEST(PluginSeriesType, VertexLayoutPassedThrough)
     desc.upload_fn              = [](SpectraBackendHandle, const void*, void*, size_t, void*) -> int
     { return 0; };
     desc.draw_fn   = [](SpectraBackendHandle,
-                        SpectraPipelineHandle,
-                        const void*,
-                        const SpectraViewport*,
-                        const SpectraSeriesPushConst*,
-                        void*) -> int { return 0; };
+                      SpectraPipelineHandle,
+                      const void*,
+                      const SpectraViewport*,
+                      const SpectraSeriesPushConst*,
+                      void*) -> int { return 0; };
     desc.bounds_fn = [](const void*, size_t, SpectraRect*, void*) -> int { return 0; };
 
     spectra_register_series_type(&reg, &desc);
@@ -505,11 +505,11 @@ TEST(PluginSeriesType, FlagsMappedToPipelineDesc)
     desc.upload_fn       = [](SpectraBackendHandle, const void*, void*, size_t, void*) -> int
     { return 0; };
     desc.draw_fn   = [](SpectraBackendHandle,
-                        SpectraPipelineHandle,
-                        const void*,
-                        const SpectraViewport*,
-                        const SpectraSeriesPushConst*,
-                        void*) -> int { return 0; };
+                      SpectraPipelineHandle,
+                      const void*,
+                      const SpectraViewport*,
+                      const SpectraSeriesPushConst*,
+                      void*) -> int { return 0; };
     desc.bounds_fn = [](const void*, size_t, SpectraRect*, void*) -> int { return 0; };
 
     spectra_register_series_type(&reg, &desc);
@@ -536,11 +536,11 @@ TEST(PluginSeriesType, TransparentFlagDisablesDepthWrite)
     desc.upload_fn       = [](SpectraBackendHandle, const void*, void*, size_t, void*) -> int
     { return 0; };
     desc.draw_fn   = [](SpectraBackendHandle,
-                        SpectraPipelineHandle,
-                        const void*,
-                        const SpectraViewport*,
-                        const SpectraSeriesPushConst*,
-                        void*) -> int { return 0; };
+                      SpectraPipelineHandle,
+                      const void*,
+                      const SpectraViewport*,
+                      const SpectraSeriesPushConst*,
+                      void*) -> int { return 0; };
     desc.bounds_fn = [](const void*, size_t, SpectraRect*, void*) -> int { return 0; };
 
     spectra_register_series_type(&reg, &desc);

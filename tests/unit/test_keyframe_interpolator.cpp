@@ -935,11 +935,11 @@ TEST(MultiPaneRecording, AutoGridLayout2Panes)
 
     std::vector<uint32_t> rendered_panes;
     auto                  pane_cb = [&](uint32_t pane_idx,
-                                        uint32_t /*frame*/,
-                                        float /*time*/,
-                                        uint8_t* rgba,
-                                        uint32_t w,
-                                        uint32_t h) -> bool
+                       uint32_t /*frame*/,
+                       float /*time*/,
+                       uint8_t* rgba,
+                       uint32_t w,
+                       uint32_t h) -> bool
     {
         rendered_panes.push_back(pane_idx);
         // Fill with pane index as color
@@ -982,11 +982,11 @@ TEST(MultiPaneRecording, CustomPaneRects)
 
     uint32_t pane_call_count = 0;
     auto     pane_cb         = [&](uint32_t /*pane_idx*/,
-                                   uint32_t /*frame*/,
-                                   float /*time*/,
-                                   uint8_t* rgba,
-                                   uint32_t w,
-                                   uint32_t h) -> bool
+                       uint32_t /*frame*/,
+                       float /*time*/,
+                       uint8_t* rgba,
+                       uint32_t w,
+                       uint32_t h) -> bool
     {
         pane_call_count++;
         std::memset(rgba, 128, static_cast<size_t>(w) * h * 4);
@@ -1013,11 +1013,11 @@ TEST(MultiPaneRecording, SinglePaneFallback)
 
     uint32_t calls   = 0;
     auto     pane_cb = [&](uint32_t pane_idx,
-                           uint32_t /*frame*/,
-                           float /*time*/,
-                           uint8_t* rgba,
-                           uint32_t w,
-                           uint32_t h) -> bool
+                       uint32_t /*frame*/,
+                       float /*time*/,
+                       uint8_t* rgba,
+                       uint32_t w,
+                       uint32_t h) -> bool
     {
         EXPECT_EQ(pane_idx, 0u);
         calls++;

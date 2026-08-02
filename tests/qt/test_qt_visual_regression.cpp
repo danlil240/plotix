@@ -32,22 +32,22 @@
 
 #include <memory>
 
-namespace {
+namespace
+{
 
 struct QtVisualEnv
 {
-    std::unique_ptr<spectra::FigureRegistry> registry;
-    std::unique_ptr<spectra::CommandRegistry> cmd_registry;
+    std::unique_ptr<spectra::FigureRegistry>               registry;
+    std::unique_ptr<spectra::CommandRegistry>              cmd_registry;
     std::unique_ptr<spectra::adapters::qt::QtActionBridge> action_bridge;
 
     QtVisualEnv()
     {
-        registry = std::make_unique<spectra::FigureRegistry>();
-        cmd_registry = std::make_unique<spectra::CommandRegistry>();
+        registry      = std::make_unique<spectra::FigureRegistry>();
+        cmd_registry  = std::make_unique<spectra::CommandRegistry>();
         action_bridge = std::make_unique<spectra::adapters::qt::QtActionBridge>(*cmd_registry);
         action_bridge->rebuild();
     }
-
 };
 
 QtVisualEnv& env()
@@ -62,15 +62,17 @@ static QWidget* find_widget(QObject* parent, const char* name)
     return parent->findChild<QWidget*>(name);
 }
 
-} // namespace
+}   // namespace
 
 // ── Window default size ──────────────────────────────────────────────────────
 
 TEST(QtVisualRegression, DefaultWindowSize)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     EXPECT_EQ(mw.width(), 1280);
     EXPECT_EQ(mw.height(), 720);
@@ -80,9 +82,11 @@ TEST(QtVisualRegression, DefaultWindowSize)
 
 TEST(QtVisualRegression, CustomTitleBarIsNotDuplicatedInClientArea)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     auto* title_bar = find_widget(&mw, "spectra_title_bar");
     ASSERT_NE(title_bar, nullptr);
@@ -93,9 +97,11 @@ TEST(QtVisualRegression, CustomTitleBarIsNotDuplicatedInClientArea)
 
 TEST(QtVisualRegression, AppHeaderExists)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     auto* header = find_widget(&mw, "spectra_app_header");
     ASSERT_NE(header, nullptr);
@@ -106,9 +112,11 @@ TEST(QtVisualRegression, AppHeaderExists)
 
 TEST(QtVisualRegression, NavRailExists)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     auto* nav_rail = find_widget(&mw, "spectra_nav_rail");
     ASSERT_NE(nav_rail, nullptr);
@@ -119,9 +127,11 @@ TEST(QtVisualRegression, NavRailExists)
 
 TEST(QtVisualRegression, DocumentTabBarExists)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     auto* tab_bar = find_widget(&mw, "spectra_doc_tab_bar");
     ASSERT_NE(tab_bar, nullptr);
@@ -132,9 +142,11 @@ TEST(QtVisualRegression, DocumentTabBarExists)
 
 TEST(QtVisualRegression, StatusBarExists)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     auto* status_bar = find_widget(&mw, "spectra_status_bar");
     ASSERT_NE(status_bar, nullptr);
@@ -145,9 +157,11 @@ TEST(QtVisualRegression, StatusBarExists)
 
 TEST(QtVisualRegression, InspectorHiddenByDefault)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     auto* inspector = find_widget(&mw, "spectra_inspector");
     ASSERT_NE(inspector, nullptr);
@@ -158,9 +172,11 @@ TEST(QtVisualRegression, InspectorHiddenByDefault)
 
 TEST(QtVisualRegression, DefaultMenuBarNotVisible)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     auto* menubar = mw.menuBar();
     ASSERT_NE(menubar, nullptr);
@@ -171,9 +187,11 @@ TEST(QtVisualRegression, DefaultMenuBarNotVisible)
 
 TEST(QtVisualRegression, CanvasFrameExists)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     auto* canvas_frame = find_widget(&mw, "spectra_canvas_frame");
     ASSERT_NE(canvas_frame, nullptr);
@@ -184,9 +202,11 @@ TEST(QtVisualRegression, CanvasFrameExists)
 
 TEST(QtVisualRegression, CentralContainerExists)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
 
     auto* container = find_widget(&mw, "spectra_central_container");
     ASSERT_NE(container, nullptr);
@@ -197,9 +217,11 @@ TEST(QtVisualRegression, CentralContainerExists)
 
 TEST(QtVisualRegression, ScreenshotCapture)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
     mw.show();
 
     // Process events to let the window render
@@ -216,9 +238,11 @@ TEST(QtVisualRegression, ScreenshotCapture)
 
 TEST(QtVisualRegression, NoUnexpectedLightNativeSurfaces)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
     mw.show();
     QApplication::processEvents();
 
@@ -237,8 +261,8 @@ TEST(QtVisualRegression, NoUnexpectedLightNativeSurfaces)
         }
     }
 
-    const double bright_ratio = static_cast<double>(bright_pixels)
-        / static_cast<double>(image.width() * image.height());
+    const double bright_ratio =
+        static_cast<double>(bright_pixels) / static_cast<double>(image.width() * image.height());
     EXPECT_LT(bright_ratio, 0.01)
         << "A large light region usually means an unthemed native dock obscured the canvas";
     mw.hide();
@@ -248,9 +272,11 @@ TEST(QtVisualRegression, NoUnexpectedLightNativeSurfaces)
 
 TEST(QtVisualRegression, CompactModeTriggersBelow1100)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
     mw.show();
     QApplication::processEvents();
 
@@ -273,9 +299,11 @@ TEST(QtVisualRegression, CompactModeTriggersBelow1100)
 
 TEST(QtVisualRegression, ResetLayoutHidesInspector)
 {
-    auto& e = env();
-    spectra::adapters::qt::SpectraMainWindow mw(
-        nullptr, e.registry.get(), e.action_bridge.get(), nullptr);
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow mw(nullptr,
+                                                e.registry.get(),
+                                                e.action_bridge.get(),
+                                                nullptr);
     mw.show();
     QApplication::processEvents();
 

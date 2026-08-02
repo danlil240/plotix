@@ -36,11 +36,11 @@ std::string choose_ulog_file_path()
     const char*    home_env          = std::getenv("HOME");
     std::string    default_path      = home_env ? std::string(home_env) + "/" : "/";
     const char*    result            = tinyfd_openFileDialog("Open ULog",
-                                                             default_path.c_str(),
-                                                             2,
-                                                             filter_patterns,
-                                                             "PX4 ULog (*.ulg)",
-                                                             0);
+                                               default_path.c_str(),
+                                               2,
+                                               filter_patterns,
+                                               "PX4 ULog (*.ulg)",
+                                               0);
 
     return result ? std::string(result) : std::string();
 }

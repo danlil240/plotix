@@ -442,11 +442,11 @@ static void populate_all_features_figure(spectra::Figure&  fig,
         scene.y_envelope[i] = 0.35f * std::cos(0.8f * x - 0.5f * scene.phase);
     }
 
-    scene.wave_series     = &ax_signals.line(scene.x_wave, scene.y_wave)
-                                 .label("composite wave")
-                                 .color(spectra::colors::cyan)
-                                 .line_style(spectra::LineStyle::Solid)
-                                 .width(2.5f);
+    scene.wave_series = &ax_signals.line(scene.x_wave, scene.y_wave)
+                             .label("composite wave")
+                             .color(spectra::colors::cyan)
+                             .line_style(spectra::LineStyle::Solid)
+                             .width(2.5f);
     scene.envelope_series = &ax_signals.line(scene.x_wave, scene.y_envelope)
                                  .label("envelope")
                                  .color(spectra::colors::yellow)

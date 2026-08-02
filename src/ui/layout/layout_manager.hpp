@@ -98,28 +98,28 @@ class LayoutManager
     static constexpr float INSPECTOR_MAX_WIDTH     = 480.0f;
     static constexpr float TAB_BAR_HEIGHT          = 40.0f;
     static constexpr float RESIZE_HANDLE_WIDTH     = 6.0f;
-    static constexpr float ANIM_SPEED = 12.0f;   // Nav rail exponential smoothing
+    static constexpr float ANIM_SPEED              = 12.0f;   // Nav rail exponential smoothing
 
     // Nav rail vertical content (icon+label buttons stacked in draw_nav_rail).
     // SpectraNavRail: 8 tools + 6 panels + Help = 15 buttons, 4 section separators.
-    static constexpr int   NAV_RAIL_BUTTON_COUNT     = 15;
-    static constexpr int   NAV_RAIL_SEPARATOR_COUNT  = 4;
+    static constexpr int NAV_RAIL_BUTTON_COUNT    = 15;
+    static constexpr int NAV_RAIL_SEPARATOR_COUNT = 4;
     // Legacy ImGuiIntegration::draw_nav_rail fallback (no AppShell).
     static constexpr int   NAV_RAIL_FALLBACK_BUTTON_COUNT = 12;
-    static constexpr float NAV_RAIL_CELL_HEIGHT      = 56.0f;
-    static constexpr float NAV_RAIL_CELL_HEIGHT_MIN  = 36.0f;
-    static constexpr float NAV_RAIL_SEPARATOR_HEIGHT = 9.0f;
-    static constexpr float NAV_RAIL_VERTICAL_PADDING = 24.0f;   // top+bottom window padding
-    static constexpr float WINDOW_MIN_HEIGHT_NO_NAV  = 240.0f;
-    static constexpr float WINDOW_MIN_CANVAS_WIDTH   = 160.0f;
+    static constexpr float NAV_RAIL_CELL_HEIGHT           = 56.0f;
+    static constexpr float NAV_RAIL_CELL_HEIGHT_MIN       = 36.0f;
+    static constexpr float NAV_RAIL_SEPARATOR_HEIGHT      = 9.0f;
+    static constexpr float NAV_RAIL_VERTICAL_PADDING      = 24.0f;   // top+bottom window padding
+    static constexpr float WINDOW_MIN_HEIGHT_NO_NAV       = 240.0f;
+    static constexpr float WINDOW_MIN_CANVAS_WIDTH        = 160.0f;
 
     static float nav_rail_content_height(int button_count, int separator_count, float cell_scale);
     static float nav_rail_nominal_content_height();
     static float nav_rail_min_content_height();
     static float nav_rail_scale_for_height(float available_height);
     static float nav_rail_scale_for_height(float available_height,
-                                           int    button_count,
-                                           int    separator_count);
+                                           int   button_count,
+                                           int   separator_count);
     static float min_window_height(bool nav_rail_visible,
                                    bool command_bar_visible,
                                    bool status_bar_visible);
@@ -166,7 +166,7 @@ class LayoutManager
 
     // Helper: exponential smoothing toward target (nav rail)
     static float smooth_toward(float current, float target, float speed, float dt);
-    void update_inspector_animation(float dt);
+    void         update_inspector_animation(float dt);
 
     // Helper methods
     void compute_zones();

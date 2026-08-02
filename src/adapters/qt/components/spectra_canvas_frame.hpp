@@ -14,20 +14,20 @@ namespace spectra::adapters::qt
 class SpectraCanvasFrame : public QWidget
 {
     Q_OBJECT
-public:
+   public:
     explicit SpectraCanvasFrame(QWidget* central_widget, QWidget* parent = nullptr);
     ~SpectraCanvasFrame() override;
-    SpectraCanvasFrame(const SpectraCanvasFrame&) = delete;
+    SpectraCanvasFrame(const SpectraCanvasFrame&)            = delete;
     SpectraCanvasFrame& operator=(const SpectraCanvasFrame&) = delete;
 
     void set_central_widget(QWidget* widget);
 
-protected:
+   protected:
     void paintEvent(QPaintEvent* event) override;
 
-private:
-    QWidget* central_  = nullptr;
-    QVBoxLayout* layout_ = nullptr;
+   private:
+    QWidget*     central_ = nullptr;
+    QVBoxLayout* layout_  = nullptr;
 };
 
 }   // namespace spectra::adapters::qt

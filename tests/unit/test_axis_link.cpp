@@ -787,8 +787,8 @@ TEST(AxisLinkThreadSafety, ConcurrentPropagateAndQuery)
             for (int i = 0; i < 100; ++i)
             {
                 mgr.propagate_limits(&ax(*fig, 0),
-                                     {static_cast<float>(i), static_cast<float>(i + 10)},
-                                     {-1.0f, 1.0f});
+                                           {static_cast<float>(i), static_cast<float>(i + 10)},
+                                           {-1.0f, 1.0f});
             }
             done = true;
         });

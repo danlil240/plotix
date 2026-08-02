@@ -16,13 +16,13 @@ namespace spectra
 using CustomUploadFn = std::function<
     int(Backend& backend, const void* series_data, void* gpu_state, size_t data_count)>;
 using CustomDrawFn    = std::function<int(Backend&                   backend,
-                                          PipelineHandle             pipeline,
-                                          const void*                gpu_state,
-                                          const float*               viewport_xywh,
-                                          const SeriesPushConstants& push_constants)>;
+                                       PipelineHandle             pipeline,
+                                       const void*                gpu_state,
+                                       const float*               viewport_xywh,
+                                       const SeriesPushConstants& push_constants)>;
 using CustomBoundsFn  = std::function<int(const void* series_data,
-                                          size_t      data_count,
-                                          float*      bounds_out)>;   // [xmin, xmax, ymin, ymax]
+                                         size_t      data_count,
+                                         float*      bounds_out)>;   // [xmin, xmax, ymin, ymax]
 using CustomCleanupFn = std::function<void(Backend& backend, void* gpu_state)>;
 
 /// An entry in the series type registry (internal storage).
