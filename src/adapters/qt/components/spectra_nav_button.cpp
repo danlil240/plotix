@@ -2,11 +2,15 @@
 
 #include "spectra_nav_button.hpp"
 #include "spectra_design_tokens.hpp"
+#include "ui/layout/layout_manager.hpp"
+#include "ui/theme/design_tokens.hpp"
 
 #include <QFontMetrics>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QSizePolicy>
+
+#include <algorithm>
 
 namespace spectra::adapters::qt
 {
@@ -105,8 +109,24 @@ void SpectraNavButton::paintEvent(QPaintEvent*)
     // Icon
     QColor icon_color = active_ ? c.cyan_accent : hovered ? c.text_primary : c.text_secondary;
 
-    const int icon_size      = compact_ ? 16 : qBound(14, height() / 2 - 5, 20);
-    const int content_height = compact_ ? icon_size : icon_size + 13;
+    // Derive the legacy rail cell scale from the button height and size the
+    // icon/label with the same floors the legacy uses.
+    const float cell_scale = compact_ ? 1.0f
+                                      : static_cast<float>(height()) / LayoutManager::NAV_RAIL_CELL_HEIGHT;
+    const int icon_size = compact_ ? 16
+                                   : qRound(std::max(ui::tokens::NAV_RAIL_ICON_SIZE_BASE * cell_scale,
+                                                     ui::tokens::NAV_RAIL_ICON_SIZE_MIN));
+    const int label_size = compact_ ? 0
+                                    : qRound(std::max(ui::tokens::NAV_RAIL_LABEL_SIZE_BASE * cell_scale,
+                                                      ui::tokens::NAV_RAIL_LABEL_SIZE_MIN));
+    const int icon_gap = compact_ ? 0
+                                  : qRound(std::max(ui::tokens::SPACE_1 * 0.75f * cell_scale, 1.0f));
+
+    QFont label_font = fm.font_small();
+    if (!compact_)
+        label_font.setPixelSize(label_size);
+    const int label_height   = compact_ ? 0 : QFontMetrics(label_font).height();
+    const int content_height = icon_size + icon_gap + label_height;
     const int icon_y         = (height() - content_height) / 2;
 
     // Draw icon using icon font
@@ -130,11 +150,9 @@ void SpectraNavButton::paintEvent(QPaintEvent*)
     // Label (hidden in compact mode)
     if (!compact_)
     {
-        QFont label_font = fm.font_small();
-        label_font.setPixelSize(qBound(10, height() / 4, 12));
         p.setFont(label_font);
         p.setPen(active_ ? c.text_primary : hovered ? c.text_secondary : c.text_muted);
-        QRect label_rect(0, icon_y + icon_size, width(), 13);
+        QRect label_rect(0, icon_y + icon_size + icon_gap, width(), label_height);
         p.drawText(label_rect, Qt::AlignCenter, label_);
     }
 }

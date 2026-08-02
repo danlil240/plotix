@@ -24,6 +24,7 @@ namespace spectra::adapters::qt
 {
 
 class SpectraNavButton;
+class NavSeparator;
 
 class SpectraNavRail : public QWidget
 {
@@ -49,12 +50,17 @@ class SpectraNavRail : public QWidget
 
    protected:
     void paintEvent(QPaintEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
    private:
     void build_buttons();
+    // Mirrors LayoutManager::nav_rail_scale_for_height so the rail compresses
+    // its cells like the legacy rail instead of clipping trailing entries.
+    void apply_cell_metrics();
 
     QVBoxLayout*             layout_ = nullptr;
     QList<SpectraNavButton*> buttons_;
+    QList<NavSeparator*>     separators_;
     bool                     compact_ = false;
     int                      active_  = 1;   // Pan is default active
 };
