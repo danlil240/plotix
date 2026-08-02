@@ -6,6 +6,7 @@
 #include "ui/commands/undoable_property.hpp"
 #include "app/frontend_services.hpp"
 #include "../components/spectra_design_tokens.hpp"
+#include "ui/theme/design_tokens.hpp"
 #include "../components/spectra_inspector_widgets.hpp"
 #include "data_editor_widget.hpp"
 
@@ -429,79 +430,107 @@ void update_color_button(QPushButton* btn, const spectra::Color& c)
                            .arg(qc.darker(120).name()));
 }
 
-QWidget* make_color_dot(QWidget* parent, const spectra::Color& c)
+// ─── Collapsible section using a QToolButton header and a content frame ─────
+// Every inspector form shares one rhythm: a token label column, comfortable
+// vertical spacing, and fields that shrink with the fixed-width drawer instead
+// of forcing a horizontal scrollbar.
+QFormLayout* make_inspector_form()
 {
-    auto* dot = new QWidget(parent);
-    dot->setFixedSize(10, 10);
-    dot->setAttribute(Qt::WA_StyledBackground, true);
-    const QColor qc = to_qcolor(c);
-    dot->setStyleSheet(
-        QString("background-color: %1; border-radius: 5px;").arg(qc.name(QColor::HexArgb)));
-    return dot;
+    auto* form = new QFormLayout();
+    form->setContentsMargins(0, 0, 0, 0);
+    form->setHorizontalSpacing(static_cast<int>(ui::tokens::SPACE_2));
+    form->setVerticalSpacing(static_cast<int>(ui::tokens::SPACE_3));
+    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    form->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
+    form->setRowWrapPolicy(QFormLayout::DontWrapRows);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    return form;
 }
 
-// ─── Collapsible section using a QToolButton header and a content frame ─────
+// Form labels must read like SpectraPropertyRow labels, and the fields must be
+// able to shrink to the fixed drawer width rather than clipping.
+void style_inspector_form_row(QFormLayout* form, QWidget* field)
+{
+    if (!form)
+        return;
+    if (auto* label = qobject_cast<QLabel*>(form->labelForField(field)))
+    {
+        label->setFont(SpectraFontManager::instance().font_small());
+        label->setStyleSheet(QString("color: %1; background: transparent;")
+                                 .arg(spectra_colors().text_secondary.name(QColor::HexArgb)));
+        label->setMinimumWidth(static_cast<int>(ui::tokens::INSPECTOR_LABEL_WIDTH) - 12);
+    }
+    if (auto* edit = qobject_cast<QLineEdit*>(field))
+    {
+        edit->setMinimumWidth(56);
+        edit->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+    }
+    else if (auto* combo = qobject_cast<QComboBox*>(field))
+    {
+        combo->setMinimumWidth(56);
+        combo->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    }
+}
+
+// Applies the row treatment to every row already added to the form.
+void style_inspector_form(QFormLayout* form)
+{
+    if (!form)
+        return;
+    for (int row = 0; row < form->rowCount(); ++row)
+    {
+        QLayoutItem* item = form->itemAt(row, QFormLayout::FieldRole);
+        style_inspector_form_row(form, item ? item->widget() : nullptr);
+    }
+}
+
+// Matches SpectraDragSpinBox presentation for the spin boxes that are still
+// constructed directly (axes limits, widths, tick lengths).
+void configure_inspector_spin(QDoubleSpinBox* spin)
+{
+    if (!spin)
+        return;
+    spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    spin->setAlignment(Qt::AlignCenter);
+    spin->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+    spin->setMinimumWidth(56);
+    spin->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+}
+
+// Wraps the shared SpectraSectionHeader so every inspector section — not just
+// the Figure page — gets the legacy band + chevron treatment while keeping the
+// existing content_layout() call sites unchanged.
 class CollapsibleSection : public QWidget
 {
    public:
     CollapsibleSection(const QString& title, QWidget* parent = nullptr)
-        : QWidget(parent), header_(new QToolButton(this)), content_(new QWidget(this)),
-          content_layout_(new QVBoxLayout(content_))
+        : QWidget(parent), header_(new SpectraSectionHeader(title, this)),
+          content_(new QWidget(this)), content_layout_(new QVBoxLayout(content_))
     {
         auto* layout = new QVBoxLayout(this);
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(0);
 
-        header_->setText(title);
-        header_->setCheckable(true);
-        header_->setChecked(true);
-        header_->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-        header_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        header_->setFixedHeight(32);
-        header_->setArrowType(Qt::DownArrow);
-        const auto& t   = spectra_colors();
-        const auto  bg  = t.panel_surface.name(QColor::HexArgb);
-        const auto  fg  = t.text_secondary.name(QColor::HexArgb);
-        const auto  hov = t.elevated_surface.name(QColor::HexArgb);
-        header_->setStyleSheet(QString("QToolButton {"
-                                       "  border: none;"
-                                       "  color: %1;"
-                                       "  background: %2;"
-                                       "  text-align: left;"
-                                       "  padding-left: 8px;"
-                                       "  font-weight: 600;"
-                                       "}"
-                                       "QToolButton:hover { background: %3; }"
-                                       "QToolButton::menu-indicator { image: none; }")
-                                   .arg(fg)
-                                   .arg(bg)
-                                   .arg(hov));
-
-        content_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        content_layout_->setContentsMargins(12, 8, 12, 8);
-        content_layout_->setSpacing(8);
+        content_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        content_layout_->setContentsMargins(static_cast<int>(ui::tokens::SPACE_2),
+                                            static_cast<int>(ui::tokens::SPACE_1),
+                                            static_cast<int>(ui::tokens::SPACE_2),
+                                            static_cast<int>(ui::tokens::SPACE_2));
+        content_layout_->setSpacing(static_cast<int>(ui::tokens::SPACE_2));
 
         layout->addWidget(header_);
         layout->addWidget(content_);
 
-        connect(header_,
-                &QToolButton::toggled,
-                this,
-                [this](bool checked)
-                {
-                    open_ = checked;
-                    content_->setVisible(open_);
-                    header_->setArrowType(open_ ? Qt::DownArrow : Qt::RightArrow);
-                });
+        connect(header_, &SpectraSectionHeader::toggled, content_, &QWidget::setVisible);
     }
 
     QVBoxLayout* content_layout() const { return content_layout_; }
 
    private:
-    QToolButton* header_         = nullptr;
-    QWidget*     content_        = nullptr;
-    QVBoxLayout* content_layout_ = nullptr;
-    bool         open_           = true;
+    SpectraSectionHeader* header_         = nullptr;
+    QWidget*              content_        = nullptr;
+    QVBoxLayout*          content_layout_ = nullptr;
 };
 
 }   // namespace
@@ -660,6 +689,8 @@ void QtInspectorWidget::build_figure_page()
     figure_scroll_ = new QScrollArea(this);
     figure_scroll_->setWidgetResizable(true);
     figure_scroll_->setFrameShape(QFrame::NoFrame);
+    // The inspector is a fixed-width drawer: content must reflow, never pan.
+    figure_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     auto* container = new QWidget();
     container->setObjectName("inspector_figure_page");
@@ -680,11 +711,6 @@ void QtInspectorWidget::build_figure_page()
     figure_size_label_->setVisible(false);
     figure_axes_count_label_->setVisible(false);
 
-    // Title row
-    figure_title_edit_ = new QLineEdit(container);
-    figure_title_edit_->setObjectName("figure_title");
-    figure_layout_->addWidget(new SpectraPropertyRow("Title", figure_title_edit_, container));
-
     // ── Background section ──
     auto* bg_header  = new SpectraSectionHeader("BACKGROUND", container);
     auto* bg_content = new QWidget(container);
@@ -703,7 +729,7 @@ void QtInspectorWidget::build_figure_page()
     auto* margins_content = new QWidget(container);
     auto* margins_layout  = new QVBoxLayout(margins_content);
     margins_layout->setContentsMargins(8, 4, 8, 8);
-    margins_layout->setSpacing(4);
+    margins_layout->setSpacing(static_cast<int>(ui::tokens::SPACE_4));
 
     margin_top_spin_    = new SpectraDragSpinBox(margins_content);
     margin_bottom_spin_ = new SpectraDragSpinBox(margins_content);
@@ -746,7 +772,7 @@ void QtInspectorWidget::build_figure_page()
     auto* legend_content = new QWidget(container);
     auto* legend_layout  = new QVBoxLayout(legend_content);
     legend_layout->setContentsMargins(8, 4, 8, 8);
-    legend_layout->setSpacing(4);
+    legend_layout->setSpacing(static_cast<int>(ui::tokens::SPACE_4));
 
     legend_visible_check_ = new QCheckBox("Show Legend", legend_content);
     legend_visible_check_->setObjectName("figure_legend_visible");
@@ -791,6 +817,7 @@ void QtInspectorWidget::build_figure_page()
     quick_layout->setContentsMargins(8, 4, 8, 8);
     quick_layout->setSpacing(6);
     reset_figure_style_btn_ = new QPushButton("Reset to Defaults", quick_content);
+    reset_figure_style_btn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     quick_layout->addWidget(reset_figure_style_btn_);
     connect(quick_header, &SpectraSectionHeader::toggled, quick_content, &QWidget::setVisible);
     figure_layout_->addWidget(quick_header);
@@ -806,6 +833,8 @@ void QtInspectorWidget::build_series_page()
     series_scroll_ = new QScrollArea(this);
     series_scroll_->setWidgetResizable(true);
     series_scroll_->setFrameShape(QFrame::NoFrame);
+    // The inspector is a fixed-width drawer: content must reflow, never pan.
+    series_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     auto* container = new QWidget();
     container->setObjectName("inspector_series_page");
@@ -836,6 +865,8 @@ void QtInspectorWidget::build_axes_page()
     axes_scroll_ = new QScrollArea(this);
     axes_scroll_->setWidgetResizable(true);
     axes_scroll_->setFrameShape(QFrame::NoFrame);
+    // The inspector is a fixed-width drawer: content must reflow, never pan.
+    axes_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     auto* container = new QWidget();
     container->setObjectName("inspector_axes_page");
@@ -865,6 +896,8 @@ void QtInspectorWidget::build_data_page()
     data_scroll_ = new QScrollArea(this);
     data_scroll_->setWidgetResizable(true);
     data_scroll_->setFrameShape(QFrame::NoFrame);
+    // The inspector is a fixed-width drawer: content must reflow, never pan.
+    data_scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
     auto* container = new QWidget();
     container->setObjectName("inspector_data_page");
@@ -944,7 +977,6 @@ void QtInspectorWidget::refresh()
     }
 
     // Figure tab
-    set_line_edit_from_model(figure_title_edit_, figure->tab_title());
     figure_size_label_->setText(QString("%1 × %2").arg(figure->width()).arg(figure->height()));
 
     const auto   axes       = active_axes();
@@ -1028,7 +1060,6 @@ void QtInspectorWidget::sync_from_model()
         return;
     }
 
-    set_line_edit_from_model(figure_title_edit_, figure->tab_title());
     if (figure_size_label_)
         figure_size_label_->setText(QString("%1 × %2").arg(figure->width()).arg(figure->height()));
     if (figure_axes_count_label_)
@@ -1159,19 +1190,18 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
 
     // Title
     auto* title_section = new CollapsibleSection("TITLE", tab);
-    auto* title_form    = new QFormLayout();
-    title_form->setContentsMargins(0, 0, 0, 0);
-    ctrl.title_edit = new QLineEdit(tab);
+    auto* title_form    = make_inspector_form();
+    ctrl.title_edit     = new QLineEdit(tab);
     ctrl.title_edit->setObjectName(QString("axes_%1_title").arg(index));
     ctrl.title_edit->setText(QString::fromStdString(ax.title()));
     title_form->addRow("Title", ctrl.title_edit);
+    style_inspector_form(title_form);
     title_section->content_layout()->addLayout(title_form);
     layout->addWidget(title_section);
 
     // X Axis
-    auto* x_section = new CollapsibleSection("X AXIS", tab);
-    auto* x_form    = new QFormLayout();
-    x_form->setContentsMargins(0, 0, 0, 0);
+    auto* x_section  = new CollapsibleSection("X AXIS", tab);
+    auto* x_form     = make_inspector_form();
     ctrl.xlabel_edit = new QLineEdit(tab);
     ctrl.xlabel_edit->setObjectName(QString("axes_%1_x_label").arg(index));
     ctrl.xlabel_edit->setText(QString::fromStdString(ax.get_xlabel()));
@@ -1180,25 +1210,27 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     auto  xlim           = ax.x_limits();
     auto* x_range_layout = new QHBoxLayout();
     ctrl.xmin_spin       = new QDoubleSpinBox(tab);
+    configure_inspector_spin(ctrl.xmin_spin);
     ctrl.xmin_spin->setObjectName(QString("axes_%1_x_min").arg(index));
     ctrl.xmin_spin->setRange(-1e9, 1e9);
     ctrl.xmin_spin->setDecimals(3);
     ctrl.xmin_spin->setValue(xlim.min);
     x_range_layout->addWidget(ctrl.xmin_spin);
     ctrl.xmax_spin = new QDoubleSpinBox(tab);
+    configure_inspector_spin(ctrl.xmax_spin);
     ctrl.xmax_spin->setObjectName(QString("axes_%1_x_max").arg(index));
     ctrl.xmax_spin->setRange(-1e9, 1e9);
     ctrl.xmax_spin->setDecimals(3);
     ctrl.xmax_spin->setValue(xlim.max);
     x_range_layout->addWidget(ctrl.xmax_spin);
     x_form->addRow("Range", x_range_layout);
+    style_inspector_form(x_form);
     x_section->content_layout()->addLayout(x_form);
     layout->addWidget(x_section);
 
     // Y Axis
-    auto* y_section = new CollapsibleSection("Y AXIS", tab);
-    auto* y_form    = new QFormLayout();
-    y_form->setContentsMargins(0, 0, 0, 0);
+    auto* y_section  = new CollapsibleSection("Y AXIS", tab);
+    auto* y_form     = make_inspector_form();
     ctrl.ylabel_edit = new QLineEdit(tab);
     ctrl.ylabel_edit->setObjectName(QString("axes_%1_y_label").arg(index));
     ctrl.ylabel_edit->setText(QString::fromStdString(ax.get_ylabel()));
@@ -1207,36 +1239,39 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     auto  ylim           = ax.y_limits();
     auto* y_range_layout = new QHBoxLayout();
     ctrl.ymin_spin       = new QDoubleSpinBox(tab);
+    configure_inspector_spin(ctrl.ymin_spin);
     ctrl.ymin_spin->setObjectName(QString("axes_%1_y_min").arg(index));
     ctrl.ymin_spin->setRange(-1e9, 1e9);
     ctrl.ymin_spin->setDecimals(3);
     ctrl.ymin_spin->setValue(ylim.min);
     y_range_layout->addWidget(ctrl.ymin_spin);
     ctrl.ymax_spin = new QDoubleSpinBox(tab);
+    configure_inspector_spin(ctrl.ymax_spin);
     ctrl.ymax_spin->setObjectName(QString("axes_%1_y_max").arg(index));
     ctrl.ymax_spin->setRange(-1e9, 1e9);
     ctrl.ymax_spin->setDecimals(3);
     ctrl.ymax_spin->setValue(ylim.max);
     y_range_layout->addWidget(ctrl.ymax_spin);
     y_form->addRow("Range", y_range_layout);
+    style_inspector_form(y_form);
     y_section->content_layout()->addLayout(y_form);
     layout->addWidget(y_section);
 
     // Grid & Border
     auto* grid_section = new CollapsibleSection("GRID & BORDER", tab);
-    auto* grid_form    = new QFormLayout();
-    grid_form->setContentsMargins(0, 0, 0, 0);
-    ctrl.grid_check = new QCheckBox("Show Grid", tab);
+    auto* grid_form    = make_inspector_form();
+    ctrl.grid_check    = new QCheckBox("Show Grid", tab);
     ctrl.grid_check->setChecked(ax.grid_enabled());
-    grid_form->addRow("", ctrl.grid_check);
+    grid_form->addRow(ctrl.grid_check);
     ctrl.border_check = new QCheckBox("Show Border", tab);
     ctrl.border_check->setChecked(ax.border_enabled());
-    grid_form->addRow("", ctrl.border_check);
+    grid_form->addRow(ctrl.border_check);
 
     ctrl.grid_color_btn = make_color_button(tab, ax.axis_style().grid_color);
     grid_form->addRow("Grid Color", ctrl.grid_color_btn);
 
     ctrl.grid_width_spin_ = new QDoubleSpinBox(tab);
+    configure_inspector_spin(ctrl.grid_width_spin_);
     ctrl.grid_width_spin_->setRange(0.1, 5.0);
     ctrl.grid_width_spin_->setDecimals(1);
     ctrl.grid_width_spin_->setSingleStep(0.1);
@@ -1244,17 +1279,18 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     grid_form->addRow("Grid Width", ctrl.grid_width_spin_);
 
     ctrl.tick_length_spin_ = new QDoubleSpinBox(tab);
+    configure_inspector_spin(ctrl.tick_length_spin_);
     ctrl.tick_length_spin_->setRange(0.0, 20.0);
     ctrl.tick_length_spin_->setDecimals(0);
     ctrl.tick_length_spin_->setValue(ax.axis_style().tick_length);
     grid_form->addRow("Tick Length", ctrl.tick_length_spin_);
+    style_inspector_form(grid_form);
     grid_section->content_layout()->addLayout(grid_form);
     layout->addWidget(grid_section);
 
     // Autoscale
-    auto* auto_section = new CollapsibleSection("AUTOSCALE", tab);
-    auto* auto_form    = new QFormLayout();
-    auto_form->setContentsMargins(0, 0, 0, 0);
+    auto* auto_section    = new CollapsibleSection("AUTOSCALE", tab);
+    auto* auto_form       = make_inspector_form();
     ctrl.autoscale_combo_ = new QComboBox(tab);
     ctrl.autoscale_combo_->addItem("Fit");
     ctrl.autoscale_combo_->addItem("Tight");
@@ -1263,14 +1299,14 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     ctrl.autoscale_combo_->setCurrentIndex(static_cast<int>(ax.get_autoscale_mode()));
     auto_form->addRow("Mode", ctrl.autoscale_combo_);
     ctrl.auto_fit_btn_ = new QPushButton("Auto-fit Now", tab);
-    auto_form->addRow("", ctrl.auto_fit_btn_);
+    auto_form->addRow(ctrl.auto_fit_btn_);
+    style_inspector_form(auto_form);
     auto_section->content_layout()->addLayout(auto_form);
     layout->addWidget(auto_section);
 
     // Statistics
     auto* stats_section = new CollapsibleSection("STATISTICS", tab);
-    auto* stats_form    = new QFormLayout();
-    stats_form->setContentsMargins(0, 0, 0, 0);
+    auto* stats_form    = make_inspector_form();
     stats_form->setSpacing(6);
 
     ctrl.stats_visible_label = new QLabel(tab);
@@ -1312,6 +1348,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     stats_form->addRow("Y Min", ctrl.stats_y_min_label);
     stats_form->addRow("Y Max", ctrl.stats_y_max_label);
     stats_form->addRow("Y Mean", ctrl.stats_y_mean_label);
+    style_inspector_form(stats_form);
     stats_section->content_layout()->addLayout(stats_form);
     layout->addWidget(stats_section);
 
@@ -1321,10 +1358,13 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     ref_layout->setContentsMargins(0, 0, 0, 0);
     ref_layout->setSpacing(8);
 
+    // Value/format inputs and the two add buttons need separate rows: four
+    // controls abreast exceed the fixed drawer width and clip.
     auto* add_row = new QHBoxLayout();
-    add_row->setSpacing(6);
+    add_row->setSpacing(static_cast<int>(ui::tokens::SPACE_2));
 
     auto* ref_value_spin = new QDoubleSpinBox(tab);
+    configure_inspector_spin(ref_value_spin);
     ref_value_spin->setObjectName(QString("axes_%1_ref_value").arg(index));
     ref_value_spin->setRange(-1e9, 1e9);
     ref_value_spin->setDecimals(3);
@@ -1334,15 +1374,24 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     auto* ref_fmt_edit = new QLineEdit("-", tab);
     ref_fmt_edit->setObjectName(QString("axes_%1_ref_fmt").arg(index));
     ref_fmt_edit->setPlaceholderText("Format");
+    ref_fmt_edit->setMinimumWidth(56);
+    ref_fmt_edit->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
     add_row->addWidget(ref_fmt_edit);
+    ref_layout->addLayout(add_row);
 
+    auto* add_btn_row = new QHBoxLayout();
+    add_btn_row->setSpacing(static_cast<int>(ui::tokens::SPACE_2));
     auto* add_hline_btn = new QPushButton("Add HLine", tab);
     add_hline_btn->setObjectName(QString("axes_%1_add_hline").arg(index));
     auto* add_vline_btn = new QPushButton("Add VLine", tab);
     add_vline_btn->setObjectName(QString("axes_%1_add_vline").arg(index));
-    add_row->addWidget(add_hline_btn);
-    add_row->addWidget(add_vline_btn);
-    ref_layout->addLayout(add_row);
+    for (auto* btn : {add_hline_btn, add_vline_btn})
+    {
+        btn->setMinimumWidth(0);
+        btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        add_btn_row->addWidget(btn);
+    }
+    ref_layout->addLayout(add_btn_row);
 
     auto* ref_list = new QWidget(tab);
     ref_list->setObjectName(QString("axes_%1_ref_list").arg(index));
@@ -1829,12 +1878,12 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
 
     // Title
     auto* title_section = new CollapsibleSection("TITLE", tab);
-    auto* title_form    = new QFormLayout();
-    title_form->setContentsMargins(0, 0, 0, 0);
-    ctrl.title_edit = new QLineEdit(tab);
+    auto* title_form    = make_inspector_form();
+    ctrl.title_edit     = new QLineEdit(tab);
     ctrl.title_edit->setObjectName(QString("axes_%1_title").arg(index));
     ctrl.title_edit->setText(QString::fromStdString(ax.title()));
     title_form->addRow("Title", ctrl.title_edit);
+    style_inspector_form(title_form);
     title_section->content_layout()->addLayout(title_form);
     layout->addWidget(title_section);
 
@@ -1847,8 +1896,7 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
                                                QDoubleSpinBox*&   max_spin)
     {
         auto* section = new CollapsibleSection(name, tab);
-        auto* form    = new QFormLayout();
-        form->setContentsMargins(0, 0, 0, 0);
+        auto* form    = make_inspector_form();
 
         label_edit = new QLineEdit(tab);
         label_edit->setObjectName(QString("axes_%1_%2_label").arg(index).arg(prefix));
@@ -1857,6 +1905,7 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
 
         auto* range_layout = new QHBoxLayout();
         min_spin           = new QDoubleSpinBox(tab);
+        configure_inspector_spin(min_spin);
         min_spin->setObjectName(QString("axes_%1_%2_min").arg(index).arg(prefix));
         min_spin->setRange(-1e9, 1e9);
         min_spin->setDecimals(3);
@@ -1864,12 +1913,14 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
         range_layout->addWidget(min_spin);
 
         max_spin = new QDoubleSpinBox(tab);
+        configure_inspector_spin(max_spin);
         max_spin->setObjectName(QString("axes_%1_%2_max").arg(index).arg(prefix));
         max_spin->setRange(-1e9, 1e9);
         max_spin->setDecimals(3);
         max_spin->setValue(limits.max);
         range_layout->addWidget(max_spin);
         form->addRow("Range", range_layout);
+        style_inspector_form(form);
         section->content_layout()->addLayout(form);
         layout->addWidget(section);
     };
@@ -1897,9 +1948,8 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
                    ctrl.zmax_spin);
 
     // Grid & Bounding Box
-    auto* grid_section = new CollapsibleSection("GRID & BOUNDING BOX", tab);
-    auto* grid_form    = new QFormLayout();
-    grid_form->setContentsMargins(0, 0, 0, 0);
+    auto* grid_section     = new CollapsibleSection("GRID & BOUNDING BOX", tab);
+    auto* grid_form        = make_inspector_form();
     ctrl.grid_planes_combo = new QComboBox(tab);
     ctrl.grid_planes_combo->setObjectName(QString("axes_%1_grid_planes").arg(index));
     ctrl.grid_planes_combo->addItem("None", static_cast<int>(Axes3D::GridPlane::None));
@@ -1915,6 +1965,7 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
     ctrl.bounding_box_check->setObjectName(QString("axes_%1_bounding_box").arg(index));
     ctrl.bounding_box_check->setChecked(ax.show_bounding_box());
     grid_form->addRow("Bounding Box", ctrl.bounding_box_check);
+    style_inspector_form(grid_form);
     grid_section->content_layout()->addLayout(grid_form);
     layout->addWidget(grid_section);
 
@@ -2149,8 +2200,7 @@ void QtInspectorWidget::build_series_properties(Series& s)
         return;
 
     auto* section = new CollapsibleSection("APPEARANCE", series_props_);
-    auto* form    = new QFormLayout();
-    form->setContentsMargins(0, 0, 0, 0);
+    auto* form    = make_inspector_form();
 
     series_controls_.label_edit = new QLineEdit(series_props_);
     series_controls_.label_edit->setText(QString::fromStdString(s.label()));
@@ -2161,9 +2211,10 @@ void QtInspectorWidget::build_series_properties(Series& s)
 
     series_controls_.visible_check = new QCheckBox("Visible", series_props_);
     series_controls_.visible_check->setChecked(s.visible());
-    form->addRow("", series_controls_.visible_check);
+    form->addRow(series_controls_.visible_check);
 
     series_controls_.width_spin = new QDoubleSpinBox(series_props_);
+    configure_inspector_spin(series_controls_.width_spin);
     series_controls_.width_spin->setRange(0.1, 20.0);
     series_controls_.width_spin->setDecimals(1);
     series_controls_.width_spin->setSingleStep(0.5);
@@ -2171,6 +2222,7 @@ void QtInspectorWidget::build_series_properties(Series& s)
     form->addRow("Width", series_controls_.width_spin);
 
     series_controls_.opacity_spin = new QDoubleSpinBox(series_props_);
+    configure_inspector_spin(series_controls_.opacity_spin);
     series_controls_.opacity_spin->setRange(0.0, 1.0);
     series_controls_.opacity_spin->setDecimals(2);
     series_controls_.opacity_spin->setSingleStep(0.05);
@@ -2193,11 +2245,14 @@ void QtInspectorWidget::build_series_properties(Series& s)
     if (has_marker)
     {
         series_controls_.marker_size_spin_ = new QDoubleSpinBox(series_props_);
+        configure_inspector_spin(series_controls_.marker_size_spin_);
         series_controls_.marker_size_spin_->setRange(1.0, 30.0);
         series_controls_.marker_size_spin_->setDecimals(1);
         series_controls_.marker_size_spin_->setValue(s.marker_size());
         form->addRow("Marker Size", series_controls_.marker_size_spin_);
     }
+
+    style_inspector_form(form);
 
     section->content_layout()->addLayout(form);
     series_props_layout_->addWidget(section);
@@ -2485,21 +2540,6 @@ void QtInspectorWidget::wire_figure_page()
 {
     auto* undo_mgr = services_ ? &services_->undo() : nullptr;
     auto* redraw   = services_ ? services_->redraw_request() : nullptr;
-
-    connect(
-        figure_title_edit_,
-        &QLineEdit::textChanged,
-        this,
-        [this, undo_mgr, redraw](const QString& text)
-        {
-            if (!registry_ || active_id_ == INVALID_FIGURE_ID)
-                return;
-            if (!undoable_set_figure_title(undo_mgr, *registry_, active_id_, text.toStdString()))
-                return;
-            emit figure_title_changed(active_id_, text);
-            if (redraw)
-                redraw->request_redraw(active_id_);
-        });
 
     figure_bg_color_field_->setColorPicker(
         [this](const QString& title, const spectra::Color& current)

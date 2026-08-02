@@ -232,7 +232,9 @@ void SpectraSegmentedControl::resizeEvent(QResizeEvent*)
 SpectraPanelTitle::SpectraPanelTitle(QWidget* parent) : QWidget(parent)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(48);
+    // Legacy `Inspector::draw_figure_properties` renders title, small spacing,
+    // subtitle, section spacing, a separator, then section spacing again.
+    setFixedHeight(kTitleH + kSubtitleH + static_cast<int>(ui::tokens::SPACE_5) * 2 + 1);
 }
 
 void SpectraPanelTitle::setTitle(const QString& title)
@@ -258,16 +260,25 @@ void SpectraPanelTitle::paintEvent(QPaintEvent*)
     QFont title_f = title_font();
     p.setFont(title_f);
     p.setPen(c.text_primary);
-    p.drawText(rect().adjusted(0, 0, 0, -24), Qt::AlignLeft | Qt::AlignBottom, title_);
+    p.drawText(QRect(0, 0, width(), kTitleH), Qt::AlignLeft | Qt::AlignVCenter, title_);
 
     if (!subtitle_.isEmpty())
     {
         QFont sub_f = subtitle_font();
         p.setFont(sub_f);
-        QColor sub_color = c.text_muted;
-        p.setPen(sub_color);
-        p.drawText(rect().adjusted(0, 24, 0, 0), Qt::AlignLeft | Qt::AlignTop, subtitle_);
+        p.setPen(c.text_muted);
+        p.drawText(QRect(0, kTitleH, width(), kSubtitleH),
+                   Qt::AlignLeft | Qt::AlignVCenter,
+                   subtitle_);
     }
+
+    // Hairline separator closing the title block, matching legacy
+    // `widgets::separator()` between the panel header and the first section.
+    QColor sep(c.border_subtle);
+    sep.setAlpha(140);
+    p.setPen(QPen(sep, 1));
+    const int sep_y = kTitleH + kSubtitleH + static_cast<int>(ui::tokens::SPACE_5);
+    p.drawLine(0, sep_y, width(), sep_y);
 }
 
 // ─── SectionHeader ────────────────────────────────────────────────────────────
@@ -487,11 +498,11 @@ void SpectraColorField::paintEvent(QPaintEvent*)
         p.drawRoundedRect(swatch_rect.adjusted(-1, -1, 1, 1), g.radius_md + 1, g.radius_md + 1);
     }
 
-    // Label
+    // Label — legacy `widgets::color_field` prints it at full text_primary.
     QFont f = SpectraFontManager::instance().font_small();
     f.setPixelSize(spectra_typography().font_sm);
     p.setFont(f);
-    p.setPen(c.text_secondary);
+    p.setPen(c.text_primary);
     p.drawText(QRect(swatch_sz + static_cast<int>(ui::tokens::SPACE_2),
                      0,
                      width() - swatch_sz - static_cast<int>(ui::tokens::SPACE_2),
@@ -870,7 +881,8 @@ std::vector<QListWidgetItem*> SpectraSeriesListView::selectedItems() const
 SpectraDragSpinBox::SpectraDragSpinBox(QWidget* parent) : QDoubleSpinBox(parent)
 {
     setButtonSymbols(QAbstractSpinBox::NoButtons);
-    setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    // Legacy `widgets::drag_field` renders the value centered inside the input.
+    setAlignment(Qt::AlignCenter);
     setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
 }
 

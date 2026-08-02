@@ -205,21 +205,26 @@ QString icon_image_url(uint32_t codepoint, const QColor& color, int size, const 
     painter.drawText(pixmap.rect(), Qt::AlignCenter, SpectraFontManager::icon_codepoint(codepoint));
     painter.end();
 
+    // The name must stay free of '#': Qt's stylesheet url() loader treats the
+    // string as a plain path, so a percent-encoded '#' from QUrl would make the
+    // pixmap unresolvable and silently drop the indicator icon.
     const QString filename = QStringLiteral("spectra_%1_%2_%3x%3_%4.png")
                                  .arg(name)
-                                 .arg(color.name(QColor::HexArgb))
+                                 .arg(color.name(QColor::HexArgb).mid(1))
                                  .arg(size)
                                  .arg(QCoreApplication::applicationPid());
     const QString dir = QDir(QDir::temp()).filePath(QStringLiteral("spectra_theme_icons"));
     QDir().mkpath(dir);
 
-    const QString path = QDir(dir).absoluteFilePath(filename);
+    QString path = QDir(dir).absoluteFilePath(filename);
     if (!pixmap.save(path))
     {
         qWarning() << "Failed to write theme icon:" << path;
         return {};
     }
-    return QUrl::fromLocalFile(path).toString();
+    // Qt resolves stylesheet url() through QPixmap, which expects a plain file
+    // path. A "file://" URL silently fails to load and drops the indicator.
+    return path;
 }
 
 double figure_zoom_level(const Figure& figure)
@@ -1869,14 +1874,6 @@ void SpectraMainWindow::build_spectra_ui()
             this,
             &SpectraMainWindow::on_welcome_page_visible);
 
-    if (inspector_panel_)
-    {
-        connect(inspector_panel_,
-                &QtInspectorWidget::figure_title_changed,
-                this,
-                [this](FigureId id, const QString&) { sync_document_title(id); });
-    }
-
     // Create inspector drawer (hidden by default)
     spectra_inspector_ = new SpectraInspectorDrawer(this);
     spectra_inspector_->setObjectName("spectra_inspector");
@@ -2502,6 +2499,8 @@ void SpectraMainWindow::apply_theme(const ui::ThemeColors& theme)
         icon_image_url(0xf00c, colors.text_primary, 16, "checkbox");
     const QString checkbox_checked_disabled_url =
         icon_image_url(0xf00c, disabled, 16, "checkbox_disabled");
+    const QString checkbox_checked_accent_url =
+        icon_image_url(0xf00c, colors.cyan_accent, 16, "checkbox_accent");
     const QString combobox_arrow_url =
         icon_image_url(0xf078, colors.text_muted, 16, "combobox_arrow");
     const QString combobox_arrow_on_url =
@@ -2551,6 +2550,129 @@ void SpectraMainWindow::apply_theme(const ui::ThemeColors& theme)
     style.replace(QLatin1String("{spinbox_up_disabled}"), spinbox_up_disabled_url);
     style.replace(QLatin1String("{spinbox_down}"), spinbox_down_url);
     style.replace(QLatin1String("{spinbox_down_disabled}"), spinbox_down_disabled_url);
+
+    // Override native input/checkbox/button styling to match the token palette
+    // used by the custom widgets and the legacy ImGui inspector (bg_tertiary
+    // surface, cyan accent focus, no heavy default border).
+    auto rgba = [](const QColor& c, int alpha)
+    { return QString("rgba(%1,%2,%3,%4)").arg(c.red()).arg(c.green()).arg(c.blue()).arg(alpha); };
+    QString    input_override = QStringLiteral(R"(
+        QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QPlainTextEdit, QTextEdit {
+            background-color: __BG_TERTIARY__;
+            color: __TEXT_PRIMARY__;
+            border: 1px solid __BORDER_SUBTLE__;
+            border-radius: __RADIUS_MD__px;
+            padding: 4px 8px;
+            font-family: "Inter";
+            font-size: 13px;
+            selection-background-color: __CYAN_ACCENT_DIM__;
+        }
+        QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus,
+        QPlainTextEdit:focus, QTextEdit:focus {
+            border-color: __CYAN_ACCENT__;
+        }
+        QSpinBox::up-button, QDoubleSpinBox::up-button,
+        QSpinBox::down-button, QDoubleSpinBox::down-button {
+            width: 0px;
+        }
+        QComboBox::drop-down {
+            border: none;
+            width: 20px;
+        }
+        QComboBox::down-arrow {
+            image: url("__COMBOBOX_ARROW_URL__");
+            background-color: transparent;
+            border: none;
+            width: 16px;
+            height: 16px;
+        }
+        QComboBox QAbstractItemView {
+            background-color: __BG_ELEVATED__;
+            color: __TEXT_PRIMARY__;
+            border: 1px solid __BORDER_SUBTLE__;
+            border-radius: __RADIUS_MD__px;
+            selection-background-color: __INPUT_SURFACE__;
+        }
+        QCheckBox {
+            color: __TEXT_PRIMARY__;
+            spacing: 8px;
+            font-family: "Inter";
+            font-size: 13px;
+        }
+        QCheckBox::indicator {
+            width: 18px;
+            height: 18px;
+            border-radius: __RADIUS_SM__px;
+            border: 1px solid __BORDER_SUBTLE__;
+            background-color: __BG_TERTIARY__;
+        }
+        QCheckBox::indicator:checked {
+            background-color: __BG_TERTIARY__;
+            border-color: __CYAN_ACCENT__;
+            image: url("__CHECKBOX_ACCENT_URL__");
+        }
+        QPushButton {
+            background-color: __BUTTON_NORMAL__;
+            color: __TEXT_PRIMARY__;
+            border: none;
+            border-radius: __RADIUS_MD__px;
+            padding: 6px 14px;
+            font-family: "Inter";
+            font-size: 13px;
+        }
+        QPushButton:hover {
+            background-color: __BUTTON_HOVER__;
+        }
+        QPushButton:pressed {
+            background-color: __BUTTON_PRESSED__;
+        }
+        QPushButton:disabled {
+            color: __TEXT_MUTED__;
+            background-color: __INPUT_SURFACE__;
+        }
+
+        /* ── Inspector surfaces ───────────────────────────────────────
+           The drawer paints the panel surface itself, so the panel, its
+           scroll areas, viewports, and page containers must stay
+           transparent. Without this they fall back to the default light
+           palette and the token-painted custom widgets become dark text
+           on a near-white background. */
+        QWidget#inspector_panel,
+        QWidget#inspector_panel QScrollArea,
+        QWidget#inspector_panel QScrollArea > QWidget,
+        QWidget#inspector_panel QScrollArea > QWidget > QWidget,
+        QWidget#inspector_panel QStackedWidget,
+        QWidget#inspector_panel QStackedWidget > QWidget,
+        QWidget#inspector_figure_page,
+        QWidget#inspector_series_page,
+        QWidget#inspector_axes_page,
+        QWidget#inspector_data_page {
+            background: transparent;
+            border: none;
+        }
+        QWidget#inspector_panel QLabel,
+        QWidget#inspector_panel QCheckBox {
+            background: transparent;
+        }
+    )");
+    const auto substitute     = [&input_override](const QString& key, const QString& value)
+    { input_override.replace(key, value); };
+    substitute("__BG_TERTIARY__", css_color(colors.bg_tertiary));
+    substitute("__TEXT_PRIMARY__", css_color(colors.text_primary));
+    substitute("__BORDER_SUBTLE__", css_color(colors.border_subtle));
+    substitute("__RADIUS_MD__", QString::number(static_cast<int>(ui::tokens::RADIUS_MD)));
+    substitute("__RADIUS_SM__", QString::number(static_cast<int>(ui::tokens::RADIUS_SM)));
+    substitute("__CYAN_ACCENT_DIM__", css_color(colors.cyan_accent_dim));
+    substitute("__CYAN_ACCENT__", css_color(colors.cyan_accent));
+    substitute("__COMBOBOX_ARROW_URL__", combobox_arrow_url);
+    substitute("__BG_ELEVATED__", css_color(colors.elevated_surface));
+    substitute("__INPUT_SURFACE__", css_color(colors.input_surface));
+    substitute("__CHECKBOX_ACCENT_URL__", checkbox_checked_accent_url);
+    substitute("__BUTTON_NORMAL__", rgba(colors.bg_tertiary, 153));
+    substitute("__BUTTON_HOVER__", rgba(colors.purple_dim, 128));
+    substitute("__BUTTON_PRESSED__", rgba(colors.cyan_accent_dim, 179));
+    substitute("__TEXT_MUTED__", css_color(colors.text_muted));
+    style += input_override;
 
     // Application scope covers detached windows and native popup/dialog
     // surfaces. Custom-painted widgets read the synchronized token palette.

@@ -2195,36 +2195,6 @@ TEST(QtPanels, InspectorLegendControlUpdatesFigure)
     EXPECT_TRUE(figure_ptr->legend().visible);
 }
 
-TEST(QtPanels, InspectorTitleEditPublishesAuthoritativeFigureRename)
-{
-    spectra::FigureRegistry registry;
-    auto                    figure = std::make_unique<spectra::Figure>();
-    figure->set_tab_title("Before");
-    const auto figure_id = registry.register_figure(std::move(figure));
-
-    spectra::adapters::qt::QtInspectorWidget inspector(&registry);
-    inspector.set_active_figure(figure_id);
-
-    spectra::FigureId emitted_id = spectra::INVALID_FIGURE_ID;
-    QString           emitted_title;
-    QObject::connect(&inspector,
-                     &spectra::adapters::qt::QtInspectorWidget::figure_title_changed,
-                     [&](spectra::FigureId id, const QString& title)
-                     {
-                         emitted_id    = id;
-                         emitted_title = title;
-                     });
-
-    auto* title = inspector.findChild<QLineEdit*>("figure_title");
-    ASSERT_NE(title, nullptr);
-    title->setText("After");
-
-    ASSERT_NE(registry.get(figure_id), nullptr);
-    EXPECT_EQ(registry.get(figure_id)->tab_title(), "After");
-    EXPECT_EQ(emitted_id, figure_id);
-    EXPECT_EQ(emitted_title, "After");
-}
-
 TEST(QtPanels, FunctionPlotDialogValidatesAndAddsSampledSeries)
 {
     spectra::FigureRegistry registry;

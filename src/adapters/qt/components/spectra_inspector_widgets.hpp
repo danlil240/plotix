@@ -82,6 +82,9 @@ class SpectraPanelTitle : public QWidget
     void paintEvent(QPaintEvent*) override;
 
    private:
+    static constexpr int kTitleH    = 28;
+    static constexpr int kSubtitleH = 20;
+
     QString title_;
     QString subtitle_;
 };

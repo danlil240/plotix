@@ -74,9 +74,6 @@ class QtInspectorWidget : public QWidget
     // frame can update dimensions without rebuilding the editor under the user.
     void sync_from_model();
 
-   signals:
-    void figure_title_changed(spectra::FigureId id, const QString& title);
-
    private:
     enum class Section
     {
@@ -122,7 +119,6 @@ class QtInspectorWidget : public QWidget
     // Figure controls
     SpectraPanelTitle* figure_title_            = nullptr;
     SpectraPanelTitle* series_title_            = nullptr;
-    QLineEdit*         figure_title_edit_       = nullptr;
     QLabel*            figure_size_label_       = nullptr;   // test-only; hidden from UI
     QLabel*            figure_axes_count_label_ = nullptr;   // test-only; hidden from UI
 
