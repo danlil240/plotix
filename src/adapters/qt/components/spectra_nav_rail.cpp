@@ -151,16 +151,17 @@ void SpectraNavRail::apply_cell_metrics()
     if (visible_buttons == 0)
         return;
 
-    const float available        = static_cast<float>(height());
-    const float pad              = LayoutManager::NAV_RAIL_VERTICAL_PADDING;
-    const float nominal_content  = visible_buttons * LayoutManager::NAV_RAIL_CELL_HEIGHT
+    const float available       = static_cast<float>(height());
+    const float pad             = LayoutManager::NAV_RAIL_VERTICAL_PADDING;
+    const float nominal_content = visible_buttons * LayoutManager::NAV_RAIL_CELL_HEIGHT
                                   + visible_seps * LayoutManager::NAV_RAIL_SEPARATOR_HEIGHT;
-    const float min_scale        = LayoutManager::NAV_RAIL_CELL_HEIGHT_MIN
-                            / LayoutManager::NAV_RAIL_CELL_HEIGHT;
+    const float min_scale =
+        LayoutManager::NAV_RAIL_CELL_HEIGHT_MIN / LayoutManager::NAV_RAIL_CELL_HEIGHT;
 
     // Start from the legacy scale model, then clamp to the actual content area
     // so short windows never clip the trailing buttons.
-    float scale = LayoutManager::nav_rail_scale_for_height(available, visible_buttons, visible_seps);
+    float scale =
+        LayoutManager::nav_rail_scale_for_height(available, visible_buttons, visible_seps);
     if (nominal_content > 0.0f)
     {
         const float fitting_scale = std::max(0.0f, (available - pad) / nominal_content);
@@ -231,42 +232,18 @@ int SpectraNavRail::width_hint() const
 void SpectraNavRail::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing, true);
 
+    // Legacy `SpectraNavRail::draw` renders the rail with NoBackground: the tool
+    // cells sit directly on the window surface. Only a right-edge hairline (plus
+    // a shadow cast onto the canvas, which belongs to the neighbouring widget)
+    // separates it from the workspace — no card, gradient, or accent edge.
     const auto& colors = spectra_colors();
-    painter.fillRect(rect(), colors.header_surface);
+    painter.fillRect(rect(), colors.window_base);
 
-    const QRectF    rail = QRectF(rect()).adjusted(4.5, 3.5, -4.5, -3.5);
-    QLinearGradient glass(rail.topLeft(), rail.topRight());
-    QColor          rail_start = colors.panel_surface;
-    QColor          rail_mid   = colors.panel_surface;
-    QColor          rail_end   = QColor::fromRgbF(
-        colors.panel_surface.redF() * 0.90 + colors.purple_ambient.redF() * 0.10,
-        colors.panel_surface.greenF() * 0.90 + colors.purple_ambient.greenF() * 0.10,
-        colors.panel_surface.blueF() * 0.90 + colors.purple_ambient.blueF() * 0.10);
-    rail_start.setAlpha(246);
-    rail_mid.setAlpha(246);
-    rail_end.setAlpha(246);
-    glass.setColorAt(0.0, rail_start);
-    glass.setColorAt(0.70, rail_mid);
-    glass.setColorAt(1.0, rail_end);
-    painter.setBrush(glass);
-    QColor rail_border = colors.border_default;
-    rail_border.setAlpha(190);
-    painter.setPen(QPen(rail_border, 1));
-    painter.drawRoundedRect(rail, 8, 8);
-
-    QLinearGradient edge(rail.topRight(), rail.bottomRight());
-    QColor          edge_start = colors.cyan_accent;
-    QColor          edge_end   = colors.purple_ambient;
-    edge_start.setAlpha(70);
-    edge_end.setAlpha(70);
-    edge.setColorAt(0.0, edge_start);
-    edge.setColorAt(1.0, edge_end);
-    painter.setBrush(Qt::NoBrush);
-    painter.setPen(QPen(QBrush(edge), 1));
-    painter.drawLine(QPointF(rail.right(), rail.top() + 8),
-                     QPointF(rail.right(), rail.bottom() - 8));
+    QColor hairline = colors.border_subtle;
+    hairline.setAlphaF(0.52f);
+    painter.setPen(QPen(hairline, 1));
+    painter.drawLine(width() - 1, 0, width() - 1, height());
 }
 
 }   // namespace spectra::adapters::qt

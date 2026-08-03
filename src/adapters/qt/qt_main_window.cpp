@@ -21,6 +21,7 @@
 #include "qt_runtime.hpp"
 
 #include "components/spectra_design_tokens.hpp"
+#include "components/spectra_inspector_widgets.hpp"
 #include "components/spectra_title_bar.hpp"
 #include "components/spectra_app_header.hpp"
 #include "components/spectra_nav_rail.hpp"
@@ -2654,6 +2655,24 @@ void SpectraMainWindow::apply_theme(const ui::ThemeColors& theme)
         QWidget#inspector_panel QCheckBox {
             background: transparent;
         }
+        /* Legacy inspector inputs are borderless bg_tertiary frames using the
+           body font (widgets::drag_field / text_field / combo_field push only
+           FrameBg + FrameRounding). ImGui's 16px body font renders at Qt pixel
+           size 13 — see imgui_font_px(). */
+        QWidget#inspector_panel QLineEdit,
+        QWidget#inspector_panel QSpinBox,
+        QWidget#inspector_panel QDoubleSpinBox,
+        QWidget#inspector_panel QComboBox {
+            border: none;
+            font-size: __BODY_PX__px;
+            padding: 0px 8px;
+        }
+        QWidget#inspector_panel QLineEdit:focus,
+        QWidget#inspector_panel QSpinBox:focus,
+        QWidget#inspector_panel QDoubleSpinBox:focus,
+        QWidget#inspector_panel QComboBox:focus {
+            border: 1px solid __CYAN_ACCENT__;
+        }
     )");
     const auto substitute     = [&input_override](const QString& key, const QString& value)
     { input_override.replace(key, value); };
@@ -2664,6 +2683,7 @@ void SpectraMainWindow::apply_theme(const ui::ThemeColors& theme)
     substitute("__RADIUS_SM__", QString::number(static_cast<int>(ui::tokens::RADIUS_SM)));
     substitute("__CYAN_ACCENT_DIM__", css_color(colors.cyan_accent_dim));
     substitute("__CYAN_ACCENT__", css_color(colors.cyan_accent));
+    substitute("__BODY_PX__", QString::number(imgui_font_px(kImGuiBodySize)));
     substitute("__COMBOBOX_ARROW_URL__", combobox_arrow_url);
     substitute("__BG_ELEVATED__", css_color(colors.elevated_surface));
     substitute("__INPUT_SURFACE__", css_color(colors.input_surface));

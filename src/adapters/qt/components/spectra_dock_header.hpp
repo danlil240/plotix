@@ -26,6 +26,14 @@ class SpectraDockHeader : public QWidget
     void set_collapsible(bool collapsible);
     void set_collapsed(bool collapsed);
 
+    // Legacy panel eyebrow geometry (src/ui/imgui/imgui_panels.cpp): the caption
+    // starts PANEL_PADDING below the panel top at PANEL_PADDING+4 from its left
+    // edge, and the segmented control that follows begins 58px down.
+    static constexpr int kEyebrowHeight = 58;
+    static constexpr int kTextX         = 20;
+    static constexpr int kTextY         = 16;
+    static constexpr int kCaptionH      = 16;
+
    signals:
     void close_requested();
     void toggle_collapsed();

@@ -95,21 +95,22 @@ class QtDataEditorWidget : public QDockWidget
     QComboBox*    axes_combo_           = nullptr;
     QComboBox*    series_combo_         = nullptr;
     QTableWidget* table_                = nullptr;
-    QGroupBox*    selection_group_      = nullptr;
-    QGroupBox*    table_group_          = nullptr;
+    QWidget*      selection_group_      = nullptr;
+    QWidget*      table_group_          = nullptr;
     QWidget*      empty_state_          = nullptr;
     QLabel*       empty_state_label_    = nullptr;
     QPushButton*  empty_import_button_  = nullptr;
     QLabel*       info_label_           = nullptr;
-    QGroupBox*    import_mapping_group_ = nullptr;
+    QWidget*      import_mapping_group_ = nullptr;
     QComboBox*    import_x_column_      = nullptr;
-    QLabel*       import_z_label_       = nullptr;
-    QComboBox*    import_z_column_      = nullptr;
-    QListWidget*  import_y_columns_     = nullptr;
-    QPushButton*  apply_import_columns_ = nullptr;
-    QPushButton*  previous_page_button_ = nullptr;
-    QPushButton*  next_page_button_     = nullptr;
-    QLabel*       page_label_           = nullptr;
+    // Row wrapper for the optional "Shared Z" mapping field (3D axes only).
+    QWidget*     import_z_label_       = nullptr;
+    QComboBox*   import_z_column_      = nullptr;
+    QListWidget* import_y_columns_     = nullptr;
+    QPushButton* apply_import_columns_ = nullptr;
+    QPushButton* previous_page_button_ = nullptr;
+    QPushButton* next_page_button_     = nullptr;
+    QLabel*      page_label_           = nullptr;
 
     std::vector<std::string>        import_headers_;
     std::vector<std::vector<float>> import_columns_;

@@ -55,6 +55,7 @@
 #include "adapters/qt/components/spectra_menu_strip.hpp"
 #include "adapters/qt/components/spectra_nav_button.hpp"
 #include "adapters/qt/components/spectra_nav_rail.hpp"
+#include "adapters/qt/components/spectra_inspector_widgets.hpp"
 #include "adapters/qt/components/spectra_status_bar.hpp"
 #include "adapters/qt/panels/inspector_widget.hpp"
 #include "adapters/qt/panels/data_editor_widget.hpp"
@@ -2089,17 +2090,17 @@ TEST(QtPanels, InspectorSummarySynchronizesLiveSizeAndUnifiedAxes)
     spectra::adapters::qt::QtInspectorWidget inspector(&registry);
     inspector.set_active_figure(figure_id);
 
-    auto* size  = inspector.findChild<QLabel*>("figure_size");
-    auto* count = inspector.findChild<QLabel*>("figure_axes_count");
-    auto* tabs  = inspector.findChild<QTabWidget*>("inspector_tabs");
+    auto* size     = inspector.findChild<QLabel*>("figure_size");
+    auto* count    = inspector.findChild<QLabel*>("figure_axes_count");
+    auto* selector = inspector.findChild<QComboBox*>("inspector_axes_selector");
     ASSERT_NE(size, nullptr);
     ASSERT_NE(count, nullptr);
-    ASSERT_NE(tabs, nullptr);
+    ASSERT_NE(selector, nullptr);
     EXPECT_EQ(size->text(), QString::fromUtf8("640 × 480"));
     EXPECT_EQ(count->text(), "2");
-    ASSERT_EQ(tabs->count(), 2);
-    EXPECT_EQ(tabs->tabText(0), "Axes 1");
-    EXPECT_EQ(tabs->tabText(1), "Axes 2 (3D)");
+    ASSERT_EQ(selector->count(), 2);
+    EXPECT_EQ(selector->itemText(0), "Axes 1");
+    EXPECT_EQ(selector->itemText(1), "Axes 2 (3D)");
 
     auto* live_figure = registry.get(figure_id);
     ASSERT_NE(live_figure, nullptr);
@@ -2121,15 +2122,15 @@ TEST(QtPanels, InspectorSummarySynchronizesLiveSizeAndUnifiedAxes)
 
     live_figure->subplot(2, 2, 3).title("New axes");
     inspector.sync_from_model();
-    size  = inspector.findChild<QLabel*>("figure_size");
-    count = inspector.findChild<QLabel*>("figure_axes_count");
-    tabs  = inspector.findChild<QTabWidget*>("inspector_tabs");
+    size     = inspector.findChild<QLabel*>("figure_size");
+    count    = inspector.findChild<QLabel*>("figure_axes_count");
+    selector = inspector.findChild<QComboBox*>("inspector_axes_selector");
     ASSERT_NE(size, nullptr);
     ASSERT_NE(count, nullptr);
-    ASSERT_NE(tabs, nullptr);
+    ASSERT_NE(selector, nullptr);
     EXPECT_EQ(size->text(), QString::fromUtf8("1208 × 612"));
     EXPECT_EQ(count->text(), "3");
-    EXPECT_EQ(tabs->count(), 3);
+    EXPECT_EQ(selector->count(), 3);
 
     auto* sparse_xmin = inspector.findChild<QDoubleSpinBox*>("axes_1_x_min");
     ASSERT_NE(sparse_xmin, nullptr);
@@ -2154,7 +2155,8 @@ TEST(QtPanels, InspectorThreeDimensionalControlsMutateAuthoritativeModel)
     auto* zmin   = inspector.findChild<QDoubleSpinBox*>("axes_0_z_min");
     auto* zmax   = inspector.findChild<QDoubleSpinBox*>("axes_0_z_max");
     auto* grid   = inspector.findChild<QComboBox*>("axes_0_grid_planes");
-    auto* bounds = inspector.findChild<QCheckBox*>("axes_0_bounding_box");
+    auto* bounds =
+        inspector.findChild<spectra::adapters::qt::SpectraToggleField*>("axes_0_bounding_box");
     ASSERT_NE(zlabel, nullptr);
     ASSERT_NE(zmin, nullptr);
     ASSERT_NE(zmax, nullptr);
@@ -2185,7 +2187,8 @@ TEST(QtPanels, InspectorLegendControlUpdatesFigure)
     spectra::adapters::qt::QtInspectorWidget inspector(&registry);
     inspector.set_active_figure(figure_id);
 
-    auto* legend = inspector.findChild<QCheckBox*>("figure_legend_visible");
+    auto* legend =
+        inspector.findChild<spectra::adapters::qt::SpectraToggleField*>("figure_legend_visible");
     ASSERT_NE(legend, nullptr);
     ASSERT_TRUE(figure_ptr->legend().visible);
 
@@ -2350,7 +2353,7 @@ TEST(QtPanels, DataEditorEmptyAxesUsesCompactImportRecoveryState)
     auto* empty       = editor.findChild<QWidget*>("de_empty_state");
     auto* message     = editor.findChild<QLabel*>("de_empty_state_label");
     auto* import      = editor.findChild<QPushButton*>("de_empty_import_csv");
-    auto* table_group = editor.findChild<QGroupBox*>("de_table_group");
+    auto* table_group = editor.findChild<QWidget*>("de_table_group");
     ASSERT_NE(empty, nullptr);
     ASSERT_NE(message, nullptr);
     ASSERT_NE(import, nullptr);
@@ -2678,7 +2681,7 @@ TEST(QtPanels, DataEditorMapsMultipleCsvColumnsIntoUndoableSeries)
                      [&data_changes]() { ++data_changes; });
 
     auto* import_csv = editor.findChild<QPushButton*>("de_import_csv");
-    auto* mapping    = editor.findChild<QGroupBox*>("de_import_mapping");
+    auto* mapping    = editor.findChild<QWidget*>("de_import_mapping");
     auto* x_column   = editor.findChild<QComboBox*>("de_import_x_column");
     auto* y_columns  = editor.findChild<QListWidget*>("de_import_y_columns");
     auto* apply      = editor.findChild<QPushButton*>("de_apply_import_columns");
@@ -2749,7 +2752,7 @@ TEST(QtPanels, DataEditorTwoColumnImportCanCreateFirstSeriesOnEmptyAxes)
     editor.set_active_figure(figure_id);
 
     editor.findChild<QPushButton*>("de_import_csv")->click();
-    auto* mapping = editor.findChild<QGroupBox*>("de_import_mapping");
+    auto* mapping = editor.findChild<QWidget*>("de_import_mapping");
     auto* apply   = editor.findChild<QPushButton*>("de_apply_import_columns");
     ASSERT_NE(mapping, nullptr);
     ASSERT_NE(apply, nullptr);
@@ -2795,7 +2798,7 @@ TEST(QtPanels, DataEditorImportsEditsAndExportsThreeDimensionalSeries)
 
     auto* import_csv = editor.findChild<QPushButton*>("de_import_csv");
     auto* export_csv = editor.findChild<QPushButton*>("de_export_csv");
-    auto* mapping    = editor.findChild<QGroupBox*>("de_import_mapping");
+    auto* mapping    = editor.findChild<QWidget*>("de_import_mapping");
     auto* z_column   = editor.findChild<QComboBox*>("de_import_z_column");
     auto* y_columns  = editor.findChild<QListWidget*>("de_import_y_columns");
     auto* apply      = editor.findChild<QPushButton*>("de_apply_import_columns");
@@ -3542,4 +3545,53 @@ TEST(QtPanels, InspectorSeriesStatisticsAndSparkline)
     EXPECT_EQ(y_max->text(), "6");
     EXPECT_EQ(y_mean->text(), "5");
     EXPECT_EQ(y_sum->text(), "15");
+}
+
+// TEMP parity capture: grabs the whole inspector drawer (eyebrow + panel) so it
+// can be diffed against a legacy `./build/spectra` window capture.
+TEST(QtPanels, TempDrawerParityDump)
+{
+    if (qEnvironmentVariableIsEmpty("SPECTRA_DUMP_INSPECTOR"))
+        GTEST_SKIP();
+
+    auto&                                    e = env();
+    spectra::adapters::qt::SpectraMainWindow shell(nullptr,
+                                                   e.registry.get(),
+                                                   e.action_bridge.get(),
+                                                   nullptr);
+    shell.resize(1280, 720);
+    shell.show();
+    for (int i = 0; i < 8; ++i)
+        QApplication::processEvents();
+
+    spectra::FigureRegistry registry;
+    auto                    figure = std::make_unique<spectra::Figure>();
+    figure->subplot(1, 1, 1);
+    const auto figure_id = registry.register_figure(std::move(figure));
+
+    // The shell above only installs the app-wide stylesheet and fonts; build the
+    // drawer directly so it works without ApplicationServices.
+    spectra::adapters::qt::SpectraInspectorDrawer drawer;
+    auto* inspector = new spectra::adapters::qt::QtInspectorWidget(&registry);
+    drawer.set_content_widget(inspector);
+    inspector->set_active_figure(figure_id);
+
+    drawer.resize(drawer.width_hint(), 640);
+    drawer.show();
+    for (int i = 0; i < 10; ++i)
+        QApplication::processEvents();
+    drawer.grab().save("/tmp/qt_drawer.png");
+    auto* tabs = inspector->findChild<spectra::adapters::qt::SpectraSegmentedControl*>(
+        "inspector_section_tabs");
+    ASSERT_NE(tabs, nullptr);
+    const char* names[] = {"figure", "series", "axes", "data"};
+    for (int i = 0; i < 4; ++i)
+    {
+        tabs->setCurrentIndex(i);
+        for (int n = 0; n < 8; ++n)
+            QApplication::processEvents();
+        drawer.grab().save(QString("/tmp/qt_tab_%1.png").arg(names[i]));
+    }
+    qWarning("drawer %dx%d", drawer.width(), drawer.height());
+    shell.hide();
 }

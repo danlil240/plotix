@@ -75,9 +75,9 @@ struct SpectraGeometry
     int nav_rail_width_compact = 48;
     int tab_bar_height         = 26;
     int status_bar_height      = 34;
-    int inspector_width        = 340;
-    int inspector_width_min    = 300;
-    int inspector_width_max    = 380;
+    int inspector_width        = 320;
+    int inspector_width_min    = 240;
+    int inspector_width_max    = 480;
     int chevron_width          = 16;
 
     // Radii

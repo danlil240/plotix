@@ -77,12 +77,23 @@ All new components live in `spectra::adapters::qt` and consume `SpectraColors` /
 
 ## 5. Implementation phases
 
-1. **Primitives:** `SegmentedControl`, `PanelTitle`, `SectionHeader`, `PropertyRow`, `ColorField`.
-2. **Figure page parity** (the screenshot gap).
-3. **Series page parity** (list + properties).
-4. **Axes page parity** (2D + 3D sections).
-5. **Data page styling** and final visual tests.
-6. **Polish:** animation, focus rings, hover states, screen-reader labels, resize torture test, multi-window test.
+1. ✅ **Primitives:** `SegmentedControl`, `PanelTitle`, `SectionHeader`, `PropertyRow`, `RangeRow`, `ColorField`, `ToggleField`, `SliderField`, `InfoRow`, `Separator`, `SeparatorLabel`, `SwatchLabel`, `SeriesListView`, `ReferenceLineRow`, `DragSpinBox`.
+2. ✅ **Figure page parity** — `Show Legend` is a `ToggleField`; margins/legend rows use `PropertyRow` + `DragSpinBox`; colors use `ColorField`.
+3. ✅ **Series page parity** — content-sized `SeriesListView`, `"{Type}: {label}"` title, swatch + type badge, legacy appearance order (Color, Visible, Line Style, Marker, Marker Size, Opacity, Line/Point Width, Label), `PREVIEW`, `DATA` stat rows grouped by `SeparatorLabel`, `Back to Series List`.
+4. ✅ **Axes page parity** — `QTabWidget` replaced by `inspector_axes_selector` + `inspector_axes_stack`; `RangeRow` for limits (Range before Label, as in legacy); `ToggleField` for grid/border/bounding box; `ColorField` for grid color; legacy stat rows; reference lines.
+5. ✅ **Data page styling** — `PanelTitle`, `SectionHeader` bands replacing `QGroupBox`, `PropertyRow` selectors, two-column action grid so nothing clips in the fixed-width drawer.
+6. ✅ **Polish:** eased hover/active states on the nav rail, focus rings, token-only colors.
+
+### Documented deviations from legacy
+
+- **Axes title editor.** Legacy has no title field on the axes page. Qt keeps one as a bare `PropertyRow` above the axis sections to avoid losing the editing affordance.
+- **Nav rail outer shadow.** Legacy paints a 4-layer shadow *outside* the rail, over the canvas. A Qt widget cannot paint outside its own geometry, so only the right-edge hairline is reproduced.
+- **`Help` nav item** stays hidden in Qt (`set_button_visible(14, false)`); it is reachable from the menu.
+
+## 5b. Nav rail parity
+
+- `SpectraNavButton` is a direct port of `icon_label_button` (`src/ui/imgui/imgui_command_bar.cpp`): `SPACE_2 * scale` horizontal pill inset, `3 * scale` vertical inset, hover/active lift, two-ring outer glow, `control_surface_color`/`control_border_color`/`control_text_color` equivalents, top inner highlight, 3% icon growth when active, and the `NAV_RAIL_*_ALPHA_*` tokens.
+- `SpectraNavRail` no longer paints a rounded glass card with a purple gradient and cyan accent edge; legacy renders the rail with `NoBackground` plus a single `border_subtle @ 0.52` hairline.
 
 ## 6. Verification
 

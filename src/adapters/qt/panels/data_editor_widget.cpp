@@ -6,6 +6,9 @@
 #include "ui/commands/undoable_property.hpp"
 #include "ui/commands/series_clipboard.hpp"
 #include "ui/data/csv_loader.hpp"
+#include "ui/theme/design_tokens.hpp"
+#include "../components/spectra_design_tokens.hpp"
+#include "../components/spectra_inspector_widgets.hpp"
 
 #include <spectra/axes.hpp>
 #include <spectra/axes3d.hpp>
@@ -63,19 +66,36 @@ void QtDataEditorWidget::build_ui()
     layout->setContentsMargins(8, 8, 8, 8);
     layout->setSpacing(8);
 
+    // Collapsible band + content pair, so the data editor reads like every
+    // other inspector section instead of a stock QGroupBox frame.
+    const auto add_section = [&layout, container](const QString& title, QWidget*& out_content)
+    {
+        auto* header = new SpectraSectionHeader(title, container);
+        out_content  = new QWidget(container);
+        auto* box    = new QVBoxLayout(out_content);
+        box->setContentsMargins(static_cast<int>(ui::tokens::SPACE_2),
+                                static_cast<int>(ui::tokens::SPACE_1),
+                                static_cast<int>(ui::tokens::SPACE_2),
+                                static_cast<int>(ui::tokens::SPACE_2));
+        box->setSpacing(static_cast<int>(ui::tokens::SPACE_2));
+        QObject::connect(header, &SpectraSectionHeader::toggled, out_content, &QWidget::setVisible);
+        layout->addWidget(header);
+        layout->addWidget(out_content);
+        return box;
+    };
+
     // ── Selectors ───────────────────────────────────────────────────────
-    selection_group_ = new QGroupBox("Selection", container);
-    auto* sel_form   = new QFormLayout(selection_group_);
+    auto* sel_layout = add_section("SELECTION", selection_group_);
 
     axes_combo_ = new QComboBox(selection_group_);
     axes_combo_->setObjectName("de_axes_combo");
-    sel_form->addRow("Axes", axes_combo_);
+    axes_combo_->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+    sel_layout->addWidget(new SpectraPropertyRow("Axes", axes_combo_, selection_group_));
 
     series_combo_ = new QComboBox(selection_group_);
     series_combo_->setObjectName("de_series_combo");
-    sel_form->addRow("Series", series_combo_);
-
-    layout->addWidget(selection_group_);
+    series_combo_->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+    sel_layout->addWidget(new SpectraPropertyRow("Series", series_combo_, selection_group_));
 
     empty_state_ = new QWidget(container);
     empty_state_->setObjectName("de_empty_state");
@@ -93,9 +113,8 @@ void QtDataEditorWidget::build_ui()
     layout->addWidget(empty_state_);
 
     // ── Data table ──────────────────────────────────────────────────────
-    table_group_ = new QGroupBox("Data Points", container);
+    auto* table_layout = add_section("DATA POINTS", table_group_);
     table_group_->setObjectName("de_table_group");
-    auto* table_layout = new QVBoxLayout(table_group_);
 
     table_ = new QTableWidget(table_group_);
     table_->setObjectName("de_data_table");
@@ -106,91 +125,131 @@ void QtDataEditorWidget::build_ui()
     table_->setMaximumHeight(300);
     table_layout->addWidget(table_);
 
-    auto* page_actions    = new QHBoxLayout();
-    previous_page_button_ = new QPushButton("Previous", table_group_);
+    // The inspector drawer is narrow, so action buttons go into a two-column
+    // grid and are allowed to shrink instead of clipping off the right edge.
+    const auto compact = [](QPushButton* button)
+    {
+        button->setMinimumWidth(0);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        return button;
+    };
+
+    previous_page_button_ = compact(new QPushButton("Previous", table_group_));
     previous_page_button_->setObjectName("de_previous_page");
-    next_page_button_ = new QPushButton("Next", table_group_);
+    next_page_button_ = compact(new QPushButton("Next", table_group_));
     next_page_button_->setObjectName("de_next_page");
     page_label_ = new QLabel("Rows 0-0 of 0", table_group_);
     page_label_->setObjectName("de_page_label");
+    page_label_->setFont(SpectraFontManager::instance().font_small());
+    page_label_->setStyleSheet(QString("color: %1; background: transparent;")
+                                   .arg(spectra_colors().text_secondary.name(QColor::HexArgb)));
+
+    auto* page_actions = new QHBoxLayout();
+    page_actions->setSpacing(static_cast<int>(ui::tokens::SPACE_2));
     page_actions->addWidget(previous_page_button_);
     page_actions->addWidget(next_page_button_);
-    page_actions->addWidget(page_label_);
-    page_actions->addStretch();
     table_layout->addLayout(page_actions);
+    table_layout->addWidget(page_label_);
 
-    auto* row_actions = new QHBoxLayout();
-    auto* add_row     = new QPushButton("Add Row", table_group_);
+    auto* add_row = compact(new QPushButton("Add Row", table_group_));
     add_row->setObjectName("de_add_row");
-    row_actions->addWidget(add_row);
-    auto* delete_rows = new QPushButton("Delete", table_group_);
+    auto* delete_rows = compact(new QPushButton("Delete", table_group_));
     delete_rows->setObjectName("de_delete_rows");
-    row_actions->addWidget(delete_rows);
-    auto* move_up = new QPushButton("Move Up", table_group_);
+    auto* move_up = compact(new QPushButton("Move Up", table_group_));
     move_up->setObjectName("de_move_up");
-    row_actions->addWidget(move_up);
-    auto* move_down = new QPushButton("Move Down", table_group_);
+    auto* move_down = compact(new QPushButton("Move Down", table_group_));
     move_down->setObjectName("de_move_down");
-    row_actions->addWidget(move_down);
-    auto* paste = new QPushButton("Paste", table_group_);
+    auto* paste = compact(new QPushButton("Paste", table_group_));
     paste->setObjectName("de_paste");
-    row_actions->addWidget(paste);
-    table_layout->addLayout(row_actions);
-
-    auto* file_actions = new QHBoxLayout();
-    auto* import_csv   = new QPushButton("Import CSV...", table_group_);
+    auto* import_csv = compact(new QPushButton("Import CSV...", table_group_));
     import_csv->setObjectName("de_import_csv");
-    file_actions->addWidget(import_csv);
-    auto* export_csv = new QPushButton("Export CSV...", table_group_);
+    auto* export_csv = compact(new QPushButton("Export CSV...", table_group_));
     export_csv->setObjectName("de_export_csv");
-    file_actions->addWidget(export_csv);
-    file_actions->addStretch();
-    table_layout->addLayout(file_actions);
 
-    import_mapping_group_ = new QGroupBox("CSV Column Mapping", table_group_);
+    auto* actions_grid = new QGridLayout();
+    actions_grid->setContentsMargins(0, 0, 0, 0);
+    actions_grid->setHorizontalSpacing(static_cast<int>(ui::tokens::SPACE_2));
+    actions_grid->setVerticalSpacing(static_cast<int>(ui::tokens::SPACE_2));
+    actions_grid->addWidget(add_row, 0, 0);
+    actions_grid->addWidget(delete_rows, 0, 1);
+    actions_grid->addWidget(move_up, 1, 0);
+    actions_grid->addWidget(move_down, 1, 1);
+    actions_grid->addWidget(paste, 2, 0);
+    actions_grid->addWidget(import_csv, 3, 0);
+    actions_grid->addWidget(export_csv, 3, 1);
+    table_layout->addLayout(actions_grid);
+
+    // Wrapper so the existing show()/hide() call sites toggle the band and its
+    // content together.
+    import_mapping_group_ = new QWidget(table_group_);
     import_mapping_group_->setObjectName("de_import_mapping");
-    auto* import_mapping_layout = new QVBoxLayout(import_mapping_group_);
-    auto* import_mapping_form   = new QFormLayout();
-    import_x_column_            = new QComboBox(import_mapping_group_);
+    auto* import_mapping_outer = new QVBoxLayout(import_mapping_group_);
+    import_mapping_outer->setContentsMargins(0, 0, 0, 0);
+    import_mapping_outer->setSpacing(0);
+
+    auto* import_mapping_header =
+        new SpectraSectionHeader("CSV COLUMN MAPPING", import_mapping_group_);
+    auto* import_mapping_body   = new QWidget(import_mapping_group_);
+    auto* import_mapping_layout = new QVBoxLayout(import_mapping_body);
+    import_mapping_layout->setContentsMargins(static_cast<int>(ui::tokens::SPACE_2),
+                                              static_cast<int>(ui::tokens::SPACE_1),
+                                              static_cast<int>(ui::tokens::SPACE_2),
+                                              static_cast<int>(ui::tokens::SPACE_2));
+    import_mapping_layout->setSpacing(static_cast<int>(ui::tokens::SPACE_2));
+    import_mapping_outer->addWidget(import_mapping_header);
+    import_mapping_outer->addWidget(import_mapping_body);
+    connect(import_mapping_header,
+            &SpectraSectionHeader::toggled,
+            import_mapping_body,
+            &QWidget::setVisible);
+
+    import_x_column_ = new QComboBox(import_mapping_group_);
     import_x_column_->setObjectName("de_import_x_column");
-    import_mapping_form->addRow("Shared X", import_x_column_);
+    import_x_column_->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+    import_mapping_layout->addWidget(
+        new SpectraPropertyRow("Shared X", import_x_column_, import_mapping_group_));
+
     import_z_column_ = new QComboBox(import_mapping_group_);
     import_z_column_->setObjectName("de_import_z_column");
-    import_z_label_ = new QLabel("Shared Z", import_mapping_group_);
-    import_mapping_form->addRow(import_z_label_, import_z_column_);
+    import_z_column_->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+    import_z_label_ = new SpectraPropertyRow("Shared Z", import_z_column_, import_mapping_group_);
+    import_mapping_layout->addWidget(import_z_label_);
     import_z_label_->hide();
-    import_z_column_->hide();
-    import_mapping_layout->addLayout(import_mapping_form);
+
     import_y_columns_ = new QListWidget(import_mapping_group_);
     import_y_columns_->setObjectName("de_import_y_columns");
     import_y_columns_->setMaximumHeight(120);
-    import_mapping_layout->addWidget(new QLabel("Y series", import_mapping_group_));
+    import_y_columns_->setFrameShape(QFrame::NoFrame);
+    import_mapping_layout->addWidget(new SpectraSeparatorLabel("Y series", import_mapping_group_));
     import_mapping_layout->addWidget(import_y_columns_);
-    auto* import_selection_actions = new QHBoxLayout();
-    auto* select_all_y             = new QPushButton("Select All", import_mapping_group_);
+
+    auto* select_all_y = compact(new QPushButton("Select All", import_mapping_group_));
     select_all_y->setObjectName("de_import_select_all_y");
-    auto* clear_y = new QPushButton("Clear", import_mapping_group_);
+    auto* clear_y = compact(new QPushButton("Clear", import_mapping_group_));
     clear_y->setObjectName("de_import_clear_y");
+    auto* import_selection_actions = new QHBoxLayout();
+    import_selection_actions->setSpacing(static_cast<int>(ui::tokens::SPACE_2));
     import_selection_actions->addWidget(select_all_y);
     import_selection_actions->addWidget(clear_y);
-    import_selection_actions->addStretch();
     import_mapping_layout->addLayout(import_selection_actions);
-    auto* import_mapping_actions = new QHBoxLayout();
-    apply_import_columns_        = new QPushButton("Import Selected Series", import_mapping_group_);
+
+    apply_import_columns_ =
+        compact(new QPushButton("Import Selected Series", import_mapping_group_));
     apply_import_columns_->setObjectName("de_apply_import_columns");
-    auto* cancel_import = new QPushButton("Cancel", import_mapping_group_);
+    auto* cancel_import = compact(new QPushButton("Cancel", import_mapping_group_));
     cancel_import->setObjectName("de_cancel_import_columns");
-    import_mapping_actions->addWidget(apply_import_columns_);
-    import_mapping_actions->addWidget(cancel_import);
-    import_mapping_layout->addLayout(import_mapping_actions);
+    import_mapping_layout->addWidget(apply_import_columns_);
+    import_mapping_layout->addWidget(cancel_import);
+
     import_mapping_group_->hide();
     table_layout->addWidget(import_mapping_group_);
 
     info_label_ = new QLabel("No data", table_group_);
-    info_label_->setStyleSheet("color: gray; font-size: 11px;");
+    info_label_->setFont(SpectraFontManager::instance().font_small());
+    info_label_->setStyleSheet(QString("color: %1; background: transparent;")
+                                   .arg(spectra_colors().text_muted.name(QColor::HexArgb)));
     table_layout->addWidget(info_label_);
 
-    layout->addWidget(table_group_);
     layout->addStretch();
 
     setWidget(container);

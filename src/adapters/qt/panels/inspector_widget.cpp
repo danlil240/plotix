@@ -408,81 +408,50 @@ void undoable_set_axes3d_label(UndoManager*       undo,
     }
 }
 
-QPushButton* make_color_button(QWidget* parent, const spectra::Color& c)
+// Legacy `widgets::stat_row`: muted label on the left, primary-colored value
+// starting at 40% of the row. Kept as a plain QLabel pair so the value stays
+// addressable by object name.
+QWidget* make_stat_row(QWidget* parent, const QString& label, QLabel* value)
 {
-    auto* btn = new QPushButton(parent);
-    btn->setFlat(true);
-    btn->setFixedSize(24, 24);
-    const QColor qc = to_qcolor(c);
-    btn->setStyleSheet(QString("background-color: %1; border: 1px solid %2; border-radius: 4px;")
-                           .arg(qc.name(QColor::HexArgb))
-                           .arg(qc.darker(120).name()));
-    return btn;
+    auto* row = new QWidget(parent);
+    row->setFixedHeight(SpectraInfoRow::kRowHeight);
+
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(static_cast<int>(ui::tokens::SPACE_2));
+
+    const auto& colors = spectra_colors();
+
+    QFont stat_font = SpectraFontManager::instance().font_base();
+    stat_font.setPixelSize(imgui_font_px(kImGuiBodySize));
+
+    auto* name = new QLabel(label, row);
+    name->setFont(stat_font);
+    name->setStyleSheet(QString("color: %1; background: transparent;")
+                            .arg(colors.text_secondary.name(QColor::HexArgb)));
+
+    value->setParent(row);
+    value->setFont(stat_font);
+    value->setStyleSheet(QString("color: %1; background: transparent;")
+                             .arg(colors.text_primary.name(QColor::HexArgb)));
+    value->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    layout->addWidget(name, 40);
+    layout->addWidget(value, 60);
+    return row;
 }
 
-void update_color_button(QPushButton* btn, const spectra::Color& c)
+// Wires a SpectraColorField to the shared dialog service so every color entry
+// in the inspector opens the same picker the legacy inspector used.
+void attach_color_picker(SpectraColorField* field, ApplicationServices* services)
 {
-    if (!btn)
+    if (!field || !services)
         return;
-    const QColor qc = to_qcolor(c);
-    btn->setStyleSheet(QString("background-color: %1; border: 1px solid %2; border-radius: 4px;")
-                           .arg(qc.name(QColor::HexArgb))
-                           .arg(qc.darker(120).name()));
-}
-
-// ─── Collapsible section using a QToolButton header and a content frame ─────
-// Every inspector form shares one rhythm: a token label column, comfortable
-// vertical spacing, and fields that shrink with the fixed-width drawer instead
-// of forcing a horizontal scrollbar.
-QFormLayout* make_inspector_form()
-{
-    auto* form = new QFormLayout();
-    form->setContentsMargins(0, 0, 0, 0);
-    form->setHorizontalSpacing(static_cast<int>(ui::tokens::SPACE_2));
-    form->setVerticalSpacing(static_cast<int>(ui::tokens::SPACE_3));
-    form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    form->setFormAlignment(Qt::AlignLeft | Qt::AlignTop);
-    form->setRowWrapPolicy(QFormLayout::DontWrapRows);
-    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    return form;
-}
-
-// Form labels must read like SpectraPropertyRow labels, and the fields must be
-// able to shrink to the fixed drawer width rather than clipping.
-void style_inspector_form_row(QFormLayout* form, QWidget* field)
-{
-    if (!form)
+    auto* dialogs = services->dialog_service();
+    if (!dialogs)
         return;
-    if (auto* label = qobject_cast<QLabel*>(form->labelForField(field)))
-    {
-        label->setFont(SpectraFontManager::instance().font_small());
-        label->setStyleSheet(QString("color: %1; background: transparent;")
-                                 .arg(spectra_colors().text_secondary.name(QColor::HexArgb)));
-        label->setMinimumWidth(static_cast<int>(ui::tokens::INSPECTOR_LABEL_WIDTH) - 12);
-    }
-    if (auto* edit = qobject_cast<QLineEdit*>(field))
-    {
-        edit->setMinimumWidth(56);
-        edit->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
-    }
-    else if (auto* combo = qobject_cast<QComboBox*>(field))
-    {
-        combo->setMinimumWidth(56);
-        combo->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
-        combo->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    }
-}
-
-// Applies the row treatment to every row already added to the form.
-void style_inspector_form(QFormLayout* form)
-{
-    if (!form)
-        return;
-    for (int row = 0; row < form->rowCount(); ++row)
-    {
-        QLayoutItem* item = form->itemAt(row, QFormLayout::FieldRole);
-        style_inspector_form_row(form, item ? item->widget() : nullptr);
-    }
+    field->setColorPicker([dialogs](const QString& title, const spectra::Color& current)
+                          { return dialogs->color_picker(title.toStdString(), current); });
 }
 
 // Matches SpectraDragSpinBox presentation for the spin boxes that are still
@@ -493,10 +462,16 @@ void configure_inspector_spin(QDoubleSpinBox* spin)
         return;
     spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
     spin->setAlignment(Qt::AlignCenter);
-    spin->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
-    spin->setMinimumWidth(56);
+    spin->setFixedHeight(SpectraPropertyRow::row_height());
+    spin->setMinimumWidth(48);
     spin->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 }
+
+// Legacy panel chrome metrics (src/ui/imgui/imgui_panels.cpp): the inspector
+// window pads PANEL_PADDING + 4 horizontally, and the scrollable content child
+// starts 24px below the segmented control track.
+constexpr int kPanelPadH = 20;
+constexpr int kTabBarGap = 24;
 
 // Wraps the shared SpectraSectionHeader so every inspector section — not just
 // the Figure page — gets the legacy band + chevron treatment while keeping the
@@ -504,6 +479,15 @@ void configure_inspector_spin(QDoubleSpinBox* spin)
 class CollapsibleSection : public QWidget
 {
    public:
+    // Legacy section geometry, measured from a live capture: the header band
+    // spans the full panel content width, its content is indented 12px by
+    // `widgets::begin_group`, rows start 16px below the band and are spaced 12px
+    // apart (48px pitch with 36px rows), and 32px of air closes the section.
+    static constexpr int kGroupIndent  = 12;
+    static constexpr int kContentTop   = 16;
+    static constexpr int kContentBelow = 32;
+    static constexpr int kRowSpacing   = 12;
+
     CollapsibleSection(const QString& title, QWidget* parent = nullptr)
         : QWidget(parent), header_(new SpectraSectionHeader(title, this)),
           content_(new QWidget(this)), content_layout_(new QVBoxLayout(content_))
@@ -513,11 +497,8 @@ class CollapsibleSection : public QWidget
         layout->setSpacing(0);
 
         content_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-        content_layout_->setContentsMargins(static_cast<int>(ui::tokens::SPACE_2),
-                                            static_cast<int>(ui::tokens::SPACE_1),
-                                            static_cast<int>(ui::tokens::SPACE_2),
-                                            static_cast<int>(ui::tokens::SPACE_2));
-        content_layout_->setSpacing(static_cast<int>(ui::tokens::SPACE_2));
+        content_layout_->setContentsMargins(kGroupIndent, kContentTop, 0, kContentBelow);
+        content_layout_->setSpacing(kRowSpacing);
 
         layout->addWidget(header_);
         layout->addWidget(content_);
@@ -642,7 +623,9 @@ QtInspectorWidget::QtInspectorWidget(FigureRegistry*      registry,
 void QtInspectorWidget::build_ui()
 {
     auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
+    // Legacy panel window padding is PANEL_PADDING + 4 horizontally. The eyebrow
+    // above this widget already supplies the top padding.
+    layout->setContentsMargins(kPanelPadH, 0, kPanelPadH, kPanelPadH);
     layout->setSpacing(0);
 
     section_selector_ = new SpectraSegmentedControl(this);
@@ -662,6 +645,9 @@ void QtInspectorWidget::build_ui()
     section_stack_->addWidget(data_scroll_);
 
     layout->addWidget(section_selector_);
+    // Legacy inserts Dummy(0, SPACE_3) after the track; with ImGui's item spacing
+    // the content child starts 24px below it.
+    layout->addSpacing(kTabBarGap);
     layout->addWidget(section_stack_, 1);
 
     connect(section_selector_,
@@ -695,8 +681,8 @@ void QtInspectorWidget::build_figure_page()
     auto* container = new QWidget();
     container->setObjectName("inspector_figure_page");
     figure_layout_ = new QVBoxLayout(container);
-    figure_layout_->setContentsMargins(12, 12, 12, 12);
-    figure_layout_->setSpacing(8);
+    figure_layout_->setContentsMargins(0, 0, 0, 0);
+    figure_layout_->setSpacing(0);
 
     // Header: title + subtitle
     figure_title_ = new SpectraPanelTitle(container);
@@ -715,8 +701,11 @@ void QtInspectorWidget::build_figure_page()
     auto* bg_header  = new SpectraSectionHeader("BACKGROUND", container);
     auto* bg_content = new QWidget(container);
     auto* bg_layout  = new QVBoxLayout(bg_content);
-    bg_layout->setContentsMargins(8, 4, 8, 8);
-    bg_layout->setSpacing(6);
+    bg_layout->setContentsMargins(CollapsibleSection::kGroupIndent,
+                                  CollapsibleSection::kContentTop,
+                                  0,
+                                  CollapsibleSection::kContentBelow);
+    bg_layout->setSpacing(CollapsibleSection::kRowSpacing);
     figure_bg_color_field_ = new SpectraColorField("Background Color", bg_content);
     figure_bg_color_field_->setObjectName("figure_bg_color");
     bg_layout->addWidget(figure_bg_color_field_);
@@ -728,8 +717,11 @@ void QtInspectorWidget::build_figure_page()
     auto* margins_header  = new SpectraSectionHeader("MARGINS", container);
     auto* margins_content = new QWidget(container);
     auto* margins_layout  = new QVBoxLayout(margins_content);
-    margins_layout->setContentsMargins(8, 4, 8, 8);
-    margins_layout->setSpacing(static_cast<int>(ui::tokens::SPACE_4));
+    margins_layout->setContentsMargins(CollapsibleSection::kGroupIndent,
+                                       CollapsibleSection::kContentTop,
+                                       0,
+                                       CollapsibleSection::kContentBelow);
+    margins_layout->setSpacing(CollapsibleSection::kRowSpacing);
 
     margin_top_spin_    = new SpectraDragSpinBox(margins_content);
     margin_bottom_spin_ = new SpectraDragSpinBox(margins_content);
@@ -758,6 +750,9 @@ void QtInspectorWidget::build_figure_page()
         new SpectraPropertyRow("Bottom", margin_bottom_spin_, margins_content));
     margins_layout->addWidget(new SpectraPropertyRow("Left", margin_left_spin_, margins_content));
     margins_layout->addWidget(new SpectraPropertyRow("Right", margin_right_spin_, margins_content));
+    // Legacy inserts widgets::section_spacing() between the outer margins and the
+    // subplot gaps.
+    margins_layout->addSpacing(24);
     margins_layout->addWidget(new SpectraPropertyRow("H Gap", margin_hgap_spin_, margins_content));
     margins_layout->addWidget(new SpectraPropertyRow("V Gap", margin_vgap_spin_, margins_content));
     margins_layout->addWidget(
@@ -771,10 +766,13 @@ void QtInspectorWidget::build_figure_page()
     auto* legend_header  = new SpectraSectionHeader("LEGEND", container);
     auto* legend_content = new QWidget(container);
     auto* legend_layout  = new QVBoxLayout(legend_content);
-    legend_layout->setContentsMargins(8, 4, 8, 8);
-    legend_layout->setSpacing(static_cast<int>(ui::tokens::SPACE_4));
+    legend_layout->setContentsMargins(CollapsibleSection::kGroupIndent,
+                                      CollapsibleSection::kContentTop,
+                                      0,
+                                      CollapsibleSection::kContentBelow);
+    legend_layout->setSpacing(CollapsibleSection::kRowSpacing);
 
-    legend_visible_check_ = new QCheckBox("Show Legend", legend_content);
+    legend_visible_check_ = new SpectraToggleField("Show Legend", legend_content);
     legend_visible_check_->setObjectName("figure_legend_visible");
     legend_layout->addWidget(legend_visible_check_);
 
@@ -814,8 +812,11 @@ void QtInspectorWidget::build_figure_page()
     auto* quick_header  = new SpectraSectionHeader("QUICK ACTIONS", container);
     auto* quick_content = new QWidget(container);
     auto* quick_layout  = new QVBoxLayout(quick_content);
-    quick_layout->setContentsMargins(8, 4, 8, 8);
-    quick_layout->setSpacing(6);
+    quick_layout->setContentsMargins(CollapsibleSection::kGroupIndent,
+                                     CollapsibleSection::kContentTop,
+                                     0,
+                                     CollapsibleSection::kContentBelow);
+    quick_layout->setSpacing(CollapsibleSection::kRowSpacing);
     reset_figure_style_btn_ = new QPushButton("Reset to Defaults", quick_content);
     reset_figure_style_btn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     quick_layout->addWidget(reset_figure_style_btn_);
@@ -839,8 +840,8 @@ void QtInspectorWidget::build_series_page()
     auto* container = new QWidget();
     container->setObjectName("inspector_series_page");
     series_layout_ = new QVBoxLayout(container);
-    series_layout_->setContentsMargins(12, 12, 12, 12);
-    series_layout_->setSpacing(10);
+    series_layout_->setContentsMargins(0, 0, 0, 0);
+    series_layout_->setSpacing(0);
 
     series_title_ = new SpectraPanelTitle(container);
     series_title_->setTitle("Series");
@@ -853,7 +854,7 @@ void QtInspectorWidget::build_series_page()
     series_props_        = new QWidget(container);
     series_props_layout_ = new QVBoxLayout(series_props_);
     series_props_layout_->setContentsMargins(0, 0, 0, 0);
-    series_props_layout_->setSpacing(10);
+    series_props_layout_->setSpacing(0);
     series_layout_->addWidget(series_props_);
 
     series_layout_->addStretch();
@@ -871,24 +872,34 @@ void QtInspectorWidget::build_axes_page()
     auto* container = new QWidget();
     container->setObjectName("inspector_axes_page");
     axes_layout_ = new QVBoxLayout(container);
-    axes_layout_->setContentsMargins(12, 12, 12, 12);
-    axes_layout_->setSpacing(10);
+    axes_layout_->setContentsMargins(0, 0, 0, 0);
+    axes_layout_->setSpacing(0);
 
-    auto* header = new QLabel("Axes", container);
-    QFont f      = header->font();
-    f.setPointSize(15);
-    f.setBold(true);
-    header->setFont(f);
-    const auto& header_colors = spectra_colors();
-    header->setStyleSheet(
-        QString("color: %1;").arg(header_colors.text_primary.name(QColor::HexArgb)));
-    axes_layout_->addWidget(header);
+    axes_title_ = new SpectraPanelTitle(container);
+    axes_title_->setTitle("Axes");
+    axes_layout_->addWidget(axes_title_);
 
-    axes_tab_widget_ = new QTabWidget(container);
-    axes_tab_widget_->setObjectName("inspector_tabs");
-    axes_layout_->addWidget(axes_tab_widget_);
+    // The legacy inspector shows one axes at a time (SelectionType::Axes). The
+    // selector lets the user switch without going through a canvas selection.
+    axes_selector_ = new QComboBox(container);
+    axes_selector_->setObjectName("inspector_axes_selector");
+    axes_selector_->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+    axes_layout_->addWidget(new SpectraPropertyRow("Axes", axes_selector_, container));
+
+    axes_stack_ = new QStackedWidget(container);
+    axes_stack_->setObjectName("inspector_axes_stack");
+    axes_layout_->addWidget(axes_stack_);
     axes_layout_->addStretch();
     axes_scroll_->setWidget(container);
+
+    connect(axes_selector_,
+            qOverload<int>(&QComboBox::currentIndexChanged),
+            this,
+            [this](int index)
+            {
+                if (axes_stack_ && index >= 0 && index < axes_stack_->count())
+                    axes_stack_->setCurrentIndex(index);
+            });
 }
 
 void QtInspectorWidget::build_data_page()
@@ -902,18 +913,12 @@ void QtInspectorWidget::build_data_page()
     auto* container = new QWidget();
     container->setObjectName("inspector_data_page");
     data_layout_ = new QVBoxLayout(container);
-    data_layout_->setContentsMargins(12, 12, 12, 12);
-    data_layout_->setSpacing(10);
+    data_layout_->setContentsMargins(0, 0, 0, 0);
+    data_layout_->setSpacing(0);
 
-    auto* header = new QLabel("Data", container);
-    QFont f      = header->font();
-    f.setPointSize(15);
-    f.setBold(true);
-    header->setFont(f);
-    const auto& header_colors = spectra_colors();
-    header->setStyleSheet(
-        QString("color: %1;").arg(header_colors.text_primary.name(QColor::HexArgb)));
-    data_layout_->addWidget(header);
+    data_title_ = new SpectraPanelTitle(container);
+    data_title_->setTitle("Data");
+    data_layout_->addWidget(data_title_);
 
     data_editor_ = new QtDataEditorWidget(registry_,
                                           services_ ? &services_->undo() : nullptr,
@@ -952,7 +957,20 @@ std::vector<AxesBase*> QtInspectorWidget::active_axes() const
 
 void QtInspectorWidget::clear_pages()
 {
-    axes_tab_widget_->clear();
+    if (axes_selector_)
+    {
+        const QSignalBlocker blocker(axes_selector_);
+        axes_selector_->clear();
+    }
+    if (axes_stack_)
+    {
+        while (axes_stack_->count() > 0)
+        {
+            QWidget* page = axes_stack_->widget(0);
+            axes_stack_->removeWidget(page);
+            page->deleteLater();
+        }
+    }
     axes_controls_.clear();
     axes_series_counts_.clear();
     series_list_->clear();
@@ -994,6 +1012,8 @@ void QtInspectorWidget::refresh()
         figure_title_->setSubtitle(QString("%1 axes, %2 series").arg(axes_count).arg(total_series));
         if (series_title_)
             series_title_->setSubtitle(QString("%1 series").arg(total_series));
+        if (axes_title_)
+            axes_title_->setSubtitle(QString("%1 axes").arg(axes_count));
     }
 
     const auto& sty = figure->style();
@@ -1007,7 +1027,10 @@ void QtInspectorWidget::refresh()
     margin_min_h_spin_->setValue(sty.min_subplot_height);
 
     const auto& leg = figure->legend();
-    legend_visible_check_->setChecked(leg.visible);
+    {
+        const QSignalBlocker blocker(legend_visible_check_);
+        legend_visible_check_->setChecked(leg.visible);
+    }
     legend_position_combo_->setCurrentIndex(static_cast<int>(leg.position));
     legend_font_size_spin_->setValue(leg.font_size);
     legend_padding_spin_->setValue(leg.padding);
@@ -1072,6 +1095,10 @@ void QtInspectorWidget::sync_from_model()
                 total_series += ax->series().size();
         figure_title_->setSubtitle(
             QString("%1 axes, %2 series").arg(axes.size()).arg(total_series));
+        if (series_title_)
+            series_title_->setSubtitle(QString("%1 series").arg(total_series));
+        if (axes_title_)
+            axes_title_->setSubtitle(QString("%1 axes").arg(axes.size()));
     }
 
     const auto& sty = figure->style();
@@ -1124,8 +1151,8 @@ void QtInspectorWidget::sync_from_model()
                 const QSignalBlocker blocker(controls.border_check);
                 controls.border_check->setChecked(ax->border_enabled());
             }
-            if (controls.grid_color_btn)
-                update_color_button(controls.grid_color_btn, ax->axis_style().grid_color);
+            if (controls.grid_color_field)
+                controls.grid_color_field->setColor(ax->axis_style().grid_color);
             set_spin_from_model(controls.grid_width_spin_, ax->axis_style().grid_width);
             set_spin_from_model(controls.tick_length_spin_, ax->axis_style().tick_length);
             if (controls.autoscale_combo_)
@@ -1176,9 +1203,9 @@ void QtInspectorWidget::sync_from_model()
 
 void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
 {
-    auto* tab    = new QWidget(axes_tab_widget_);
+    auto* tab    = new QWidget(axes_stack_);
     auto* layout = new QVBoxLayout(tab);
-    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
     AxesControls ctrl{};
@@ -1188,126 +1215,106 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     auto* undo_mgr       = services_ ? &services_->undo() : nullptr;
     auto* redraw         = services_ ? services_->redraw_request() : nullptr;
 
-    // Title
-    auto* title_section = new CollapsibleSection("TITLE", tab);
-    auto* title_form    = make_inspector_form();
-    ctrl.title_edit     = new QLineEdit(tab);
+    // Title. The legacy inspector has no title editor on the axes page, so this
+    // stays a bare property row instead of a section band.
+    ctrl.title_edit = new QLineEdit(tab);
     ctrl.title_edit->setObjectName(QString("axes_%1_title").arg(index));
     ctrl.title_edit->setText(QString::fromStdString(ax.title()));
-    title_form->addRow("Title", ctrl.title_edit);
-    style_inspector_form(title_form);
-    title_section->content_layout()->addLayout(title_form);
-    layout->addWidget(title_section);
+    layout->addWidget(new SpectraPropertyRow("Title", ctrl.title_edit, tab));
 
-    // X Axis
-    auto* x_section  = new CollapsibleSection("X AXIS", tab);
-    auto* x_form     = make_inspector_form();
+    // X Axis — legacy renders Range first, then Label.
+    auto* x_section = new CollapsibleSection("X AXIS", tab);
+    auto  xlim      = ax.x_limits();
+    auto* x_range   = new SpectraRangeRow(tab);
+    ctrl.xmin_spin  = x_range->minSpin();
+    ctrl.xmax_spin  = x_range->maxSpin();
+    configure_inspector_spin(ctrl.xmin_spin);
+    configure_inspector_spin(ctrl.xmax_spin);
+    ctrl.xmin_spin->setObjectName(QString("axes_%1_x_min").arg(index));
+    ctrl.xmax_spin->setObjectName(QString("axes_%1_x_max").arg(index));
+    ctrl.xmin_spin->setValue(xlim.min);
+    ctrl.xmax_spin->setValue(xlim.max);
+    x_section->content_layout()->addWidget(new SpectraPropertyRow("Range", x_range, tab));
+
     ctrl.xlabel_edit = new QLineEdit(tab);
     ctrl.xlabel_edit->setObjectName(QString("axes_%1_x_label").arg(index));
     ctrl.xlabel_edit->setText(QString::fromStdString(ax.get_xlabel()));
-    x_form->addRow("Label", ctrl.xlabel_edit);
-
-    auto  xlim           = ax.x_limits();
-    auto* x_range_layout = new QHBoxLayout();
-    ctrl.xmin_spin       = new QDoubleSpinBox(tab);
-    configure_inspector_spin(ctrl.xmin_spin);
-    ctrl.xmin_spin->setObjectName(QString("axes_%1_x_min").arg(index));
-    ctrl.xmin_spin->setRange(-1e9, 1e9);
-    ctrl.xmin_spin->setDecimals(3);
-    ctrl.xmin_spin->setValue(xlim.min);
-    x_range_layout->addWidget(ctrl.xmin_spin);
-    ctrl.xmax_spin = new QDoubleSpinBox(tab);
-    configure_inspector_spin(ctrl.xmax_spin);
-    ctrl.xmax_spin->setObjectName(QString("axes_%1_x_max").arg(index));
-    ctrl.xmax_spin->setRange(-1e9, 1e9);
-    ctrl.xmax_spin->setDecimals(3);
-    ctrl.xmax_spin->setValue(xlim.max);
-    x_range_layout->addWidget(ctrl.xmax_spin);
-    x_form->addRow("Range", x_range_layout);
-    style_inspector_form(x_form);
-    x_section->content_layout()->addLayout(x_form);
+    x_section->content_layout()->addWidget(new SpectraPropertyRow("Label", ctrl.xlabel_edit, tab));
     layout->addWidget(x_section);
 
     // Y Axis
-    auto* y_section  = new CollapsibleSection("Y AXIS", tab);
-    auto* y_form     = make_inspector_form();
+    auto* y_section = new CollapsibleSection("Y AXIS", tab);
+    auto  ylim      = ax.y_limits();
+    auto* y_range   = new SpectraRangeRow(tab);
+    ctrl.ymin_spin  = y_range->minSpin();
+    ctrl.ymax_spin  = y_range->maxSpin();
+    configure_inspector_spin(ctrl.ymin_spin);
+    configure_inspector_spin(ctrl.ymax_spin);
+    ctrl.ymin_spin->setObjectName(QString("axes_%1_y_min").arg(index));
+    ctrl.ymax_spin->setObjectName(QString("axes_%1_y_max").arg(index));
+    ctrl.ymin_spin->setValue(ylim.min);
+    ctrl.ymax_spin->setValue(ylim.max);
+    y_section->content_layout()->addWidget(new SpectraPropertyRow("Range", y_range, tab));
+
     ctrl.ylabel_edit = new QLineEdit(tab);
     ctrl.ylabel_edit->setObjectName(QString("axes_%1_y_label").arg(index));
     ctrl.ylabel_edit->setText(QString::fromStdString(ax.get_ylabel()));
-    y_form->addRow("Label", ctrl.ylabel_edit);
-
-    auto  ylim           = ax.y_limits();
-    auto* y_range_layout = new QHBoxLayout();
-    ctrl.ymin_spin       = new QDoubleSpinBox(tab);
-    configure_inspector_spin(ctrl.ymin_spin);
-    ctrl.ymin_spin->setObjectName(QString("axes_%1_y_min").arg(index));
-    ctrl.ymin_spin->setRange(-1e9, 1e9);
-    ctrl.ymin_spin->setDecimals(3);
-    ctrl.ymin_spin->setValue(ylim.min);
-    y_range_layout->addWidget(ctrl.ymin_spin);
-    ctrl.ymax_spin = new QDoubleSpinBox(tab);
-    configure_inspector_spin(ctrl.ymax_spin);
-    ctrl.ymax_spin->setObjectName(QString("axes_%1_y_max").arg(index));
-    ctrl.ymax_spin->setRange(-1e9, 1e9);
-    ctrl.ymax_spin->setDecimals(3);
-    ctrl.ymax_spin->setValue(ylim.max);
-    y_range_layout->addWidget(ctrl.ymax_spin);
-    y_form->addRow("Range", y_range_layout);
-    style_inspector_form(y_form);
-    y_section->content_layout()->addLayout(y_form);
+    y_section->content_layout()->addWidget(new SpectraPropertyRow("Label", ctrl.ylabel_edit, tab));
     layout->addWidget(y_section);
 
     // Grid & Border
     auto* grid_section = new CollapsibleSection("GRID & BORDER", tab);
-    auto* grid_form    = make_inspector_form();
-    ctrl.grid_check    = new QCheckBox("Show Grid", tab);
+    ctrl.grid_check    = new SpectraToggleField("Show Grid", tab);
+    ctrl.grid_check->setObjectName(QString("axes_%1_grid").arg(index));
     ctrl.grid_check->setChecked(ax.grid_enabled());
-    grid_form->addRow(ctrl.grid_check);
-    ctrl.border_check = new QCheckBox("Show Border", tab);
+    grid_section->content_layout()->addWidget(ctrl.grid_check);
+
+    ctrl.border_check = new SpectraToggleField("Show Border", tab);
+    ctrl.border_check->setObjectName(QString("axes_%1_border").arg(index));
     ctrl.border_check->setChecked(ax.border_enabled());
-    grid_form->addRow(ctrl.border_check);
+    grid_section->content_layout()->addWidget(ctrl.border_check);
 
-    ctrl.grid_color_btn = make_color_button(tab, ax.axis_style().grid_color);
-    grid_form->addRow("Grid Color", ctrl.grid_color_btn);
+    ctrl.grid_color_field = new SpectraColorField("Grid Color", tab);
+    ctrl.grid_color_field->setObjectName(QString("axes_%1_grid_color").arg(index));
+    ctrl.grid_color_field->setColor(ax.axis_style().grid_color);
+    attach_color_picker(ctrl.grid_color_field, services_);
+    grid_section->content_layout()->addWidget(ctrl.grid_color_field);
 
-    ctrl.grid_width_spin_ = new QDoubleSpinBox(tab);
-    configure_inspector_spin(ctrl.grid_width_spin_);
+    ctrl.grid_width_spin_ = new SpectraDragSpinBox(tab);
     ctrl.grid_width_spin_->setRange(0.1, 5.0);
     ctrl.grid_width_spin_->setDecimals(1);
     ctrl.grid_width_spin_->setSingleStep(0.1);
+    ctrl.grid_width_spin_->setSuffix(" px");
     ctrl.grid_width_spin_->setValue(ax.axis_style().grid_width);
-    grid_form->addRow("Grid Width", ctrl.grid_width_spin_);
+    grid_section->content_layout()->addWidget(
+        new SpectraPropertyRow("Grid Width", ctrl.grid_width_spin_, tab));
 
-    ctrl.tick_length_spin_ = new QDoubleSpinBox(tab);
-    configure_inspector_spin(ctrl.tick_length_spin_);
+    ctrl.tick_length_spin_ = new SpectraDragSpinBox(tab);
     ctrl.tick_length_spin_->setRange(0.0, 20.0);
     ctrl.tick_length_spin_->setDecimals(0);
+    ctrl.tick_length_spin_->setSuffix(" px");
     ctrl.tick_length_spin_->setValue(ax.axis_style().tick_length);
-    grid_form->addRow("Tick Length", ctrl.tick_length_spin_);
-    style_inspector_form(grid_form);
-    grid_section->content_layout()->addLayout(grid_form);
+    grid_section->content_layout()->addWidget(
+        new SpectraPropertyRow("Tick Length", ctrl.tick_length_spin_, tab));
     layout->addWidget(grid_section);
 
     // Autoscale
     auto* auto_section    = new CollapsibleSection("AUTOSCALE", tab);
-    auto* auto_form       = make_inspector_form();
     ctrl.autoscale_combo_ = new QComboBox(tab);
     ctrl.autoscale_combo_->addItem("Fit");
     ctrl.autoscale_combo_->addItem("Tight");
     ctrl.autoscale_combo_->addItem("Padded");
     ctrl.autoscale_combo_->addItem("Manual");
     ctrl.autoscale_combo_->setCurrentIndex(static_cast<int>(ax.get_autoscale_mode()));
-    auto_form->addRow("Mode", ctrl.autoscale_combo_);
+    auto_section->content_layout()->addWidget(
+        new SpectraPropertyRow("Mode", ctrl.autoscale_combo_, tab));
     ctrl.auto_fit_btn_ = new QPushButton("Auto-fit Now", tab);
-    auto_form->addRow(ctrl.auto_fit_btn_);
-    style_inspector_form(auto_form);
-    auto_section->content_layout()->addLayout(auto_form);
+    ctrl.auto_fit_btn_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto_section->content_layout()->addWidget(ctrl.auto_fit_btn_);
     layout->addWidget(auto_section);
 
     // Statistics
     auto* stats_section = new CollapsibleSection("STATISTICS", tab);
-    auto* stats_form    = make_inspector_form();
-    stats_form->setSpacing(6);
 
     ctrl.stats_visible_label = new QLabel(tab);
     ctrl.stats_visible_label->setObjectName(QString("axes_%1_stats_visible").arg(index));
@@ -1327,29 +1334,19 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
     ctrl.stats_y_mean_label->setObjectName(QString("axes_%1_stats_y_mean").arg(index));
 
     const auto& stat_colors = spectra_colors();
-    const auto  value_color = stat_colors.text_primary.name(QColor::HexArgb);
-    for (auto* l : {ctrl.stats_visible_label,
-                    ctrl.stats_total_points_label,
-                    ctrl.stats_x_min_label,
-                    ctrl.stats_x_max_label,
-                    ctrl.stats_x_mean_label,
-                    ctrl.stats_y_min_label,
-                    ctrl.stats_y_max_label,
-                    ctrl.stats_y_mean_label})
-    {
-        l->setStyleSheet(QString("color: %1;").arg(value_color));
-    }
 
-    stats_form->addRow("Visible", ctrl.stats_visible_label);
-    stats_form->addRow("Total Points", ctrl.stats_total_points_label);
-    stats_form->addRow("X Min", ctrl.stats_x_min_label);
-    stats_form->addRow("X Max", ctrl.stats_x_max_label);
-    stats_form->addRow("X Mean", ctrl.stats_x_mean_label);
-    stats_form->addRow("Y Min", ctrl.stats_y_min_label);
-    stats_form->addRow("Y Max", ctrl.stats_y_max_label);
-    stats_form->addRow("Y Mean", ctrl.stats_y_mean_label);
-    style_inspector_form(stats_form);
-    stats_section->content_layout()->addLayout(stats_form);
+    stats_section->content_layout()->addWidget(
+        make_stat_row(tab, "Visible", ctrl.stats_visible_label));
+    stats_section->content_layout()->addWidget(
+        make_stat_row(tab, "Total Points", ctrl.stats_total_points_label));
+    stats_section->content_layout()->addWidget(make_stat_row(tab, "X Min", ctrl.stats_x_min_label));
+    stats_section->content_layout()->addWidget(make_stat_row(tab, "X Max", ctrl.stats_x_max_label));
+    stats_section->content_layout()->addWidget(
+        make_stat_row(tab, "X Mean", ctrl.stats_x_mean_label));
+    stats_section->content_layout()->addWidget(make_stat_row(tab, "Y Min", ctrl.stats_y_min_label));
+    stats_section->content_layout()->addWidget(make_stat_row(tab, "Y Max", ctrl.stats_y_max_label));
+    stats_section->content_layout()->addWidget(
+        make_stat_row(tab, "Y Mean", ctrl.stats_y_mean_label));
     layout->addWidget(stats_section);
 
     // Reference Lines
@@ -1491,7 +1488,8 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
             });
 
     layout->addStretch();
-    axes_tab_widget_->addTab(tab, QString("Axes %1").arg(index + 1));
+    axes_stack_->addWidget(tab);
+    axes_selector_->addItem(QString("Axes %1").arg(index + 1));
 
     connect(ctrl.title_edit,
             &QLineEdit::textChanged,
@@ -1623,7 +1621,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
             });
 
     connect(ctrl.grid_check,
-            &QCheckBox::toggled,
+            &SpectraToggleField::toggled,
             this,
             [this, axes_idx_local, undo_mgr, redraw](bool checked)
             {
@@ -1643,7 +1641,7 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
             });
 
     connect(ctrl.border_check,
-            &QCheckBox::toggled,
+            &SpectraToggleField::toggled,
             this,
             [this, axes_idx_local, undo_mgr, redraw](bool checked)
             {
@@ -1662,10 +1660,10 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                     redraw->request_redraw();
             });
 
-    connect(ctrl.grid_color_btn,
-            &QPushButton::clicked,
+    connect(ctrl.grid_color_field,
+            &SpectraColorField::colorChanged,
             this,
-            [this, axes_idx_local, undo_mgr, redraw, btn = ctrl.grid_color_btn]()
+            [this, axes_idx_local, undo_mgr, redraw](const spectra::Color& chosen)
             {
                 Figure* fig = registry_ ? registry_->get(active_id_) : nullptr;
                 if (!fig)
@@ -1673,24 +1671,16 @@ void QtInspectorWidget::build_axes_tab(Axes& ax, int index)
                 Axes* ax = dynamic_cast<Axes*>(figure_axes_at(fig, axes_idx_local));
                 if (!ax)
                     return;
-                auto* dialogs = services_ ? services_->dialog_service() : nullptr;
-                if (!dialogs)
-                    return;
-                auto chosen = dialogs->color_picker("Grid Color", ax->axis_style().grid_color);
-                if (!chosen)
-                    return;
                 auto before                 = ax->axis_style().grid_color;
-                ax->axis_style().grid_color = *chosen;
+                ax->axis_style().grid_color = chosen;
                 if (undo_mgr)
                 {
                     auto* target = ax;
-                    undo_mgr->push(UndoAction{"Change grid color",
-                                              [target, before]()
-                                              { target->axis_style().grid_color = before; },
-                                              [target, chosen = *chosen]()
-                                              { target->axis_style().grid_color = chosen; }});
+                    undo_mgr->push(UndoAction{
+                        "Change grid color",
+                        [target, before]() { target->axis_style().grid_color = before; },
+                        [target, chosen]() { target->axis_style().grid_color = chosen; }});
                 }
-                update_color_button(btn, ax->axis_style().grid_color);
                 if (redraw)
                     redraw->request_redraw();
             });
@@ -1868,24 +1858,19 @@ void QtInspectorWidget::update_axes_statistics(spectra::AxesBase& ax, AxesContro
 
 void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
 {
-    auto* tab    = new QWidget(axes_tab_widget_);
+    auto* tab    = new QWidget(axes_stack_);
     auto* layout = new QVBoxLayout(tab);
-    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(8);
 
     AxesControls ctrl{};
     ctrl.model = &ax;
 
-    // Title
-    auto* title_section = new CollapsibleSection("TITLE", tab);
-    auto* title_form    = make_inspector_form();
-    ctrl.title_edit     = new QLineEdit(tab);
+    // Title. Matches the 2D page: a bare property row above the axis sections.
+    ctrl.title_edit = new QLineEdit(tab);
     ctrl.title_edit->setObjectName(QString("axes_%1_title").arg(index));
     ctrl.title_edit->setText(QString::fromStdString(ax.title()));
-    title_form->addRow("Title", ctrl.title_edit);
-    style_inspector_form(title_form);
-    title_section->content_layout()->addLayout(title_form);
-    layout->addWidget(title_section);
+    layout->addWidget(new SpectraPropertyRow("Title", ctrl.title_edit, tab));
 
     auto add_axis_group = [index, layout, tab](const QString&     name,
                                                const QString&     prefix,
@@ -1896,32 +1881,23 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
                                                QDoubleSpinBox*&   max_spin)
     {
         auto* section = new CollapsibleSection(name, tab);
-        auto* form    = make_inspector_form();
+
+        auto* range = new SpectraRangeRow(tab);
+        min_spin    = range->minSpin();
+        max_spin    = range->maxSpin();
+        configure_inspector_spin(min_spin);
+        configure_inspector_spin(max_spin);
+        min_spin->setObjectName(QString("axes_%1_%2_min").arg(index).arg(prefix));
+        max_spin->setObjectName(QString("axes_%1_%2_max").arg(index).arg(prefix));
+        min_spin->setValue(limits.min);
+        max_spin->setValue(limits.max);
+        section->content_layout()->addWidget(new SpectraPropertyRow("Range", range, tab));
 
         label_edit = new QLineEdit(tab);
         label_edit->setObjectName(QString("axes_%1_%2_label").arg(index).arg(prefix));
         label_edit->setText(QString::fromStdString(label));
-        form->addRow("Label", label_edit);
+        section->content_layout()->addWidget(new SpectraPropertyRow("Label", label_edit, tab));
 
-        auto* range_layout = new QHBoxLayout();
-        min_spin           = new QDoubleSpinBox(tab);
-        configure_inspector_spin(min_spin);
-        min_spin->setObjectName(QString("axes_%1_%2_min").arg(index).arg(prefix));
-        min_spin->setRange(-1e9, 1e9);
-        min_spin->setDecimals(3);
-        min_spin->setValue(limits.min);
-        range_layout->addWidget(min_spin);
-
-        max_spin = new QDoubleSpinBox(tab);
-        configure_inspector_spin(max_spin);
-        max_spin->setObjectName(QString("axes_%1_%2_max").arg(index).arg(prefix));
-        max_spin->setRange(-1e9, 1e9);
-        max_spin->setDecimals(3);
-        max_spin->setValue(limits.max);
-        range_layout->addWidget(max_spin);
-        form->addRow("Range", range_layout);
-        style_inspector_form(form);
-        section->content_layout()->addLayout(form);
         layout->addWidget(section);
     };
 
@@ -1949,7 +1925,6 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
 
     // Grid & Bounding Box
     auto* grid_section     = new CollapsibleSection("GRID & BOUNDING BOX", tab);
-    auto* grid_form        = make_inspector_form();
     ctrl.grid_planes_combo = new QComboBox(tab);
     ctrl.grid_planes_combo->setObjectName(QString("axes_%1_grid_planes").arg(index));
     ctrl.grid_planes_combo->addItem("None", static_cast<int>(Axes3D::GridPlane::None));
@@ -1959,18 +1934,18 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
     ctrl.grid_planes_combo->addItem("All", static_cast<int>(Axes3D::GridPlane::All));
     ctrl.grid_planes_combo->setCurrentIndex(
         ctrl.grid_planes_combo->findData(static_cast<int>(ax.grid_planes())));
-    grid_form->addRow("Grid Planes", ctrl.grid_planes_combo);
+    grid_section->content_layout()->addWidget(
+        new SpectraPropertyRow("Grid Planes", ctrl.grid_planes_combo, tab));
 
-    ctrl.bounding_box_check = new QCheckBox("Visible", tab);
+    ctrl.bounding_box_check = new SpectraToggleField("Bounding Box", tab);
     ctrl.bounding_box_check->setObjectName(QString("axes_%1_bounding_box").arg(index));
     ctrl.bounding_box_check->setChecked(ax.show_bounding_box());
-    grid_form->addRow("Bounding Box", ctrl.bounding_box_check);
-    style_inspector_form(grid_form);
-    grid_section->content_layout()->addLayout(grid_form);
+    grid_section->content_layout()->addWidget(ctrl.bounding_box_check);
     layout->addWidget(grid_section);
 
     layout->addStretch();
-    axes_tab_widget_->addTab(tab, QString("Axes %1 (3D)").arg(index + 1));
+    axes_stack_->addWidget(tab);
+    axes_selector_->addItem(QString("Axes %1 (3D)").arg(index + 1));
 
     auto* undo_mgr     = services_ ? &services_->undo() : nullptr;
     auto* redraw       = services_ ? services_->redraw_request() : nullptr;
@@ -2078,7 +2053,7 @@ void QtInspectorWidget::build_axes3d_tab(Axes3D& ax, int index)
             });
 
     connect(ctrl.bounding_box_check,
-            &QCheckBox::toggled,
+            &SpectraToggleField::toggled,
             this,
             [this, resolve_axes, undo_mgr, redraw](bool checked)
             {
@@ -2199,62 +2174,92 @@ void QtInspectorWidget::build_series_properties(Series& s)
     if (!series_props_layout_)
         return;
 
+    // ── Context header: "{Type}: {label}" plus a color swatch + type badge,
+    // mirroring legacy `Inspector::draw_series_properties`.
+    auto* scatter = dynamic_cast<ScatterSeries*>(&s);
+    auto* line    = dynamic_cast<LineSeries*>(&s);
+
+    QString type_name = QStringLiteral("Series");
+    if (line)
+        type_name = QStringLiteral("Line Series");
+    else if (scatter)
+        type_name = QStringLiteral("Scatter Series");
+
+    const QString display_name =
+        s.label().empty() ? QStringLiteral("Unnamed") : QString::fromStdString(s.label());
+
+    series_controls_.detail_title = new SpectraPanelTitle(series_props_);
+    series_controls_.detail_title->setObjectName("series_detail_title");
+    series_controls_.detail_title->setTitle(QString("%1: %2").arg(type_name, display_name));
+    series_props_layout_->addWidget(series_controls_.detail_title);
+
+    series_controls_.type_row = new SpectraSwatchLabel(series_props_);
+    series_controls_.type_row->setObjectName("series_type_badge");
+    series_controls_.type_row->setColor(s.color());
+    series_controls_.type_row->setText(type_name);
+    series_props_layout_->addWidget(series_controls_.type_row);
+
+    // ── Appearance, in the legacy field order.
     auto* section = new CollapsibleSection("APPEARANCE", series_props_);
-    auto* form    = make_inspector_form();
+    auto* content = section->content_layout();
 
-    series_controls_.label_edit = new QLineEdit(series_props_);
-    series_controls_.label_edit->setText(QString::fromStdString(s.label()));
-    form->addRow("Label", series_controls_.label_edit);
+    series_controls_.color_field = new SpectraColorField("Color", series_props_);
+    series_controls_.color_field->setObjectName("series_color");
+    series_controls_.color_field->setColor(s.color());
+    attach_color_picker(series_controls_.color_field, services_);
+    content->addWidget(series_controls_.color_field);
 
-    series_controls_.color_btn = make_color_button(series_props_, s.color());
-    form->addRow("Color", series_controls_.color_btn);
-
-    series_controls_.visible_check = new QCheckBox("Visible", series_props_);
+    series_controls_.visible_check = new SpectraToggleField("Visible", series_props_);
+    series_controls_.visible_check->setObjectName("series_visible");
     series_controls_.visible_check->setChecked(s.visible());
-    form->addRow(series_controls_.visible_check);
-
-    series_controls_.width_spin = new QDoubleSpinBox(series_props_);
-    configure_inspector_spin(series_controls_.width_spin);
-    series_controls_.width_spin->setRange(0.1, 20.0);
-    series_controls_.width_spin->setDecimals(1);
-    series_controls_.width_spin->setSingleStep(0.5);
-    series_controls_.width_spin->setValue(s.plot_style().line_width);
-    form->addRow("Width", series_controls_.width_spin);
-
-    series_controls_.opacity_spin = new QDoubleSpinBox(series_props_);
-    configure_inspector_spin(series_controls_.opacity_spin);
-    series_controls_.opacity_spin->setRange(0.0, 1.0);
-    series_controls_.opacity_spin->setDecimals(2);
-    series_controls_.opacity_spin->setSingleStep(0.05);
-    series_controls_.opacity_spin->setValue(s.opacity());
-    form->addRow("Opacity", series_controls_.opacity_spin);
+    content->addWidget(series_controls_.visible_check);
 
     series_controls_.line_style_combo = new QComboBox(series_props_);
+    series_controls_.line_style_combo->setObjectName("series_line_style");
     for (int ls = 0; ls < LINE_STYLE_COUNT; ++ls)
         series_controls_.line_style_combo->addItem(line_style_name(ALL_LINE_STYLES[ls]));
     series_controls_.line_style_combo->setCurrentIndex(static_cast<int>(s.line_style()));
-    form->addRow("Line", series_controls_.line_style_combo);
+    content->addWidget(
+        new SpectraPropertyRow("Line Style", series_controls_.line_style_combo, series_props_));
 
     series_controls_.marker_style_combo = new QComboBox(series_props_);
+    series_controls_.marker_style_combo->setObjectName("series_marker_style");
     for (int ms = 0; ms < MARKER_STYLE_COUNT; ++ms)
         series_controls_.marker_style_combo->addItem(marker_style_name(ALL_MARKER_STYLES[ms]));
     series_controls_.marker_style_combo->setCurrentIndex(static_cast<int>(s.marker_style()));
-    form->addRow("Marker", series_controls_.marker_style_combo);
+    content->addWidget(
+        new SpectraPropertyRow("Marker", series_controls_.marker_style_combo, series_props_));
 
-    bool has_marker = s.marker_style() != MarkerStyle::None;
-    if (has_marker)
+    if (s.marker_style() != MarkerStyle::None)
     {
-        series_controls_.marker_size_spin_ = new QDoubleSpinBox(series_props_);
-        configure_inspector_spin(series_controls_.marker_size_spin_);
-        series_controls_.marker_size_spin_->setRange(1.0, 30.0);
-        series_controls_.marker_size_spin_->setDecimals(1);
+        series_controls_.marker_size_spin_ =
+            new SpectraSliderField("Marker Size", 1.0, 30.0, 1, " px", series_props_);
+        series_controls_.marker_size_spin_->setObjectName("series_marker_size");
         series_controls_.marker_size_spin_->setValue(s.marker_size());
-        form->addRow("Marker Size", series_controls_.marker_size_spin_);
+        content->addWidget(series_controls_.marker_size_spin_);
     }
 
-    style_inspector_form(form);
+    series_controls_.opacity_spin =
+        new SpectraSliderField("Opacity", 0.0, 1.0, 2, {}, series_props_);
+    series_controls_.opacity_spin->setObjectName("series_opacity");
+    series_controls_.opacity_spin->setValue(s.opacity());
+    content->addWidget(series_controls_.opacity_spin);
 
-    section->content_layout()->addLayout(form);
+    // Legacy exposes "Line Width" for line series and "Point Size" for scatter.
+    const QString width_label =
+        scatter ? QStringLiteral("Point Size") : QStringLiteral("Line Width");
+    const double width_max = scatter ? 30.0 : 12.0;
+    series_controls_.width_spin =
+        new SpectraSliderField(width_label, 0.5, width_max, 1, " px", series_props_);
+    series_controls_.width_spin->setObjectName("series_width");
+    series_controls_.width_spin->setValue(s.plot_style().line_width);
+    content->addWidget(series_controls_.width_spin);
+
+    series_controls_.label_edit = new QLineEdit(series_props_);
+    series_controls_.label_edit->setObjectName("series_label");
+    series_controls_.label_edit->setText(QString::fromStdString(s.label()));
+    content->addWidget(new SpectraPropertyRow("Label", series_controls_.label_edit, series_props_));
+
     series_props_layout_->addWidget(section);
 
     series_controls_.series = &s;
@@ -2270,76 +2275,72 @@ void QtInspectorWidget::build_series_properties(Series& s)
     preview_section->content_layout()->addLayout(preview_layout);
     series_props_layout_->addWidget(preview_section);
 
-    // Data statistics
-    auto* stats_section = new CollapsibleSection("DATA STATISTICS", series_props_);
-    auto* stats_grid    = new QGridLayout();
-    stats_grid->setContentsMargins(0, 0, 0, 0);
-    stats_grid->setHorizontalSpacing(12);
-    stats_grid->setVerticalSpacing(4);
+    // Data statistics — legacy renders one stat_row per line, grouped under
+    // "X Axis" / "Y Axis" separator labels.
+    auto* stats_section = new CollapsibleSection("DATA", series_props_);
+    auto* stats_content = stats_section->content_layout();
 
-    const auto& stat_colors  = spectra_colors();
-    const auto  value_color  = stat_colors.text_primary.name(QColor::HexArgb);
-    const auto  header_color = stat_colors.text_secondary.name(QColor::HexArgb);
-
-    auto* x_header = new QLabel("X", series_props_);
-    x_header->setStyleSheet(QString("color: %1;").arg(header_color));
-    x_header->setAlignment(Qt::AlignCenter);
-    auto* y_header = new QLabel("Y", series_props_);
-    y_header->setStyleSheet(QString("color: %1;").arg(header_color));
-    y_header->setAlignment(Qt::AlignCenter);
-    stats_grid->addWidget(new QLabel(""), 0, 0);
-    stats_grid->addWidget(x_header, 0, 1);
-    stats_grid->addWidget(y_header, 0, 2);
-
-    auto add_stat_row = [&](const QString& name,
-                            QLabel*&       x_label,
-                            QLabel*&       y_label,
-                            const QString& x_name,
-                            const QString& y_name)
+    const auto add_axis_stats = [&](const QString& group,
+                                    QLabel*&       count_label,
+                                    QLabel*&       min_label,
+                                    QLabel*&       max_label,
+                                    QLabel*&       mean_label,
+                                    QLabel*&       sum_label,
+                                    const QString& prefix)
     {
-        auto* label = new QLabel(name, series_props_);
-        x_label     = new QLabel(series_props_);
-        x_label->setObjectName(x_name);
-        x_label->setStyleSheet(QString("color: %1;").arg(value_color));
-        x_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        y_label = new QLabel(series_props_);
-        y_label->setObjectName(y_name);
-        y_label->setStyleSheet(QString("color: %1;").arg(value_color));
-        y_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        int row = stats_grid->rowCount();
-        stats_grid->addWidget(label, row, 0);
-        stats_grid->addWidget(x_label, row, 1);
-        stats_grid->addWidget(y_label, row, 2);
+        stats_content->addWidget(new SpectraSeparatorLabel(group, series_props_));
+
+        count_label = new QLabel(series_props_);
+        count_label->setObjectName(prefix + "_count");
+        min_label = new QLabel(series_props_);
+        min_label->setObjectName(prefix + "_min");
+        max_label = new QLabel(series_props_);
+        max_label->setObjectName(prefix + "_max");
+        mean_label = new QLabel(series_props_);
+        mean_label->setObjectName(prefix + "_mean");
+        sum_label = new QLabel(series_props_);
+        sum_label->setObjectName(prefix + "_sum");
+
+        stats_content->addWidget(make_stat_row(series_props_, "Count", count_label));
+        stats_content->addWidget(make_stat_row(series_props_, "Min", min_label));
+        stats_content->addWidget(make_stat_row(series_props_, "Max", max_label));
+        stats_content->addWidget(make_stat_row(series_props_, "Mean", mean_label));
+        stats_content->addWidget(make_stat_row(series_props_, "Sum", sum_label));
     };
 
-    add_stat_row("Count",
-                 series_controls_.stats_x_count_label,
-                 series_controls_.stats_y_count_label,
-                 "series_stats_x_count",
-                 "series_stats_y_count");
-    add_stat_row("Min",
-                 series_controls_.stats_x_min_label,
-                 series_controls_.stats_y_min_label,
-                 "series_stats_x_min",
-                 "series_stats_y_min");
-    add_stat_row("Max",
-                 series_controls_.stats_x_max_label,
-                 series_controls_.stats_y_max_label,
-                 "series_stats_x_max",
-                 "series_stats_y_max");
-    add_stat_row("Mean",
-                 series_controls_.stats_x_mean_label,
-                 series_controls_.stats_y_mean_label,
-                 "series_stats_x_mean",
-                 "series_stats_y_mean");
-    add_stat_row("Sum",
-                 series_controls_.stats_x_sum_label,
-                 series_controls_.stats_y_sum_label,
-                 "series_stats_x_sum",
-                 "series_stats_y_sum");
+    add_axis_stats("X Axis",
+                   series_controls_.stats_x_count_label,
+                   series_controls_.stats_x_min_label,
+                   series_controls_.stats_x_max_label,
+                   series_controls_.stats_x_mean_label,
+                   series_controls_.stats_x_sum_label,
+                   "series_stats_x");
+    add_axis_stats("Y Axis",
+                   series_controls_.stats_y_count_label,
+                   series_controls_.stats_y_min_label,
+                   series_controls_.stats_y_max_label,
+                   series_controls_.stats_y_mean_label,
+                   series_controls_.stats_y_sum_label,
+                   "series_stats_y");
 
-    stats_section->content_layout()->addLayout(stats_grid);
     series_props_layout_->addWidget(stats_section);
+
+    // Back to the browser, matching legacy's trailing button_field.
+    auto* back_btn = new QPushButton("Back to Series List", series_props_);
+    back_btn->setObjectName("series_back_button");
+    back_btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    series_props_layout_->addWidget(back_btn);
+    connect(back_btn,
+            &QPushButton::clicked,
+            this,
+            [this]()
+            {
+                if (series_list_)
+                    series_list_->setCurrentRow(-1);
+                clear_series_properties();
+                if (ctx_)
+                    ctx_->clear();
+            });
 
     auto* undo_mgr = services_ ? &services_->undo() : nullptr;
     auto* redraw   = services_ ? services_->redraw_request() : nullptr;
@@ -2364,25 +2365,20 @@ void QtInspectorWidget::build_series_properties(Series& s)
                     redraw->request_redraw();
             });
 
-    connect(series_controls_.color_btn,
-            &QPushButton::clicked,
+    connect(series_controls_.color_field,
+            &SpectraColorField::colorChanged,
             this,
-            [services_ = services_, &s, undo_mgr, redraw, btn = series_controls_.color_btn]()
+            [this, &s, undo_mgr, redraw](const spectra::Color& chosen)
             {
-                auto* dialogs = services_ ? services_->dialog_service() : nullptr;
-                if (!dialogs)
-                    return;
-                auto chosen = dialogs->color_picker("Series Color", s.color());
-                if (!chosen)
-                    return;
-                undoable_set_series_color(undo_mgr, s, *chosen);
-                update_color_button(btn, s.color());
+                undoable_set_series_color(undo_mgr, s, chosen);
+                if (series_controls_.type_row)
+                    series_controls_.type_row->setColor(s.color());
                 if (redraw)
                     redraw->request_redraw();
             });
 
     connect(series_controls_.visible_check,
-            &QCheckBox::toggled,
+            &SpectraToggleField::toggled,
             this,
             [&s, undo_mgr, redraw](bool checked)
             {
@@ -2401,7 +2397,7 @@ void QtInspectorWidget::build_series_properties(Series& s)
             });
 
     connect(series_controls_.width_spin,
-            qOverload<double>(&QDoubleSpinBox::valueChanged),
+            &SpectraSliderField::valueChanged,
             this,
             [&s, undo_mgr, redraw](double val)
             {
@@ -2415,7 +2411,7 @@ void QtInspectorWidget::build_series_properties(Series& s)
             });
 
     connect(series_controls_.opacity_spin,
-            qOverload<double>(&QDoubleSpinBox::valueChanged),
+            &SpectraSliderField::valueChanged,
             this,
             [&s, undo_mgr, redraw](double val)
             {
@@ -2451,7 +2447,7 @@ void QtInspectorWidget::build_series_properties(Series& s)
     if (series_controls_.marker_size_spin_)
     {
         connect(series_controls_.marker_size_spin_,
-                qOverload<double>(&QDoubleSpinBox::valueChanged),
+                &SpectraSliderField::valueChanged,
                 this,
                 [&s, undo_mgr, redraw](double val)
                 {
@@ -2572,7 +2568,8 @@ void QtInspectorWidget::wire_figure_page()
                     redraw->request_redraw();
             });
 
-    auto connect_margin = [this, undo_mgr, redraw](QDoubleSpinBox* spin, float FigureStyle::*member)
+    auto connect_margin =
+        [this, undo_mgr, redraw](QDoubleSpinBox* spin, float FigureStyle::* member)
     {
         connect(spin,
                 qOverload<double>(&QDoubleSpinBox::valueChanged),
@@ -2607,7 +2604,7 @@ void QtInspectorWidget::wire_figure_page()
 
     connect(
         legend_visible_check_,
-        &QCheckBox::toggled,
+        &SpectraToggleField::toggled,
         this,
         [this, undo_mgr, redraw](bool checked)
         {

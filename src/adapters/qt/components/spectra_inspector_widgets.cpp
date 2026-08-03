@@ -21,6 +21,9 @@
 #include <QPainter>
 #include <QVBoxLayout>
 
+#include <algorithm>
+#include <utility>
+
 namespace spectra::adapters::qt
 {
 
@@ -42,24 +45,44 @@ spectra::Color from_qcolor(const QColor& c)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// ImGui sizes a font by its ascent+descent, Qt by the em square. Inter's
+// ascent+descent is ~1.21 em, so `ImFontConfig::SizePixels = S` renders at the
+// same visual size as a Qt pixel size of S / 1.21. Without this conversion every
+// inspector string comes out ~20% larger than the legacy panel.
+int imgui_font_px(double imgui_size_pixels)
+{
+    return qRound(imgui_size_pixels / 1.21);
+}
+
 static QFont title_font()
 {
     auto f = SpectraFontManager::instance().font_semibold();
-    f.setPixelSize(spectra_typography().font_xl);
+    f.setPixelSize(imgui_font_px(kImGuiTitleSize));
     return f;
 }
 
+// Legacy `Inspector::draw_figure_properties` prints the subtitle with the body
+// font in text_secondary, not a small muted caption.
 static QFont subtitle_font()
 {
-    auto f = SpectraFontManager::instance().font_small();
-    f.setPixelSize(spectra_typography().font_sm);
+    auto f = SpectraFontManager::instance().font_base();
+    f.setPixelSize(imgui_font_px(kImGuiBodySize));
+    return f;
+}
+
+// Every inspector row label, field value, and color-field caption in the legacy
+// panel uses the body font.
+static QFont row_font()
+{
+    auto f = SpectraFontManager::instance().font_base();
+    f.setPixelSize(imgui_font_px(kImGuiBodySize));
     return f;
 }
 
 static QFont header_font()
 {
     auto f = SpectraFontManager::instance().font_medium();
-    f.setPixelSize(spectra_typography().font_sm);
+    f.setPixelSize(imgui_font_px(kImGuiHeadingSize));
     return f;
 }
 
@@ -74,8 +97,9 @@ static QString chevron_icon(bool down)
 SpectraSegmentedControl::SpectraSegmentedControl(QWidget* parent) : QWidget(parent)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(
-        static_cast<int>(ui::tokens::SEGMENT_TAB_H + ui::tokens::SEGMENT_TRACK_PAD * 2.0f));
+    // Legacy draws the track at exactly SEGMENT_TAB_H and insets the segments by
+    // SEGMENT_TRACK_PAD inside it, so the widget is the track.
+    setFixedHeight(static_cast<int>(ui::tokens::SEGMENT_TAB_H));
     setCursor(Qt::PointingHandCursor);
     setFocusPolicy(Qt::StrongFocus);
 }
@@ -108,17 +132,12 @@ QRectF SpectraSegmentedControl::segmentRect(int index) const
     if (items_.isEmpty())
         return {};
 
+    // Legacy: tab_w = floor((track_w - pad*2) / count) and the first segment
+    // starts one pad in; the trailing pad is left as track surface.
     const float pad = ui::tokens::SEGMENT_TRACK_PAD;
-    const float w   = static_cast<float>(width()) - pad * 2.0f;
+    const float sw  = std::floor((static_cast<float>(width()) - pad * 2.0f) / items_.size());
     const float h   = static_cast<float>(height()) - pad * 2.0f;
-    const float sw  = std::floor(w / items_.size());
-
-    float x = pad + sw * static_cast<float>(index);
-    if (index == items_.size() - 1)
-    {
-        // Last segment absorbs any leftover pixels.
-        return QRectF(x, pad, w - x + pad, h);
-    }
+    const float x   = pad + sw * static_cast<float>(index);
     return QRectF(x, pad, sw, h);
 }
 
@@ -133,13 +152,9 @@ void SpectraSegmentedControl::paintEvent(QPaintEvent*)
     const auto& c = spectra_colors();
     const auto& g = spectra_geometry();
 
-    // Track background
-    const float pad = ui::tokens::SEGMENT_TRACK_PAD;
-    QRectF      track_rect(pad,
-                      pad,
-                      static_cast<float>(width()) - pad * 2.0f,
-                      static_cast<float>(height()) - pad * 2.0f);
-    QColor      track_bg = c.window_base;
+    // Track background fills the whole control (legacy uses the raw content width).
+    QRectF track_rect = QRectF(rect()).adjusted(0, 0, -1, -1);
+    QColor track_bg   = c.window_base;
     track_bg.setAlphaF(0.55f);
     p.setBrush(track_bg);
     p.setPen(QPen(c.border_subtle, 1));
@@ -169,9 +184,8 @@ void SpectraSegmentedControl::paintEvent(QPaintEvent*)
             p.drawRoundedRect(seg, g.radius_sm, g.radius_sm);
         }
 
-        QFont f = SpectraFontManager::instance().font_medium();
-        f.setPixelSize(spectra_typography().font_sm);
-        p.setFont(f);
+        // Legacy tab labels use font_heading_.
+        p.setFont(header_font());
 
         QColor text = active ? c.cyan_accent : (hover ? c.text_secondary : c.text_muted);
         if (!active && !hover)
@@ -234,7 +248,7 @@ SpectraPanelTitle::SpectraPanelTitle(QWidget* parent) : QWidget(parent)
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     // Legacy `Inspector::draw_figure_properties` renders title, small spacing,
     // subtitle, section spacing, a separator, then section spacing again.
-    setFixedHeight(kTitleH + kSubtitleH + static_cast<int>(ui::tokens::SPACE_5) * 2 + 1);
+    updateHeight();
 }
 
 void SpectraPanelTitle::setTitle(const QString& title)
@@ -245,9 +259,20 @@ void SpectraPanelTitle::setTitle(const QString& title)
 
 void SpectraPanelTitle::setSubtitle(const QString& subtitle)
 {
-    subtitle_ = subtitle;
+    if (subtitle == subtitle_)
+        return;
+    const bool had = !subtitle_.isEmpty();
+    subtitle_      = subtitle;
+    if (had != !subtitle_.isEmpty())
+        updateHeight();
     updateGeometry();
     update();
+}
+
+void SpectraPanelTitle::updateHeight()
+{
+    setFixedHeight(subtitle_.isEmpty() ? kSeparatorYNoSub + kTrailingGap
+                                       : kSeparatorY + kTrailingGap);
 }
 
 void SpectraPanelTitle::paintEvent(QPaintEvent*)
@@ -257,6 +282,8 @@ void SpectraPanelTitle::paintEvent(QPaintEvent*)
 
     const auto& c = spectra_colors();
 
+    // Offsets measured from the legacy panel: title box 0..20, subtitle box
+    // 44..60, separator at 96, first section band at 132.
     QFont title_f = title_font();
     p.setFont(title_f);
     p.setPen(c.text_primary);
@@ -264,10 +291,9 @@ void SpectraPanelTitle::paintEvent(QPaintEvent*)
 
     if (!subtitle_.isEmpty())
     {
-        QFont sub_f = subtitle_font();
-        p.setFont(sub_f);
-        p.setPen(c.text_muted);
-        p.drawText(QRect(0, kTitleH, width(), kSubtitleH),
+        p.setFont(subtitle_font());
+        p.setPen(c.text_secondary);
+        p.drawText(QRect(0, kSubtitleY, width(), kSubtitleH),
                    Qt::AlignLeft | Qt::AlignVCenter,
                    subtitle_);
     }
@@ -275,9 +301,9 @@ void SpectraPanelTitle::paintEvent(QPaintEvent*)
     // Hairline separator closing the title block, matching legacy
     // `widgets::separator()` between the panel header and the first section.
     QColor sep(c.border_subtle);
-    sep.setAlpha(140);
+    sep.setAlphaF(0.30f);
     p.setPen(QPen(sep, 1));
-    const int sep_y = kTitleH + kSubtitleH + static_cast<int>(ui::tokens::SPACE_5);
+    const int sep_y = subtitle_.isEmpty() ? kSeparatorYNoSub : kSeparatorY;
     p.drawLine(0, sep_y, width(), sep_y);
 }
 
@@ -370,17 +396,19 @@ SpectraPropertyRow::SpectraPropertyRow(const QString& label, QWidget* value_widg
     : QWidget(parent), label_(label), value_(value_widget)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT + 2);
+    setFixedHeight(kRowHeight);
 
     auto* layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
     auto* label_lbl = new QLabel(label, this);
-    label_lbl->setFont(SpectraFontManager::instance().font_small());
-    label_lbl->setStyleSheet(
-        QString("color: %1;").arg(spectra_colors().text_secondary.name(QColor::HexArgb)));
-    label_lbl->setFixedWidth(static_cast<int>(ui::tokens::INSPECTOR_LABEL_WIDTH));
+    label_lbl->setFont(row_font());
+    label_lbl->setStyleSheet(QString("color: %1; background: transparent;")
+                                 .arg(spectra_colors().text_secondary.name(QColor::HexArgb)));
+    // The row already sits inside the section's 12px group indent, so the label
+    // column is INSPECTOR_LABEL_WIDTH minus that indent.
+    label_lbl->setFixedWidth(kLabelWidth);
     label_lbl->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     layout->addWidget(label_lbl);
 
@@ -388,7 +416,7 @@ SpectraPropertyRow::SpectraPropertyRow(const QString& label, QWidget* value_widg
     {
         value_->setParent(this);
         value_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        value_->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+        value_->setFixedHeight(kRowHeight);
         layout->addWidget(value_);
     }
 
@@ -417,12 +445,12 @@ SpectraRangeRow::SpectraRangeRow(QWidget* parent)
     : QWidget(parent), min_(new QDoubleSpinBox(this)), max_(new QDoubleSpinBox(this))
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT + 2);
+    setFixedHeight(SpectraPropertyRow::row_height());
 
     min_->setButtonSymbols(QAbstractSpinBox::NoButtons);
     max_->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    min_->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
-    max_->setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+    min_->setFixedHeight(SpectraPropertyRow::row_height());
+    max_->setFixedHeight(SpectraPropertyRow::row_height());
     min_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     max_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     min_->setDecimals(3);
@@ -450,7 +478,8 @@ SpectraColorField::SpectraColorField(const QString& label, QWidget* parent)
     : QWidget(parent), label_(label)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(32);
+    // Legacy `widgets::color_field` is exactly as tall as its 28px swatch.
+    setFixedHeight(28);
     setCursor(Qt::PointingHandCursor);
 }
 
@@ -498,15 +527,12 @@ void SpectraColorField::paintEvent(QPaintEvent*)
         p.drawRoundedRect(swatch_rect.adjusted(-1, -1, 1, 1), g.radius_md + 1, g.radius_md + 1);
     }
 
-    // Label — legacy `widgets::color_field` prints it at full text_primary.
-    QFont f = SpectraFontManager::instance().font_small();
-    f.setPixelSize(spectra_typography().font_sm);
-    p.setFont(f);
+    // Label — legacy `widgets::color_field` prints it at full text_primary in the
+    // 16px body font, 13px to the right of the swatch.
+    constexpr int label_gap = 13;
+    p.setFont(row_font());
     p.setPen(c.text_primary);
-    p.drawText(QRect(swatch_sz + static_cast<int>(ui::tokens::SPACE_2),
-                     0,
-                     width() - swatch_sz - static_cast<int>(ui::tokens::SPACE_2),
-                     height()),
+    p.drawText(QRect(swatch_sz + label_gap, 0, width() - swatch_sz - label_gap, height()),
                Qt::AlignLeft | Qt::AlignVCenter,
                label_);
 }
@@ -541,13 +567,276 @@ void SpectraColorField::mousePressEvent(QMouseEvent* event)
     }
 }
 
+// ─── InfoRow ──────────────────────────────────────────────────────────────────
+
+SpectraInfoRow::SpectraInfoRow(const QString& label, const QString& value, QWidget* parent)
+    : QWidget(parent), label_(label), value_(value)
+{
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setFixedHeight(kRowHeight);
+}
+
+void SpectraInfoRow::setLabel(const QString& label)
+{
+    label_ = label;
+    update();
+}
+
+void SpectraInfoRow::setValue(const QString& value)
+{
+    if (value == value_)
+        return;
+    value_ = value;
+    update();
+}
+
+void SpectraInfoRow::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    const auto& c = spectra_colors();
+
+    p.setFont(row_font());
+
+    // Legacy `widgets::info_row` places the value at 45% of the available width.
+    const int split = static_cast<int>(width() * 0.45);
+
+    p.setPen(c.text_secondary);
+    p.drawText(QRect(0, 0, split, height()), Qt::AlignLeft | Qt::AlignVCenter, label_);
+
+    p.setPen(c.text_primary);
+    p.drawText(QRect(split, 0, width() - split, height()),
+               Qt::AlignLeft | Qt::AlignVCenter,
+               value_);
+}
+
+// ─── SliderField ──────────────────────────────────────────────────────────────
+
+SpectraSliderField::SpectraSliderField(const QString& label,
+                                       double         minimum,
+                                       double         maximum,
+                                       int            decimals,
+                                       QString        suffix,
+                                       QWidget*       parent)
+    : QWidget(parent), label_(label), min_(minimum), max_(maximum), value_(minimum),
+      decimals_(decimals), suffix_(std::move(suffix))
+{
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setFixedHeight(SpectraPropertyRow::row_height());
+    setCursor(Qt::PointingHandCursor);
+    setFocusPolicy(Qt::StrongFocus);
+}
+
+void SpectraSliderField::setValue(double value)
+{
+    const double clamped = std::clamp(value, min_, max_);
+    if (qFuzzyCompare(clamped + 1.0, value_ + 1.0))
+        return;
+    value_ = clamped;
+    emit valueChanged(value_);
+    update();
+}
+
+QRect SpectraSliderField::trackRect() const
+{
+    const int label_w = SpectraPropertyRow::kLabelWidth;
+    return QRect(label_w, 0, std::max(1, width() - label_w), height());
+}
+
+QString SpectraSliderField::formatted() const
+{
+    return QString::number(value_, 'f', decimals_) + suffix_;
+}
+
+void SpectraSliderField::setFromPos(int x)
+{
+    const QRect track = trackRect();
+    if (track.width() <= 0 || max_ <= min_)
+        return;
+    const double t = std::clamp(static_cast<double>(x - track.left()) / track.width(), 0.0, 1.0);
+    setValue(min_ + t * (max_ - min_));
+}
+
+void SpectraSliderField::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    const auto& c = spectra_colors();
+
+    p.setFont(row_font());
+
+    // Label
+    p.setPen(c.text_secondary);
+    p.drawText(QRect(0, 0, SpectraPropertyRow::kLabelWidth, height()),
+               Qt::AlignLeft | Qt::AlignVCenter,
+               label_);
+
+    const QRect      track    = trackRect();
+    const double     center_y = track.center().y() + 0.5;
+    constexpr double track_h  = 4.0;
+
+    // Track background
+    QRectF track_bg(track.left(), center_y - track_h * 0.5, track.width(), track_h);
+    p.setPen(Qt::NoPen);
+    p.setBrush(c.bg_tertiary);
+    p.drawRoundedRect(track_bg, track_h * 0.5, track_h * 0.5);
+
+    // Accent fill
+    const double t    = (max_ > min_) ? std::clamp((value_ - min_) / (max_ - min_), 0.0, 1.0) : 0.0;
+    QColor       fill = c.cyan_accent;
+    fill.setAlphaF(0.60f);
+    QRectF fill_rect(track.left(), center_y - track_h * 0.5, track.width() * t, track_h);
+    p.setBrush(fill);
+    p.drawRoundedRect(fill_rect, track_h * 0.5, track_h * 0.5);
+
+    // Thumb (14px pill)
+    constexpr double thumb_d = 14.0;
+    const double     thumb_x = track.left() + thumb_d * 0.5 + (track.width() - thumb_d) * t;
+    p.setBrush(dragging_ ? c.cyan_accent.lighter(115) : c.cyan_accent);
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(QPointF(thumb_x, center_y), thumb_d * 0.5, thumb_d * 0.5);
+
+    // Value text, centered in the track like the legacy ImGui slider.
+    p.setPen(c.text_primary);
+    p.drawText(track, Qt::AlignCenter, formatted());
+}
+
+void SpectraSliderField::mousePressEvent(QMouseEvent* event)
+{
+    if (event->button() != Qt::LeftButton)
+        return;
+    dragging_ = true;
+    setFromPos(static_cast<int>(event->position().x()));
+    update();
+}
+
+void SpectraSliderField::mouseMoveEvent(QMouseEvent* event)
+{
+    if (!dragging_)
+        return;
+    setFromPos(static_cast<int>(event->position().x()));
+}
+
+void SpectraSliderField::mouseReleaseEvent(QMouseEvent*)
+{
+    if (!dragging_)
+        return;
+    dragging_ = false;
+    update();
+}
+
+void SpectraSliderField::leaveEvent(QEvent*)
+{
+    update();
+}
+
+// ─── Separator ────────────────────────────────────────────────────────────────
+
+SpectraSeparator::SpectraSeparator(QWidget* parent) : QWidget(parent)
+{
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setFixedHeight(1);
+}
+
+void SpectraSeparator::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    QColor   sep = spectra_colors().border_subtle;
+    sep.setAlphaF(0.30f);
+    p.setPen(QPen(sep, 1));
+    p.drawLine(0, 0, width(), 0);
+}
+
+// ─── SeparatorLabel ───────────────────────────────────────────────────────────
+
+SpectraSeparatorLabel::SpectraSeparatorLabel(const QString& text, QWidget* parent)
+    : QWidget(parent), text_(text)
+{
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setFixedHeight(20);
+}
+
+void SpectraSeparatorLabel::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    const auto& c = spectra_colors();
+
+    QFont f = SpectraFontManager::instance().font_medium();
+    f.setPixelSize(imgui_font_px(kImGuiHeadingSize));
+    p.setFont(f);
+
+    const QFontMetrics fm(f);
+    const int          text_w = fm.horizontalAdvance(text_);
+    const int          gap    = static_cast<int>(ui::tokens::SPACE_2);
+    const int          text_x = (width() - text_w) / 2;
+    const int          line_y = height() / 2;
+
+    p.setPen(QPen(c.border_subtle, 1));
+    if (text_x > gap)
+        p.drawLine(0, line_y, text_x - gap, line_y);
+    const int right_start = text_x + text_w + gap;
+    if (right_start < width())
+        p.drawLine(right_start, line_y, width(), line_y);
+
+    p.setPen(c.text_muted);
+    p.drawText(rect(), Qt::AlignCenter, text_);
+}
+
+// ─── SwatchLabel ──────────────────────────────────────────────────────────────
+
+SpectraSwatchLabel::SpectraSwatchLabel(QWidget* parent) : QWidget(parent)
+{
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    setFixedHeight(20);
+}
+
+void SpectraSwatchLabel::setColor(const spectra::Color& c)
+{
+    color_ = c;
+    update();
+}
+
+void SpectraSwatchLabel::setText(const QString& text)
+{
+    text_ = text;
+    update();
+}
+
+void SpectraSwatchLabel::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
+
+    const auto& c = spectra_colors();
+    const auto& g = spectra_geometry();
+
+    // Legacy `widgets::color_swatch(col, 16.0f)` followed by SPACE_2 and the type name.
+    constexpr int sz = 16;
+    const int     y  = (height() - sz) / 2;
+    QRectF        swatch(0, y, sz, sz);
+    p.setBrush(to_qcolor(color_));
+    p.setPen(QPen(c.border_subtle, 1));
+    p.drawRoundedRect(swatch, g.radius_sm, g.radius_sm);
+
+    p.setFont(row_font());
+    p.setPen(c.text_secondary);
+    const int text_x = sz + static_cast<int>(ui::tokens::SPACE_2);
+    p.drawText(QRect(text_x, 0, width() - text_x, height()),
+               Qt::AlignLeft | Qt::AlignVCenter,
+               text_);
+}
+
 // ─── ToggleField ──────────────────────────────────────────────────────────────
 
 SpectraToggleField::SpectraToggleField(const QString& label, QWidget* parent)
     : QWidget(parent), label_(label)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    setFixedHeight(28);
+    setFixedHeight(SpectraPropertyRow::row_height());
     setCursor(Qt::PointingHandCursor);
 }
 
@@ -567,10 +856,8 @@ void SpectraToggleField::paintEvent(QPaintEvent*)
 
     const auto& c = spectra_colors();
 
-    // Label
-    QFont f = SpectraFontManager::instance().font_small();
-    f.setPixelSize(spectra_typography().font_sm);
-    p.setFont(f);
+    // Label — legacy `widgets::toggle_field` uses the 16px body font.
+    p.setFont(row_font());
     p.setPen(c.text_secondary);
     p.drawText(QRect(0, 0, width() - 42, height()), Qt::AlignLeft | Qt::AlignVCenter, label_);
 
@@ -742,7 +1029,7 @@ SpectraSeriesListView::SpectraSeriesListView(QWidget* parent)
       copy_btn_(new QPushButton(this)), cut_btn_(new QPushButton(this)),
       delete_btn_(new QPushButton(this))
 {
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -801,9 +1088,11 @@ SpectraSeriesListView::SpectraSeriesListView(QWidget* parent)
     list_->setFrameShape(QFrame::NoFrame);
     list_->setUniformItemSizes(true);
     list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    list_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    updateListHeight();
 
     layout->addWidget(bulk_bar_);
-    layout->addWidget(list_, 1);
+    layout->addWidget(list_);
 
     connect(list_,
             &QListWidget::currentRowChanged,
@@ -814,10 +1103,25 @@ SpectraSeriesListView::SpectraSeriesListView(QWidget* parent)
     connect(delete_btn_, &QPushButton::clicked, this, &SpectraSeriesListView::deleteSelected);
 }
 
+void SpectraSeriesListView::updateListHeight()
+{
+    if (!list_)
+        return;
+    const int rows      = std::max(1, list_->count());
+    const int row_h     = static_cast<int>(ui::tokens::SERIES_ROW_HEIGHT);
+    const int spacing   = list_->spacing() * 2;
+    const int content_h = rows * (row_h + spacing);
+    // Cap so a long series list still leaves the property sections reachable.
+    list_->setFixedHeight(std::clamp(content_h + 4, row_h, row_h * 10));
+}
+
 void SpectraSeriesListView::clear()
 {
     if (list_)
+    {
         list_->clear();
+        updateListHeight();
+    }
 }
 
 int SpectraSeriesListView::count() const
@@ -836,7 +1140,8 @@ QListWidgetItem* SpectraSeriesListView::addSeries(const spectra::Color& color,
     auto* item = new QListWidgetItem(label, list_);
     item->setIcon(QIcon(make_series_icon(color, visible)));
     item->setData(Qt::UserRole, user_data);
-    item->setSizeHint(QSize(0, 28));
+    item->setSizeHint(QSize(0, static_cast<int>(ui::tokens::SERIES_ROW_HEIGHT)));
+    updateListHeight();
     return item;
 }
 
@@ -881,9 +1186,11 @@ std::vector<QListWidgetItem*> SpectraSeriesListView::selectedItems() const
 SpectraDragSpinBox::SpectraDragSpinBox(QWidget* parent) : QDoubleSpinBox(parent)
 {
     setButtonSymbols(QAbstractSpinBox::NoButtons);
-    // Legacy `widgets::drag_field` renders the value centered inside the input.
+    // Legacy `widgets::drag_field` renders the value centered inside a 36px frame
+    // using the 16px body font.
     setAlignment(Qt::AlignCenter);
-    setFixedHeight(ui::tokens::INSPECTOR_INPUT_HEIGHT);
+    setFont(row_font());
+    setFixedHeight(SpectraPropertyRow::row_height());
 }
 
 }   // namespace spectra::adapters::qt

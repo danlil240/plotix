@@ -29,6 +29,17 @@ namespace spectra::adapters::qt
 QColor         to_qcolor(const spectra::Color& c);
 spectra::Color from_qcolor(const QColor& c);
 
+// Font sizes the legacy inspector loads in `ImGuiIntegration::load_fonts()`.
+// ImGui interprets these as ascent+descent while Qt's setPixelSize sets the em
+// square, so pass them through `imgui_font_px()` before handing them to QFont.
+constexpr double kImGuiBodySize    = 16.0;
+constexpr double kImGuiHeadingSize = 11.5;
+constexpr double kImGuiTitleSize   = 20.0;
+
+// Converts an ImGui `size_pixels` into the Qt pixel size that renders at the
+// same visual size for Inter.
+int imgui_font_px(double imgui_size_pixels);
+
 // ─── SegmentedControl ─────────────────────────────────────────────────────────
 // Pill-style 4-segment bar used for the inspector top tabs (Figure/Series/Axes/Data).
 
@@ -82,8 +93,17 @@ class SpectraPanelTitle : public QWidget
     void paintEvent(QPaintEvent*) override;
 
    private:
-    static constexpr int kTitleH    = 28;
-    static constexpr int kSubtitleH = 20;
+    void updateHeight();
+
+    // Offsets measured from the legacy panel (font_title_ 20px, font_body_ 16px,
+    // ImGui ItemSpacing 12): title box 0..20, subtitle box 44..60, separator at
+    // 96, and the first section band at 132.
+    static constexpr int kTitleH          = 20;
+    static constexpr int kSubtitleY       = 44;
+    static constexpr int kSubtitleH       = 16;
+    static constexpr int kSeparatorY      = 96;
+    static constexpr int kSeparatorYNoSub = 52;
+    static constexpr int kTrailingGap     = 36;
 
     QString title_;
     QString subtitle_;
@@ -126,6 +146,15 @@ class SpectraPropertyRow : public QWidget
 
     void     setLabel(const QString& label);
     QWidget* valueWidget() const { return value_; }
+
+    // Legacy `widgets::drag_field` renders a default ImGui frame: 36px tall, with
+    // the value input starting INSPECTOR_LABEL_WIDTH from the panel content edge.
+    // Rows live inside the section's 12px group indent, so the label column is
+    // 80 - 12 = 68.
+    static constexpr int kRowHeight  = 36;
+    static constexpr int kLabelWidth = 68;
+
+    static constexpr int row_height() { return kRowHeight; }
 
    protected:
     void paintEvent(QPaintEvent*) override;
@@ -184,6 +213,131 @@ class SpectraColorField : public QWidget
     QString        label_;
     spectra::Color color_ = {1.0f, 1.0f, 1.0f, 1.0f};
     ColorPicker    picker_;
+};
+
+// ─── InfoRow ──────────────────────────────────────────────────────────────────
+// Read-only "Label            value" row matching legacy `widgets::info_row`:
+// muted label on the left, primary-colored value starting at 45% of the row.
+
+class SpectraInfoRow : public QWidget
+{
+    Q_OBJECT
+
+   public:
+    explicit SpectraInfoRow(const QString& label,
+                            const QString& value  = {},
+                            QWidget*       parent = nullptr);
+
+    void    setLabel(const QString& label);
+    void    setValue(const QString& value);
+    QString value() const { return value_; }
+
+    // Legacy stat/info rows are plain 16px text lines with no frame.
+    static constexpr int kRowHeight = 22;
+
+   protected:
+    void paintEvent(QPaintEvent*) override;
+
+   private:
+    QString label_;
+    QString value_;
+};
+
+// ─── SliderField ──────────────────────────────────────────────────────────────
+// Label + 4px pill track with an accent fill and a 14px thumb, mirroring
+// legacy `widgets::slider_field`. The formatted value is centered in the track.
+
+class SpectraSliderField : public QWidget
+{
+    Q_OBJECT
+
+   public:
+    SpectraSliderField(const QString& label,
+                       double         minimum,
+                       double         maximum,
+                       int            decimals = 1,
+                       QString        suffix   = {},
+                       QWidget*       parent   = nullptr);
+
+    double value() const { return value_; }
+    void   setValue(double value);
+
+   signals:
+    void valueChanged(double value);
+
+   protected:
+    void paintEvent(QPaintEvent*) override;
+    void mousePressEvent(QMouseEvent*) override;
+    void mouseMoveEvent(QMouseEvent*) override;
+    void mouseReleaseEvent(QMouseEvent*) override;
+    void leaveEvent(QEvent*) override;
+
+   private:
+    QRect   trackRect() const;
+    void    setFromPos(int x);
+    QString formatted() const;
+
+    QString label_;
+    double  min_      = 0.0;
+    double  max_      = 1.0;
+    double  value_    = 0.0;
+    int     decimals_ = 1;
+    QString suffix_;
+    bool    dragging_ = false;
+};
+
+// ─── Separator ────────────────────────────────────────────────────────────────
+// Hairline divider matching legacy `widgets::separator()`.
+
+class SpectraSeparator : public QWidget
+{
+    Q_OBJECT
+
+   public:
+    explicit SpectraSeparator(QWidget* parent = nullptr);
+
+   protected:
+    void paintEvent(QPaintEvent*) override;
+};
+
+// ─── SeparatorLabel ───────────────────────────────────────────────────────────
+// Centered muted caption flanked by hairlines, matching legacy
+// `widgets::separator_label` (used for "X Axis" / "Y Axis" stat groups).
+
+class SpectraSeparatorLabel : public QWidget
+{
+    Q_OBJECT
+
+   public:
+    explicit SpectraSeparatorLabel(const QString& text, QWidget* parent = nullptr);
+
+   protected:
+    void paintEvent(QPaintEvent*) override;
+
+   private:
+    QString text_;
+};
+
+// ─── SwatchLabel ──────────────────────────────────────────────────────────────
+// 16px color swatch followed by muted text — the legacy series-properties
+// "color swatch + type badge" line.
+
+class SpectraSwatchLabel : public QWidget
+{
+    Q_OBJECT
+
+   public:
+    explicit SpectraSwatchLabel(QWidget* parent = nullptr);
+
+    void setColor(const spectra::Color& c);
+    void setText(const QString& text);
+
+   protected:
+    void paintEvent(QPaintEvent*) override;
+
+   private:
+    spectra::Color color_ = {1.0f, 1.0f, 1.0f, 1.0f};
+    QString        text_;
 };
 
 // ─── ToggleField ──────────────────────────────────────────────────────────────
@@ -279,6 +433,10 @@ class SpectraSeriesListView : public QWidget
     void deleteSelected();
 
    private:
+    // The legacy browser draws every row inline and lets the inspector page
+    // scroll, so the list sizes to its content instead of expanding.
+    void updateListHeight();
+
     QListWidget* list_       = nullptr;
     QWidget*     bulk_bar_   = nullptr;
     QPushButton* copy_btn_   = nullptr;

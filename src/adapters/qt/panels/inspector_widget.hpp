@@ -122,6 +122,9 @@ class QtInspectorWidget : public QWidget
     QLabel*            figure_size_label_       = nullptr;   // test-only; hidden from UI
     QLabel*            figure_axes_count_label_ = nullptr;   // test-only; hidden from UI
 
+    SpectraPanelTitle* axes_title_ = nullptr;
+    SpectraPanelTitle* data_title_ = nullptr;
+
     SpectraColorField* figure_bg_color_field_ = nullptr;
     QDoubleSpinBox*    margin_top_spin_       = nullptr;
     QDoubleSpinBox*    margin_bottom_spin_    = nullptr;
@@ -131,40 +134,40 @@ class QtInspectorWidget : public QWidget
     QDoubleSpinBox*    margin_vgap_spin_      = nullptr;
     QDoubleSpinBox*    margin_min_h_spin_     = nullptr;
 
-    QCheckBox*         legend_visible_check_      = nullptr;
-    QComboBox*         legend_position_combo_     = nullptr;
-    QDoubleSpinBox*    legend_font_size_spin_     = nullptr;
-    QDoubleSpinBox*    legend_padding_spin_       = nullptr;
-    SpectraColorField* legend_bg_color_field_     = nullptr;
-    SpectraColorField* legend_border_color_field_ = nullptr;
-    QPushButton*       reset_figure_style_btn_    = nullptr;
+    SpectraToggleField* legend_visible_check_      = nullptr;
+    QComboBox*          legend_position_combo_     = nullptr;
+    QDoubleSpinBox*     legend_font_size_spin_     = nullptr;
+    QDoubleSpinBox*     legend_padding_spin_       = nullptr;
+    SpectraColorField*  legend_bg_color_field_     = nullptr;
+    SpectraColorField*  legend_border_color_field_ = nullptr;
+    QPushButton*        reset_figure_style_btn_    = nullptr;
 
-    // Axes controls
-    QTabWidget*     axes_tab_widget_ = nullptr;
-    QComboBox*      axes_selector_   = nullptr;
-    QStackedWidget* axes_stack_      = nullptr;
+    // Axes controls. The legacy inspector renders one axes at a time, so the Qt
+    // page mirrors that with a compact selector driving a stacked page.
+    QComboBox*      axes_selector_ = nullptr;
+    QStackedWidget* axes_stack_    = nullptr;
 
     struct AxesControls
     {
-        QLineEdit*      title_edit         = nullptr;
-        QLineEdit*      xlabel_edit        = nullptr;
-        QLineEdit*      ylabel_edit        = nullptr;
-        QLineEdit*      zlabel_edit        = nullptr;
-        QDoubleSpinBox* xmin_spin          = nullptr;
-        QDoubleSpinBox* xmax_spin          = nullptr;
-        QDoubleSpinBox* ymin_spin          = nullptr;
-        QDoubleSpinBox* ymax_spin          = nullptr;
-        QDoubleSpinBox* zmin_spin          = nullptr;
-        QDoubleSpinBox* zmax_spin          = nullptr;
-        QCheckBox*      grid_check         = nullptr;
-        QCheckBox*      border_check       = nullptr;
-        QPushButton*    grid_color_btn     = nullptr;
-        QDoubleSpinBox* grid_width_spin_   = nullptr;
-        QDoubleSpinBox* tick_length_spin_  = nullptr;
-        QComboBox*      autoscale_combo_   = nullptr;
-        QPushButton*    auto_fit_btn_      = nullptr;
-        QComboBox*      grid_planes_combo  = nullptr;
-        QCheckBox*      bounding_box_check = nullptr;
+        QLineEdit*          title_edit         = nullptr;
+        QLineEdit*          xlabel_edit        = nullptr;
+        QLineEdit*          ylabel_edit        = nullptr;
+        QLineEdit*          zlabel_edit        = nullptr;
+        QDoubleSpinBox*     xmin_spin          = nullptr;
+        QDoubleSpinBox*     xmax_spin          = nullptr;
+        QDoubleSpinBox*     ymin_spin          = nullptr;
+        QDoubleSpinBox*     ymax_spin          = nullptr;
+        QDoubleSpinBox*     zmin_spin          = nullptr;
+        QDoubleSpinBox*     zmax_spin          = nullptr;
+        SpectraToggleField* grid_check         = nullptr;
+        SpectraToggleField* border_check       = nullptr;
+        SpectraColorField*  grid_color_field   = nullptr;
+        QDoubleSpinBox*     grid_width_spin_   = nullptr;
+        QDoubleSpinBox*     tick_length_spin_  = nullptr;
+        QComboBox*          autoscale_combo_   = nullptr;
+        QPushButton*        auto_fit_btn_      = nullptr;
+        QComboBox*          grid_planes_combo  = nullptr;
+        SpectraToggleField* bounding_box_check = nullptr;
 
         // Aggregate statistics labels (2D axes only)
         QLabel* stats_visible_label      = nullptr;
@@ -191,14 +194,17 @@ class QtInspectorWidget : public QWidget
     {
         spectra::Series* series = nullptr;
 
-        QLineEdit*      label_edit         = nullptr;
-        QPushButton*    color_btn          = nullptr;
-        QCheckBox*      visible_check      = nullptr;
-        QDoubleSpinBox* width_spin         = nullptr;
-        QDoubleSpinBox* opacity_spin       = nullptr;
-        QDoubleSpinBox* marker_size_spin_  = nullptr;
-        QComboBox*      line_style_combo   = nullptr;
-        QComboBox*      marker_style_combo = nullptr;
+        QLineEdit*          label_edit         = nullptr;
+        SpectraColorField*  color_field        = nullptr;
+        SpectraToggleField* visible_check      = nullptr;
+        SpectraSliderField* width_spin         = nullptr;
+        SpectraSliderField* opacity_spin       = nullptr;
+        SpectraSliderField* marker_size_spin_  = nullptr;
+        QComboBox*          line_style_combo   = nullptr;
+        QComboBox*          marker_style_combo = nullptr;
+
+        SpectraPanelTitle*  detail_title = nullptr;
+        SpectraSwatchLabel* type_row     = nullptr;
 
         // Data statistics labels
         QLabel* stats_x_count_label = nullptr;
